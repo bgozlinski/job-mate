@@ -31,7 +31,7 @@
 | Decyzja | Wybór | Uzasadnienie |
 |---|---|---|
 | Root pakietu | `app/` | Dockerfile ma już `WORKDIR /app` i `CMD app.main:app` — najmniej zmian; konwencja typowa dla FastAPI. |
-| Instalacja projektu | projekt wirtualny — brak `[build-system]` | To aplikacja, nie biblioteka. uv instaluje wtedy wyłącznie zależności; `app` jest importowalny przez katalog roboczy. Mniej konfiguracji builda i mniej miejsc, w których lista pakietów może się rozjechać. |
+| Instalacja projektu | projekt wirtualny — brak `[build-system]` | To aplikacja, nie biblioteka. uv instaluje wtedy wyłącznie zależności; `app` jest importowalny przez katalog roboczy. Mniej konfiguracji builda i mniej miejsc, w których lista pakietów może się rozjechać. Cena: pytest wymaga jawnego `pythonpath = ["."]` (szczegóły w Z-3). |
 | Sterownik Postgresa | psycopg 3 (`postgresql+psycopg://`) | Jeden sterownik obsługuje async w aplikacji i sync w Alembicu (etap 2) — nie utrzymujemy dwóch DSN-ów. Koła `cp314` (w tym `win_amd64`) są dostępne w 3.3.4, więc Python 3.14 zostaje. |
 | Klient Redis | `redis.asyncio` z pakietu `redis>=8` | Oficjalny klient ma wbudowane asyncio; nie potrzeba `aioredis` (zarchiwizowany, wchłonięty do `redis-py`). |
 | Konfiguracja | pydantic-settings | Walidacja typów przy starcie — literówka w env wywala aplikację od razu, a nie przy pierwszym zapytaniu do bazy. |
@@ -124,7 +124,10 @@ Każde zadanie ma być osobnym commitem. Zadania Z-1 i Z-2 są blokujące dla re
 ### Z-3. Zależności i konfiguracja narzędzi w `pyproject.toml`
 **Cel:** runtime — `sqlalchemy[asyncio]`, `psycopg[binary]`, `redis`, `pydantic-settings`. Dev (osobna grupa `dependency-groups`, nie główne zależności) — `ruff`, `pytest`, `pytest-asyncio`, `httpx`. Do tego sekcje `[tool.ruff]` i `[tool.pytest.ini_options]`.
 **Kryteria:** `uv sync` przechodzi, `uv run ruff check .` i `uv run pytest` uruchamiają się (mogą nic nie znaleźć).
-**Uwaga:** nie ustawiaj `target-version` w ruffie — ruff sam odczyta `requires-python` z `pyproject.toml`, więc jedna wersja mniej do rozjechania. W pytest ustaw `asyncio_mode = "auto"`, inaczej każdy test async wymaga dekoratora.
+**Uwaga:**
+- Nie ustawiaj `target-version` w ruffie — ruff sam odczyta `requires-python` z `pyproject.toml`, więc jedna wersja mniej do rozjechania.
+- W pytest ustaw `asyncio_mode = "auto"`, inaczej każdy test async wymaga dekoratora.
+- Ustaw też `pythonpath = ["."]`. To nieoczywisty skutek uboczny projektu wirtualnego: skoro `app` nie jest instalowany do venv, importuje się wyłącznie dzięki obecności katalogu głównego na `sys.path`. Pytest dokłada tam katalog testu (`tests/`), a nie korzeń projektu — bez tej linii zbieranie testów kończy się `ModuleNotFoundError: No module named 'app'`, tak samo lokalnie jak w CI.
 
 ### Z-4. `app/core/config.py`
 **Cel:** klasa `Settings` (pydantic-settings) z polami `POSTGRES_*` i `REDIS_URL`, plus property składające DSN SQLAlchemy.
