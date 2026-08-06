@@ -2,19 +2,17 @@ FROM python:3.14-slim
 
 WORKDIR /app
 
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE=1 \
+  PYTHONUNBUFFERED=1 \
+  PATH="/app/.venv/bin:$PATH"
 
-RUN apt-get update && apt-get install -y
+COPY --from=ghcr.io/astral-sh/uv:0.12.2 /uv /bin/uv
 
 COPY pyproject.toml uv.lock ./
-RUN pip install uv
-
-RUN uv sync --frozen --no-install-project
-#RUN poetry config virtualenvs.create false && poetry install --no-root
+RUN uv sync --frozen --no-install-project --no-dev
 
 COPY . .
 
 EXPOSE 8000
 
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
