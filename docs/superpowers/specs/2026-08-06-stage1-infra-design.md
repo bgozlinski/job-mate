@@ -31,6 +31,7 @@
 | Decyzja | Wybór | Uzasadnienie |
 |---|---|---|
 | Root pakietu | `app/` | Dockerfile ma już `WORKDIR /app` i `CMD app.main:app` — najmniej zmian; konwencja typowa dla FastAPI. |
+| Instalacja projektu | projekt wirtualny — brak `[build-system]` | To aplikacja, nie biblioteka. uv instaluje wtedy wyłącznie zależności; `app` jest importowalny przez katalog roboczy. Mniej konfiguracji builda i mniej miejsc, w których lista pakietów może się rozjechać. |
 | Sterownik Postgresa | psycopg 3 (`postgresql+psycopg://`) | Jeden sterownik obsługuje async w aplikacji i sync w Alembicu (etap 2) — nie utrzymujemy dwóch DSN-ów. Koła `cp314` (w tym `win_amd64`) są dostępne w 3.3.4, więc Python 3.14 zostaje. |
 | Klient Redis | `redis.asyncio` z pakietu `redis>=8` | Oficjalny klient ma wbudowane asyncio; nie potrzeba `aioredis` (zarchiwizowany, wchłonięty do `redis-py`). |
 | Konfiguracja | pydantic-settings | Walidacja typów przy starcie — literówka w env wywala aplikację od razu, a nie przy pierwszym zapytaniu do bazy. |
@@ -109,7 +110,7 @@ Jeden workflow, jeden job, wyzwalany na `push` i `pull_request`:
 
 ## 7. Plan pracy — zadania w kolejności
 
-Każde zadanie ma być osobnym commitem. Zadania 1–2 są blokujące dla reszty.
+Każde zadanie ma być osobnym commitem. Zadania Z-1 i Z-2 są blokujące dla reszty; Z-6a musi poprzedzać Z-6.
 
 ### Z-1. `.gitignore` i pierwszy commit
 **Cel:** repozytorium nie ma ani jednego commita, a w katalogu leżą `.env` z hasłem, `.venv/` i `.idea/`. Pierwsze `git add .` wciągnie je wszystkie.
@@ -134,11 +135,19 @@ Każde zadanie ma być osobnym commitem. Zadania 1–2 są blokujące dla reszty
 **Cel:** przemianowanie `DB_*` → `POSTGRES_*`, usunięcie zahardkodowanych wartości z sekcji `environment:` w compose, dodanie `REDIS_URL`.
 **Kryteria:** `docker compose config` renderuje poprawne wartości, nigdzie w `docker-compose.yml` nie ma literału hasła.
 
+### Z-6a. `.dockerignore`
+**Cel:** ograniczyć kontekst builda i nie wpuścić sekretów do obrazu. Plik nie istnieje, a Z-6 zawiera `COPY . .`.
+**Kryteria:** `.env`, `.venv/`, `.git/`, `.idea/`, `__pycache__/` i cache'e narzędzi nie trafiają do obrazu. Rozmiar kontekstu builda (pierwsza linia wyjścia `docker build`) liczony w megabajtach, nie setkach megabajtów.
+**Uwaga:**
+- **Docker nie czyta `.gitignore`.** To, że plik jest ignorowany przez gita, nie znaczy nic dla `COPY`.
+- `.env` w obrazie to nie tylko zły styl — warstwy obrazu są czytelne dla każdego, kto go pobierze, także po nadpisaniu pliku w późniejszej warstwie. Konfigurację wstrzykuje `env_file` w compose, w czasie uruchomienia, nie budowania.
+- Skopiowany `.venv/` z hosta jest dodatkowo szkodliwy: zawiera ścieżki i binaria z Windows, więc mógłby przesłonić venv zbudowany w obrazie.
+
 ### Z-6. Naprawa `Dockerfile`
 **Cel:** obraz, który faktycznie uruchamia aplikację.
 **Do naprawienia:**
 - `RUN apt-get update && apt-get install -y` — bez nazwy pakietu, nie instaluje niczego. Healthcheck woła `curl`, którego w `python:3.14-slim` nie ma. Albo doinstaluj `curl` i posprzątaj `/var/lib/apt/lists`, albo zrezygnuj z curla i oprzyj healthcheck na `python -c` z `urllib`.
-- `uv sync --frozen --no-install-project` uruchamia się przed `COPY . .`, więc sam projekt nigdy nie trafia do venv. Potrzebny drugi `uv sync --frozen` po skopiowaniu kodu — pierwszy zostaje, bo cache'uje warstwę zależności.
+- `--no-install-project` w `uv sync` można zostawić: przy projekcie wirtualnym (bez `[build-system]`) uv i tak nie instaluje samego projektu, a flaga jasno komunikuje intencję. Pakiet `app` jest importowalny, bo `WORKDIR /app` zawiera katalog `app/` i trafia na `sys.path`. Drugi `uv sync` po `COPY . .` **nie** jest potrzebny.
 - `ENV PYTHONDONTWRITEBYTECODE 1` — składnia bez `=` jest przestarzała i generuje ostrzeżenie builda.
 - Ustaw `PATH` na `/app/.venv/bin`, żeby `CMD` wołał `uvicorn` bezpośrednio, bez narzutu `uv run` przy każdym starcie.
 
