@@ -54,7 +54,7 @@ app/
 ├── core/
 │   ├── __init__.py
 │   ├── config.py        # Settings — JEDYNE miejsce czytające os.environ
-│   ├── db.py            # async engine + async_sessionmaker
+│   ├── db.py            # async engine (async_sessionmaker dopiero w etapie 2, z modelami)
 │   └── redis.py         # fabryka klienta redis.asyncio
 └── api/
     ├── __init__.py
