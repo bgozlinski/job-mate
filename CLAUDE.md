@@ -87,5 +87,5 @@ The spec references `db/schema.sql` for the full DDL; that file does not exist y
 ## Constraints
 
 - **No scraping of Indeed/LinkedIn** (NFR-5, terms-of-service violation). Job data comes from manual input or
-  public datasets only. 
+  public datasets only.
 - Auth is JWT; users may only ever access their own resumes, sessions, and messages (NFR-1).
