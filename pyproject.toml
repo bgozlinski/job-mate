@@ -3,6 +3,7 @@ name = "job-mate"
 version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = [
+    "alembic>=1.19.1",
     "fastapi>=0.141.1",
     "psycopg[binary]>=3.3.4",
     "pydantic-settings>=2.14.2",
@@ -41,7 +42,7 @@ select = [
 exclude_dirs = [".venv", ".git", "tests"]
 
 [tool.mypy]
-files = ["app", "tests"]
+files = ["app", "migrations", "tests"]
 strict = true
 plugins = ["pydantic.mypy"]
 
