@@ -5,6 +5,7 @@ requires-python = ">=3.14"
 dependencies = [
     "alembic>=1.19.1",
     "fastapi>=0.141.1",
+    "pgvector>=0.5.0",
     "psycopg[binary]>=3.3.4",
     "pydantic-settings>=2.14.2",
     "redis>=8.1.0",
