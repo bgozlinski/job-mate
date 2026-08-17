@@ -29,12 +29,14 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
-      - name: Lint
-        run: uv run ruff check .
+      - name: Cache pre-commit environments
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
 
-      - name: Check formatting
-        run: uv run ruff format --check .
+      - name: Lint, format, type-check and security scan
+        run: uv run pre-commit run --all-files --show-diff-on-failure
 
       - name: Test
         run: uv run pytest
-

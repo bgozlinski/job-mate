@@ -27,5 +27,5 @@ app.include_router(health_router)
 
 
 @app.get("/")
-async def root():
+async def root() -> dict[str, str]:
     return {"message": "Hello World"}
