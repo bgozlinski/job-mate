@@ -14,8 +14,6 @@ class FakeConnection:
 
 
 class FakeEngine:
-    """Minimalny odpowiednik AsyncEngine w zakresie, którego używa readiness."""
-
     def __init__(self, error: Exception | None = None) -> None:
         self._error = error
 
@@ -37,7 +35,6 @@ class FakeRedis:
 
 
 def build_app(engine: FakeEngine, redis: FakeRedis) -> FastAPI:
-    """Świeża aplikacja z podstawionymi zależnościami — bez lifespanu i bez I/O."""
     application = FastAPI()
     application.include_router(health_router)
     application.state.engine = engine
@@ -53,9 +50,6 @@ async def client_for(application: FastAPI) -> AsyncIterator[AsyncClient]:
 
 
 async def test_liveness_does_not_touch_dependencies() -> None:
-    # Celowo produkcyjna aplikacja i celowo bez ustawiania app.state:
-    # ASGITransport nie uruchamia lifespanu, więc gdyby /health sięgał
-    # do bazy lub Redisa, ten test padłby na AttributeError.
     async with client_for(production_app) as client:
         response = await client.get("/health")
 
