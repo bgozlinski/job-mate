@@ -12,7 +12,7 @@ from app.services.matching import (
     match_resume,
     tokenize,
 )
-from tests.conftest import FakeEmbeddingModel
+from tests.conftest import FakeEmbeddingModel, FakeSuggestionWriter
 
 JOB_POST = (
     "Backend engineer. We need python, python, python and kubernetes. "
@@ -23,26 +23,14 @@ ARTICLE = "Career advice: quantify every bullet point with a number and a result
 OTHER_POST = "Frontend engineer wanted: react, typescript and css every day."
 
 
-class RecordingWriter:
-    """A stand-in for the LLM that keeps the prompt it was handed."""
-
-    def __init__(self) -> None:
-        self.prompts: list[str] = []
-
-    async def write(self, prompt: str) -> list[str]:
-        self.prompts.append(prompt)
-
-        return ["Shipped a python service on kubernetes"]
-
-
 @pytest.fixture
 def model() -> FakeEmbeddingModel:
     return FakeEmbeddingModel(dimensions=EMBEDDING_DIMENSIONS)
 
 
 @pytest.fixture
-def writer() -> RecordingWriter:
-    return RecordingWriter()
+def writer() -> FakeSuggestionWriter:
+    return FakeSuggestionWriter(["Shipped a python service on kubernetes"])
 
 
 async def store(

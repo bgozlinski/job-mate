@@ -8,11 +8,13 @@ from fastapi import FastAPI
 from app.api.auth import router as auth_router
 from app.api.documents import router as documents_router
 from app.api.health import router as health_router
+from app.api.matching import router as matching_router
 from app.api.resumes import router as resumes_router
 from app.core.config import get_settings
 from app.core.db import create_engine, create_session_factory
 from app.core.redis import create_redis
 from app.services.embeddings import OpenAIEmbeddingModel
+from app.services.matching import AnthropicSuggestionWriter
 
 
 @asynccontextmanager
@@ -33,6 +35,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.embedding_model = (
         OpenAIEmbeddingModel(settings) if settings.openai_api_key else None
     )
+    app.state.suggestion_writer = (
+        AnthropicSuggestionWriter(settings) if settings.anthropic_api_key else None
+    )
     try:
         yield
     finally:
@@ -46,6 +51,7 @@ app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(resumes_router)
 app.include_router(documents_router)
+app.include_router(matching_router)
 
 
 @app.get("/")

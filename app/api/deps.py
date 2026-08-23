@@ -8,11 +8,14 @@ import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from redis.asyncio import Redis
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.auth.security import decode_access_token
+from app.models.resume import Resume
 from app.models.user import User
 from app.services.embeddings import EmbeddingModel
+from app.services.matching import SuggestionWriter
 
 bearer_scheme = HTTPBearer()
 
@@ -81,21 +84,72 @@ async def get_cache(request: Request) -> Redis:
     return cache
 
 
-async def get_embedding_model(request: Request) -> EmbeddingModel:
-    """Hand out the shared embeddings client, or refuse the request.
+def _configured[Client](client: Client | None, what: str) -> Client:
+    """Return a provider client, or refuse the request when there is none.
 
-    The application starts without an API key so that everything unrelated to
-    ingestion keeps working in development and in CI. The cost is paid here:
-    without a key this answers 503, which is the truth -- a dependency the
-    endpoint needs is not configured -- rather than a 500 pretending it is a
-    bug.
+    The application starts without provider keys so that everything unrelated
+    to them keeps working in development and in CI. The cost is paid here:
+    without a key the route answers 503, which is the truth -- a dependency it
+    needs is not configured -- rather than a 500 pretending it is a bug.
     """
-    model: EmbeddingModel | None = request.app.state.embedding_model
-
-    if model is None:
+    if client is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Embeddings are not configured",
+            detail=f"{what} is not configured",
         )
 
-    return model
+    return client
+
+
+async def get_embedding_model(request: Request) -> EmbeddingModel:
+    """Hand out the shared embeddings client, or refuse the request."""
+    model: EmbeddingModel | None = request.app.state.embedding_model
+
+    return _configured(model, "Embeddings")
+
+
+async def get_embeddings(
+    model: Annotated[EmbeddingModel, Depends(get_embedding_model)],
+    cache: Annotated[Redis, Depends(get_cache)],
+) -> tuple[EmbeddingModel, Redis]:
+    """Hand out the embeddings client together with its cache.
+
+    They are always used as a pair -- an embedding call goes through the cache
+    or it costs money -- so the services take them as one argument.
+    """
+    return model, cache
+
+
+async def get_suggestion_writer(request: Request) -> SuggestionWriter:
+    """Hand out the shared LLM client, or refuse the request."""
+    writer: SuggestionWriter | None = request.app.state.suggestion_writer
+
+    return _configured(writer, "The language model")
+
+
+async def get_owned_resume(
+    resume_id: uuid.UUID,
+    user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> Resume:
+    """Load a resume belonging to the caller, or raise 404.
+
+    The owner is part of the query, not a check performed afterwards: an id
+    that exists but belongs to somebody else has to be indistinguishable from
+    one that does not exist at all (NFR-1). Answering 403 would confirm the
+    resume is real.
+
+    Every route that touches a single resume goes through this dependency, so
+    there is no second path on which the ownership filter could be forgotten.
+    """
+    resume = await session.scalar(
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)
+    )
+
+    if resume is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
+    return resume
+
+
+OwnedResume = Annotated[Resume, Depends(get_owned_resume)]
