@@ -1,36 +1,9 @@
-from collections.abc import Sequence
-
 import pytest
 import pytest_asyncio
 from redis.asyncio import Redis
 
 from app.services.embeddings import BATCH_SIZE, cache_key, embed_texts
-
-
-class FakeEmbeddingModel:
-    """An embeddings provider that costs nothing and counts its calls."""
-
-    def __init__(self, name: str = "fake-embed", dimensions: int = 4) -> None:
-        self._name = name
-        self._dimensions = dimensions
-        self.calls: list[list[str]] = []
-
-    @property
-    def name(self) -> str:
-        return self._name
-
-    @property
-    def dimensions(self) -> int:
-        return self._dimensions
-
-    async def embed(self, texts: Sequence[str]) -> list[list[float]]:
-        self.calls.append(list(texts))
-        # Values that survive a float32 round trip exactly, so a cached
-        # vector can be compared with a freshly embedded one.
-        return [
-            [float(len(text)), float(text.count("a")), 0.5, -0.25][: self._dimensions]
-            for text in texts
-        ]
+from tests.conftest import FakeEmbeddingModel
 
 
 @pytest.fixture

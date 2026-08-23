@@ -1,6 +1,6 @@
 import asyncio
 import sys
-from collections.abc import AsyncIterator, Callable, Iterator, Mapping
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from urllib.parse import urlsplit, urlunsplit
 
 import pytest
@@ -28,6 +28,38 @@ def pytest_asyncio_loop_factories(
     if sys.platform == "win32":
         return {"selector": asyncio.SelectorEventLoop}
     return {"default": asyncio.new_event_loop}
+
+
+class FakeEmbeddingModel:
+    """An embeddings provider that costs nothing and counts its calls.
+
+    The vectors are derived from the text so that a cached one can be
+    compared with a freshly embedded one, and every value survives a float32
+    round trip exactly.
+    """
+
+    def __init__(self, name: str = "fake-embed", dimensions: int = 4) -> None:
+        self._name = name
+        self._dimensions = dimensions
+        self.calls: list[list[str]] = []
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def dimensions(self) -> int:
+        return self._dimensions
+
+    def vector(self, text: str) -> list[float]:
+        head = [float(len(text)), float(text.count("a")), 0.5, -0.25]
+
+        return (head + [0.0] * self._dimensions)[: self._dimensions]
+
+    async def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        self.calls.append(list(texts))
+
+        return [self.vector(text) for text in texts]
 
 
 TEST_REDIS_DB = 15
