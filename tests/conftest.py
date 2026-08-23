@@ -44,6 +44,11 @@ def database_url() -> Iterator[URL]:
 
     url = settings.database_url.set(database=name)
     schema = create_engine(url)
+    with schema.begin() as connection:
+        # create_all only knows about tables: the vector type the chunks
+        # table is declared with comes from an extension, which the real
+        # database gets from a migration and this one has to enable itself.
+        connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     Base.metadata.create_all(schema)
     schema.dispose()
 
