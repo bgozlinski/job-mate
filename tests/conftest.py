@@ -59,11 +59,15 @@ def database_url() -> Iterator[URL]:
 async def session_factory(
     database_url: URL,
 ) -> AsyncIterator[async_sessionmaker[AsyncSession]]:
-    """A session factory over an empty users table."""
+    """A session factory over empty tables."""
     engine = create_async_engine(database_url)
 
+    # Driven by the metadata so a new model does not silently leak rows from
+    # one test into the next. CASCADE because the tables reference each other.
+    tables = ", ".join(f'"{table.name}"' for table in Base.metadata.sorted_tables)
+
     async with engine.begin() as connection:
-        await connection.execute(text("TRUNCATE TABLE users"))
+        await connection.execute(text(f"TRUNCATE TABLE {tables} CASCADE"))
 
     yield async_sessionmaker(engine, expire_on_commit=False)
 
