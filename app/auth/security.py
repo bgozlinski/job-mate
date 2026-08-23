@@ -1,3 +1,5 @@
+"""Password hashing and access-token issuing and decoding."""
+
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from typing import Any
@@ -11,18 +13,23 @@ password_hash = PasswordHash.recommended()
 
 
 def hash_password(password: str) -> str:
+    """Hash a password with argon2id, salt included in the returned string."""
     return password_hash.hash(password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Check a password against a stored hash in constant time."""
     return password_hash.verify(plain_password, hashed_password)
 
 
 @lru_cache
 def _dummy_hash() -> str:
-    # Hashing is the expensive part of a login, so skipping it for an unknown
-    # address would make "no such user" measurably faster than "wrong password"
-    # and turn the endpoint into an account-enumeration oracle.
+    """Return a throwaway hash to verify against, computed once.
+
+    Hashing is the expensive part of a login, so skipping it for an unknown
+    address would make "no such user" measurably faster than "wrong
+    password" and turn the endpoint into an account-enumeration oracle.
+    """
     return password_hash.hash("password-used-only-to-equalise-timing")
 
 
@@ -35,6 +42,11 @@ def create_access_token(
     data: dict[str, Any],
     expires_delta: int | None = None,
 ) -> str:
+    """Sign the given claims, adding iat and exp.
+
+    expires_delta is a number of minutes and overrides the configured
+    lifetime; the tests pass a negative value to produce an expired token.
+    """
     settings = get_settings()
     now = datetime.now(UTC)
     minutes = (
@@ -58,8 +70,9 @@ def create_access_token(
 def decode_access_token(token: str) -> dict[str, Any]:
     """Return the claims of a valid token, or raise jwt.InvalidTokenError.
 
-    The algorithm list is passed explicitly: without it a token could name its
-    own algorithm and a forged "alg": "none" header would validate.
+    The algorithm list is passed explicitly: without it a token could name
+    its own algorithm and a forged "alg": "none" header would validate.
+    Requiring exp rejects tokens that would otherwise never expire.
     """
     settings = get_settings()
 

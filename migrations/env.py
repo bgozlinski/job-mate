@@ -1,3 +1,5 @@
+"""Alembic environment: how revisions reach the database."""
+
 from logging.config import fileConfig
 
 from alembic import context

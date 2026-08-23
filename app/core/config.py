@@ -1,3 +1,5 @@
+"""Settings read from the environment."""
+
 from functools import lru_cache
 
 from pydantic import SecretStr
@@ -6,6 +8,14 @@ from sqlalchemy import URL
 
 
 class Settings(BaseSettings):
+    """Every value the application reads from its environment.
+
+    Values come from real environment variables first and from .env second,
+    which is what lets the container and CI supply them without a file. The
+    two secrets are SecretStr so that a repr or a traceback cannot spill
+    them into a log (NFR-1).
+    """
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -26,6 +36,11 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> URL:
+        """Assemble the connection URL as an object rather than a string.
+
+        str(URL) masks the password as '***', so anything that stringifies
+        this on the way to the driver produces a URL that cannot connect.
+        """
         return URL.create(
             drivername="postgresql+psycopg",
             username=self.postgres_user,
@@ -38,4 +53,10 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    """Return the settings, parsed once and reused.
+
+    The cache also defers the first read until something asks for it, so a
+    missing variable fails where it can be reported rather than during an
+    import.
+    """
     return Settings()

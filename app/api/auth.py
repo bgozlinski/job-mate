@@ -1,3 +1,5 @@
+"""Registration, login and the current-user endpoint."""
+
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -24,6 +26,12 @@ async def register(
     payload: UserCreate,
     session: Annotated[AsyncSession, Depends(get_db)],
 ) -> UserRead:
+    """Create an account, or answer 409 if the address is taken.
+
+    The duplicate is caught from the unique index rather than prevented by a
+    prior SELECT: checking first leaves a window in which a concurrent
+    request can insert the same address between the check and the write.
+    """
     user = User(email=payload.email, password_hash=hash_password(payload.password))
     session.add(user)
 
@@ -44,6 +52,12 @@ async def login(
     payload: LoginRequest,
     session: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse:
+    """Exchange credentials for an access token.
+
+    An unknown address and a wrong password produce the same response and,
+    thanks to the discarded verification, take the same time. Either one
+    would otherwise reveal which addresses have accounts (NFR-1).
+    """
     user = await session.scalar(select(User).where(User.email == payload.email))
 
     if user is None:
@@ -59,4 +73,5 @@ async def login(
 
 @router.get("/me")
 async def read_current_user(user: CurrentUser) -> UserRead:
+    """Return the account behind the token."""
     return UserRead.model_validate(user)
