@@ -1,10 +1,12 @@
 import asyncio
 import sys
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping
+from urllib.parse import urlsplit, urlunsplit
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from redis.asyncio import Redis
 from sqlalchemy import URL, create_engine, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -26,6 +28,31 @@ def pytest_asyncio_loop_factories(
     if sys.platform == "win32":
         return {"selector": asyncio.SelectorEventLoop}
     return {"default": asyncio.new_event_loop}
+
+
+TEST_REDIS_DB = 15
+"""A database of its own, so flushing between tests cannot wipe the cache the
+development stack is using."""
+
+
+@pytest_asyncio.fixture
+async def cache() -> AsyncIterator[Redis]:
+    """A Redis client on the test database, emptied around every test.
+
+    The database is swapped in the URL rather than passed as a keyword: what
+    the URL says wins in from_url, so a db argument would be ignored and the
+    flush would land on the development cache.
+    """
+    url = urlsplit(get_settings().redis_url)
+    client = Redis.from_url(
+        urlunsplit(url._replace(path=f"/{TEST_REDIS_DB}")), decode_responses=True
+    )
+    await client.flushdb()
+    try:
+        yield client
+    finally:
+        await client.flushdb()
+        await client.aclose()
 
 
 @pytest.fixture(scope="session")

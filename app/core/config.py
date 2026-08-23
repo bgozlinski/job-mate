@@ -12,8 +12,12 @@ class Settings(BaseSettings):
 
     Values come from real environment variables first and from .env second,
     which is what lets the container and CI supply them without a file. The
-    two secrets are SecretStr so that a repr or a traceback cannot spill
-    them into a log (NFR-1).
+    secrets are SecretStr so that a repr or a traceback cannot spill them
+    into a log (NFR-1).
+
+    openai_api_key is optional because CI has no key and must still be able
+    to import the application and run the suite; the embeddings client is
+    what fails, and only when something actually asks it to embed.
     """
 
     model_config = SettingsConfigDict(
@@ -28,6 +32,9 @@ class Settings(BaseSettings):
     postgres_port: int
 
     redis_url: str
+
+    openai_api_key: SecretStr | None = None
+    embedding_model: str = "text-embedding-3-small"
 
     jwt_secret_key: SecretStr
     jwt_algorithm: str = "HS256"

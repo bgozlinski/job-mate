@@ -37,10 +37,21 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      redis:
+        # Same image as docker-compose: the embedding cache tests talk to a
+        # real Redis rather than a fake, so CI has to provide one.
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
       # Settings reads .env, which is not committed, but plain environment
-      # variables work just as well. Every required field has to be here --
-      # REDIS_URL included, even though no test touches Redis.
+      # variables work just as well. Every required field has to be here.
       POSTGRES_DB: jobmate
       POSTGRES_USER: jobmate
       POSTGRES_PASSWORD: jobmate
