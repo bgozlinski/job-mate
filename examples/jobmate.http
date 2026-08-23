@@ -1,0 +1,93 @@
+### Manual walk-through of the whole pipeline, top to bottom.
+# Run the requests in order with the HTTP client (the green arrow next to each
+# ###). Every response handler stores what the next request needs, so no id or
+# token is ever copied by hand.
+#
+# Requires the stack to be up (docker compose up -d) and both provider keys in
+# .env; without them /documents and /match answer 503 by design.
+
+@host = http://localhost:8000
+
+### Register the test account (409 or 400 on a rerun is fine, the account exists)
+POST {{host}}/auth/register
+Content-Type: application/json
+
+< ./credentials.json
+
+### Log in and keep the token for every request below
+POST {{host}}/auth/login
+Content-Type: application/json
+
+< ./credentials.json
+
+> {%
+    client.global.set("token", response.body.access_token);
+%}
+
+### Ingest the job posting (201 the first time, 200 and the same id on a rerun)
+POST {{host}}/documents
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+< ./job-post.json
+
+> {%
+    client.global.set("document_id", response.body.id);
+    client.test("stored with chunks", function () {
+        client.assert(response.body.chunk_count > 0, "no chunks were stored");
+    });
+%}
+
+### Ingest an advice article: this is what the suggestions get grounded in
+POST {{host}}/documents
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+< ./article.json
+
+### Ingest an unrelated posting, which must NOT show up in the match prompt
+POST {{host}}/documents
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+< ./frontend-post.json
+
+### Store a resume that deliberately omits docker, kubernetes and kafka
+POST {{host}}/resumes
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+< ./resume.json
+
+> {%
+    client.global.set("resume_id", response.body.id);
+%}
+
+### Match the resume against the posting (the expensive one: embeddings + LLM)
+POST {{host}}/resumes/{{resume_id}}/match
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "document_id": "{{document_id}}"
+}
+
+> {%
+    client.test("the gaps are found", function () {
+        client.assert(response.body.missing_keywords.includes("kubernetes"),
+            "kubernetes should be reported as missing");
+        client.assert(response.body.score > 0 && response.body.score < 1,
+            "a partial match should score between 0 and 1");
+    });
+    client.test("the answer is auditable", function () {
+        client.assert(response.body.retrieved_chunk_ids.length > 1,
+            "the prompt should be built from the posting and from advice");
+    });
+%}
+
+### List the resumes of this account
+GET {{host}}/resumes
+Authorization: Bearer {{token}}
+
+### Readiness of the dependencies
+GET {{host}}/health/ready

@@ -1,0 +1,9 @@
+{
+  "source_type": "job_post",
+  "title": "Frontend Engineer",
+  "metadata": {
+    "role": "frontend",
+    "seniority": "mid"
+  },
+  "content": "Frontend Engineer wanted: React, TypeScript, CSS and Vite. You will build design-system components and care about accessibility and Core Web Vitals."
+}

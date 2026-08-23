@@ -1,0 +1,10 @@
+{
+  "source_type": "job_post",
+  "title": "Mid Backend Engineer (Python)",
+  "source_url": "https://example.com/jobs/backend-python",
+  "metadata": {
+    "role": "backend",
+    "seniority": "mid"
+  },
+  "content": "We are looking for a Backend Engineer to join our platform team. You will design and maintain REST APIs in Python and FastAPI, model data in PostgreSQL, and ship services with Docker and Kubernetes. Responsibilities: build and own API endpoints end to end, write automated tests, review code, and take part in on-call rotation. Requirements: at least three years of commercial Python experience, solid SQL and PostgreSQL, experience with Docker, familiarity with Kubernetes, CI/CD pipelines, and message queues such as RabbitMQ or Kafka. Nice to have: Redis, Terraform, observability tooling such as Prometheus and Grafana. We offer remote work, a training budget and a yearly conference ticket."
+}
