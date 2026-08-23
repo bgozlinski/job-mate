@@ -16,6 +16,42 @@ concurrency:
 jobs:
   quality:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # Same image as docker-compose: pgvector ships with the extension the
+        # ingestion stage will need, and CI should not drift from development.
+        image: pgvector/pgvector:pg18
+        env:
+          # Must match the POSTGRES_* values in the job env below.
+          POSTGRES_DB: jobmate
+          POSTGRES_USER: jobmate
+          POSTGRES_PASSWORD: jobmate
+        ports:
+          - 5432:5432
+        # Steps run on the runner, not inside the service network, so without
+        # a healthcheck they would start before Postgres accepts connections.
+        options: >-
+          --health-cmd "pg_isready -U jobmate -d jobmate"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Settings reads .env, which is not committed, but plain environment
+      # variables work just as well. Every required field has to be here --
+      # REDIS_URL included, even though no test touches Redis.
+      POSTGRES_DB: jobmate
+      POSTGRES_USER: jobmate
+      POSTGRES_PASSWORD: jobmate
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      REDIS_URL: redis://localhost:6379/0
+      # Signs tokens that live for the duration of this job. Deliberately a
+      # literal and not a secret: it protects nothing, and a secret would
+      # break runs from forks.
+      JWT_SECRET_KEY: ci-only-throwaway-key
+
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -37,6 +73,12 @@ jobs:
 
       - name: Lint, format, type-check and security scan
         run: uv run pre-commit run --all-files --show-diff-on-failure
+
+      - name: Apply migrations
+        run: uv run alembic upgrade head
+
+      - name: Check models match migrations
+        run: uv run alembic check
 
       - name: Test
         run: uv run pytest
