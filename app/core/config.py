@@ -15,9 +15,9 @@ class Settings(BaseSettings):
     secrets are SecretStr so that a repr or a traceback cannot spill them
     into a log (NFR-1).
 
-    openai_api_key is optional because CI has no key and must still be able
-    to import the application and run the suite; the embeddings client is
-    what fails, and only when something actually asks it to embed.
+    The two provider keys are optional because CI has no keys and must
+    still be able to import the application and run the suite; the clients
+    are what fail, and only when something actually asks them to work.
     """
 
     model_config = SettingsConfigDict(
@@ -35,6 +35,9 @@ class Settings(BaseSettings):
 
     openai_api_key: SecretStr | None = None
     embedding_model: str = "text-embedding-3-small"
+
+    anthropic_api_key: SecretStr | None = None
+    llm_model: str = "claude-opus-5"
 
     jwt_secret_key: SecretStr
     jwt_algorithm: str = "HS256"

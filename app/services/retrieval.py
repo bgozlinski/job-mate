@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chunk import Chunk
-from app.models.document import Document
+from app.models.document import Document, SourceType
 from app.services.embeddings import EmbeddingModel, embed_texts
 
 DEFAULT_K = 5
@@ -24,10 +24,15 @@ class SearchQuery:
     filters is matched with JSONB containment against documents.metadata, so
     {"role": "backend"} keeps every document whose metadata has that pair and
     ignores whatever else it carries.
+
+    source_types narrows the search to kinds of source. It is a column, not
+    metadata, which is why it is a separate field: matching CV advice must be
+    able to ask for articles without also dragging in every job post.
     """
 
     text: str
     filters: dict[str, Any] = field(default_factory=dict)
+    source_types: tuple[SourceType, ...] = ()
     k: int = DEFAULT_K
 
     def __post_init__(self) -> None:
@@ -85,6 +90,9 @@ async def search(
 
     if query.filters:
         statement = statement.where(Document.doc_metadata.contains(query.filters))
+
+    if query.source_types:
+        statement = statement.where(Document.source_type.in_(query.source_types))
 
     rows = await session.execute(statement)
 
