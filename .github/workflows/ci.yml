@@ -49,8 +49,9 @@ jobs:
       REDIS_URL: redis://localhost:6379/0
       # Signs tokens that live for the duration of this job. Deliberately a
       # literal and not a secret: it protects nothing, and a secret would
-      # break runs from forks.
-      JWT_SECRET_KEY: ci-only-throwaway-key
+      # break runs from forks. Still 32+ bytes, the minimum HS256 key length
+      # per RFC 7518 -- a shorter one makes PyJWT warn on every call.
+      JWT_SECRET_KEY: ci-only-throwaway-key-padded-to-32-bytes
 
     steps:
       - name: Checkout
@@ -66,7 +67,7 @@ jobs:
         run: uv sync --frozen
 
       - name: Cache pre-commit environments
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
