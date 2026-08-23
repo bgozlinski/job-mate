@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import DateTime, Enum, String, Text, func, text
+from sqlalchemy import DateTime, Enum, Index, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -41,6 +41,11 @@ class Document(Base):
     (FR-6) and shared by every user, so there is no user_id here and no
     per-account filtering the way resumes have one.
 
+    The GIN index over metadata is what makes the filtered half of hybrid
+    retrieval cheap; jsonb_path_ops rather than the default operator class
+    because containment (@>) is the only operator the filter uses, and that
+    variant is smaller and faster for it.
+
     Deduplication (FR-1) rests on the unique index over content_hash, not on
     a SELECT before the INSERT: two requests carrying the same text can pass
     that check concurrently and only the database can settle it. The hash is
@@ -49,6 +54,14 @@ class Document(Base):
     """
 
     __tablename__ = "documents"
+    __table_args__ = (
+        Index(
+            "ix_documents_metadata_gin",
+            "metadata",
+            postgresql_using="gin",
+            postgresql_ops={"metadata": "jsonb_path_ops"},
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
     source_type: Mapped[SourceType] = mapped_column(
