@@ -41,11 +41,15 @@ select = [
     "UP",
     "PL",
     "SIM",
+    "D",
 ]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
 
 [tool.ruff.lint.per-file-ignores]
 # S101: asserts are the point of a test. S105: fixed passwords in fixtures.
-"tests/**/*.py" = ["S101", "S105"]
+"tests/**/*.py" = ["S101", "S105", "D"]  # test names carry the documentation
 
 [tool.bandit]
 exclude_dirs = [".venv", ".git", "tests"]
