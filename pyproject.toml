@@ -9,6 +9,7 @@ dependencies = [
     "psycopg[binary]>=3.3.4",
     "pwdlib[argon2]>=0.3.1",
     "pydantic-settings>=2.14.2",
+    "pydantic[email]>=2.13.4",
     "pyjwt>=2.13.0",
     "redis>=8.1.0",
     "sqlalchemy[asyncio]>=2.0.51",
@@ -43,7 +44,8 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101"]
+# S101: asserts are the point of a test. S105: fixed passwords in fixtures.
+"tests/**/*.py" = ["S101", "S105"]
 
 [tool.bandit]
 exclude_dirs = [".venv", ".git", "tests"]
