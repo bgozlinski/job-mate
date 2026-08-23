@@ -15,6 +15,10 @@ if TYPE_CHECKING:
     from app.models.chunk import Chunk
 
 
+CONTENT_HASH_LENGTH = 64
+"""Width of a sha256 hex digest, which is what app.services.chunking produces."""
+
+
 class SourceType(StrEnum):
     """What kind of source a document came from (FR-1).
 
@@ -57,7 +61,9 @@ class Document(Base):
     title: Mapped[str | None] = mapped_column(Text())
     source_url: Mapped[str | None] = mapped_column(Text())
     content: Mapped[str] = mapped_column(Text())
-    content_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    content_hash: Mapped[str] = mapped_column(
+        String(CONTENT_HASH_LENGTH), unique=True, index=True
+    )
     doc_metadata: Mapped[dict[str, Any]] = mapped_column(
         "metadata",
         JSONB,
