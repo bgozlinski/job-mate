@@ -7,7 +7,9 @@ dependencies = [
     "fastapi>=0.141.1",
     "pgvector>=0.5.0",
     "psycopg[binary]>=3.3.4",
+    "pwdlib[argon2]>=0.3.1",
     "pydantic-settings>=2.14.2",
+    "pyjwt>=2.13.0",
     "redis>=8.1.0",
     "sqlalchemy[asyncio]>=2.0.51",
     "uvicorn[standard]>=0.52.1",
@@ -23,6 +25,10 @@ dev = [
     "pytest-asyncio>=1.4.0",
     "ruff>=0.16.1",
 ]
+
+[tool.ruff]
+extend-exclude = ["migrations/versions"]
+force-exclude = true
 
 [tool.ruff.lint]
 select = [

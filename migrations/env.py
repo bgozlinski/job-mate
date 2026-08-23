@@ -3,21 +3,20 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import create_engine, pool
 
+import app.models  # noqa: F401
 from app.core.config import get_settings
+from app.core.db import Base
 
-# this is the Alembic Config object, which provides
-# access to the values within the .ini file in use.
 config = context.config
 
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# No ORM models yet — the first migration is written by hand, so autogenerate
-# stays off. Wiring metadata in here needs care: autogenerate does not know
-# about the vector type, HNSW indexes or extensions and will try to drop them.
-target_metadata = None
+# Autogenerate compares Base.metadata against the live database, so anything the
+# models do not describe looks like something to drop: the vector type, HNSW
+# indexes and extensions included. Review every generated revision before
+# applying it.
+target_metadata = Base.metadata
 
 # The connection URL comes from Settings, never from alembic.ini — the .ini is
 # committed and must not carry credentials (NFR-1).

@@ -19,6 +19,11 @@ class Settings(BaseSettings):
 
     redis_url: str
 
+    jwt_secret_key: SecretStr
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 1440
+    refresh_token_expire_days: int = 7
+
     @property
     def database_url(self) -> URL:
         return URL.create(
