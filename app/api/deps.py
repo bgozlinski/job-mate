@@ -7,10 +7,12 @@ from typing import Annotated
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.auth.security import decode_access_token
 from app.models.user import User
+from app.services.embeddings import EmbeddingModel
 
 bearer_scheme = HTTPBearer()
 
@@ -66,3 +68,34 @@ async def get_current_user(
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+async def get_cache(request: Request) -> Redis:
+    """Hand out the shared Redis client.
+
+    One client per application, opened in the lifespan: a client per request
+    would build a new connection pool for every call.
+    """
+    cache: Redis = request.app.state.redis
+
+    return cache
+
+
+async def get_embedding_model(request: Request) -> EmbeddingModel:
+    """Hand out the shared embeddings client, or refuse the request.
+
+    The application starts without an API key so that everything unrelated to
+    ingestion keeps working in development and in CI. The cost is paid here:
+    without a key this answers 503, which is the truth -- a dependency the
+    endpoint needs is not configured -- rather than a 500 pretending it is a
+    bug.
+    """
+    model: EmbeddingModel | None = request.app.state.embedding_model
+
+    if model is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Embeddings are not configured",
+        )
+
+    return model

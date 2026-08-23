@@ -6,11 +6,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.auth import router as auth_router
+from app.api.documents import router as documents_router
 from app.api.health import router as health_router
 from app.api.resumes import router as resumes_router
 from app.core.config import get_settings
 from app.core.db import create_engine, create_session_factory
 from app.core.redis import create_redis
+from app.services.embeddings import OpenAIEmbeddingModel
 
 
 @asynccontextmanager
@@ -26,6 +28,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.engine = create_engine(settings)
     app.state.session_factory = create_session_factory(app.state.engine)
     app.state.redis = create_redis(settings)
+    # Built once, and only when a key is configured: development and CI run
+    # without one, and everything except ingestion works fine that way.
+    app.state.embedding_model = (
+        OpenAIEmbeddingModel(settings) if settings.openai_api_key else None
+    )
     try:
         yield
     finally:
@@ -38,6 +45,7 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(resumes_router)
+app.include_router(documents_router)
 
 
 @app.get("/")

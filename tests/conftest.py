@@ -10,11 +10,12 @@ from redis.asyncio import Redis
 from sqlalchemy import URL, create_engine, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.api.deps import get_db
+from app.api.deps import get_cache, get_db, get_embedding_model
 from app.core.config import get_settings
 from app.core.db import Base
 from app.main import app
 from app.models import User  # noqa: F401  -- registers the table on Base.metadata
+from app.models.chunk import EMBEDDING_DIMENSIONS
 
 
 def pytest_asyncio_loop_factories(
@@ -138,17 +139,36 @@ async def session_factory(
     await engine.dispose()
 
 
+@pytest.fixture
+def embedding_model() -> FakeEmbeddingModel:
+    """The embeddings provider the API uses in tests.
+
+    Full width, because the vectors reach a vector(1536) column; a narrower
+    fake would be rejected by the database rather than by the code.
+    """
+    return FakeEmbeddingModel(dimensions=EMBEDDING_DIMENSIONS)
+
+
 @pytest_asyncio.fixture
 async def client(
     session_factory: async_sessionmaker[AsyncSession],
+    cache: Redis,
+    embedding_model: FakeEmbeddingModel,
 ) -> AsyncIterator[AsyncClient]:
-    """Client wired to the test database, bypassing lifespan (and Redis)."""
+    """Client wired to the test database, bypassing lifespan.
+
+    The embeddings provider is overridden here rather than in the tests that
+    need it: an override that is forgotten means a test calling the real API,
+    which costs money and needs a key nobody has in CI.
+    """
 
     async def override_get_db() -> AsyncIterator[AsyncSession]:
         async with session_factory() as session:
             yield session
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_cache] = lambda: cache
+    app.dependency_overrides[get_embedding_model] = lambda: embedding_model
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as test_client:
