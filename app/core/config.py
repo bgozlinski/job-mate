@@ -18,12 +18,23 @@ class Settings(BaseSettings):
     The two provider keys are optional because CI has no keys and must
     still be able to import the application and run the suite; the clients
     are what fail, and only when something actually asks them to work.
+
+    extra="forbid" turns a misspelt key in .env into a startup failure that
+    names it. Ignoring it instead costs an hour: OPEN_API_KEY was accepted
+    silently and surfaced much later as a 503 from /documents, which points
+    at the provider rather than at the typo.
+
+    Two limits are worth knowing. The check only covers the .env file --
+    environment variables are matched to fields by name, so an unknown one
+    is invisible to this class no matter what extra says. And a key with an
+    empty value is skipped before the check, because that is what an
+    unfilled line in .env.example is.
     """
 
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="ignore",
+        extra="forbid",
     )
     postgres_user: str
     postgres_password: SecretStr

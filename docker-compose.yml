@@ -58,6 +58,12 @@ services:
         condition: service_healthy
     volumes:
       - ./app:/app/app
+      # .env is dockerignored, so without this mount the container never sees
+      # the file -- compose passes its contents as environment variables, and
+      # a misspelt name among those is invisible to Settings(extra="forbid").
+      # Read-only, and a mount rather than a COPY: the file stays out of the
+      # image.
+      - ./.env:/app/.env:ro
     healthcheck:
       test:
         - CMD
