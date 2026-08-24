@@ -8,6 +8,7 @@ from httpx import AsyncClient
 
 from app.api.deps import get_suggestion_writer
 from app.main import app
+from app.services.matching import Suggestions
 from tests.conftest import auth_header
 
 PASSWORD = "secret123"
@@ -71,6 +72,10 @@ async def test_a_resume_is_matched_against_a_posting(client, owner, suggestion_w
     assert "kubernetes" in body["missing_keywords"]
     assert "python" in body["matched_keywords"]
     assert body["suggestions"] == suggestion_writer.suggestions
+    # The gap note travels in its own field: a client rendering suggestions
+    # into a document must not pick up a remark about the document (W-2).
+    assert body["notes"] == suggestion_writer.notes
+    assert body["notes"] not in body["suggestions"]
     assert body["retrieved_chunk_ids"]
     # The advice article reached the prompt, which is what grounding means.
     assert ARTICLE in suggestion_writer.prompts[0]
@@ -143,7 +148,7 @@ async def test_a_provider_outage_is_reported_as_a_bad_gateway(client, owner):
     document_id = await create_document(client, owner)
 
     class BrokenWriter:
-        async def write(self, prompt: str) -> list[str]:
+        async def write(self, prompt: str) -> Suggestions:
             raise AnthropicError(
                 "the key is sk-secret and the host is internal",
                 request=httpx2.Request("POST", "https://api.anthropic.com/v1/messages"),

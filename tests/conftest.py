@@ -21,6 +21,7 @@ from app.core.db import Base
 from app.main import app
 from app.models import User  # noqa: F401  -- registers the table on Base.metadata
 from app.models.chunk import EMBEDDING_DIMENSIONS
+from app.services.matching import Suggestions
 
 
 def pytest_asyncio_loop_factories(
@@ -74,19 +75,29 @@ class FakeSuggestionWriter:
     Recording the prompt is the point: the tests assert what the model was
     shown, which is the only way to prove suggestions are grounded in
     retrieved chunks (FR-3) without calling a real model.
+
+    It answers with a note by default. The two lists have to stay separable
+    from the endpoint's side, and a fake that never fills notes would let a
+    dropped field pass unnoticed.
     """
 
-    def __init__(self, suggestions: list[str] | None = None) -> None:
+    def __init__(
+        self, suggestions: list[str] | None = None, notes: list[str] | None = None
+    ) -> None:
         self.prompts: list[str] = []
         self.suggestions = ["Shipped a service on kubernetes"]
+        self.notes = ["The resume does not evidence Docker"]
 
         if suggestions is not None:
             self.suggestions = suggestions
 
-    async def write(self, prompt: str) -> list[str]:
+        if notes is not None:
+            self.notes = notes
+
+    async def write(self, prompt: str) -> Suggestions:
         self.prompts.append(prompt)
 
-        return list(self.suggestions)
+        return Suggestions(bullet_points=list(self.suggestions), notes=list(self.notes))
 
 
 TEST_REDIS_DB = 15

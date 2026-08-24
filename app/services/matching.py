@@ -6,6 +6,10 @@ model invents cannot be reproduced, explained or tested, while a coverage
 ratio can. The model is left with the one job it is better at -- phrasing --
 and even that is grounded in retrieved chunks rather than free generation,
 which is what FR-3 asks for.
+
+What it writes comes back in two lists. bullet_points is text for the resume;
+notes is what the model has to say about the resume. Keeping them apart is the
+difference between advice and a remark pasted into a document.
 """
 
 import re
@@ -15,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from anthropic import AsyncAnthropic
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +36,11 @@ a job post says is equally important, and a ratio over hundreds of terms would
 sit near the same value for every resume."""
 
 MIN_KEYWORD_LENGTH = 3
+
+MIN_IES_PLURAL_LENGTH = 5
+"""Below this, an "-ies" word is not treated as a plural. "queries" folds to
+"query", but the same rule on "ties" leaves the single letter "ty"."""
+
 ADVICE_CHUNKS = 5
 
 TOKEN = re.compile(r"[a-z0-9]+(?:[.+#][a-z0-9]+)*[+#]*")
@@ -47,12 +56,80 @@ our out over own said same shall should so some such than that the their
 them then there these they this those through to too under until up upon
 very was we were what when where which while who whom why will with would
 you your yours he her him his she us me my mine
+about across after again against all along among another any around because
+before between both during each either every few here just many more most
+much no nor now once only other per via well within without yet
 """
 """Grammar, not vocabulary. Words like "experience" or "team" stay out of this
 list on purpose: a posting that stresses them is saying something about the
 role, and dropping them would flatten the score."""
 
 STOPWORDS = frozenset(STOPWORD_LIST.split())
+
+BOILERPLATE_LIST = """
+looking look join seeking seek hiring hire wanted apply
+requirement responsibility qualification description note nice
+design build maintain ship write review develop create implement deliver
+ensure support manage collaborate contribute work take part help provide drive
+care want need
+solid strong excellent good great proven deep least ability able
+skill knowledge understanding familiarity familiar hand
+year yearly annual commercial one two three four five six seven eight nine ten
+offer benefit salary budget bonus perk remote hybrid onsite relocation
+training conference ticket holiday insurance equity
+end code day
+"""
+"""Vocabulary, unlike STOPWORDS -- and dropped for a different reason.
+
+These are the words a posting uses to be a posting: how it addresses the
+reader, its section headings, the verbs it wraps around a duty, the filler in
+front of a real requirement. They say nothing about the role, so their absence
+from a resume is not a gap, and a score measured partly against them is
+measured partly against prose.
+
+The perks belong here for a sharper reason: a remote-work line or a training
+budget is what the employer offers, not what the candidate must evidence. They
+point the wrong way through the comparison, and counting them can only push a
+score down.
+
+The boundary is drawn one word away on purpose. "experience" and "team" belong
+to STOPWORD_LIST's reasoning and stay countable: a posting that stresses them
+is saying something. Job titles stay too -- "engineer", "developer" -- because
+a resume that never names the role really is missing something.
+
+Matched on the folded form, so "responsibilities" and "years" are covered by
+their singulars and this list holds one entry per term.
+"""
+
+BOILERPLATE = frozenset(BOILERPLATE_LIST.split())
+
+INVARIANT_LIST = """
+aws gcp devops kubernetes k8s redis postgres jenkins rails windows macos ios
+https dns tls cors saas paas ops news series
+"""
+"""Terms that end in s and are already singular. A suffix rule cannot know
+that "kubernetes" is not the plural of "kubernete", and getting it wrong is
+expensive here: these are exactly the words a posting is picky about, and a
+mangled form matches nothing in the resume."""
+
+INVARIANT = frozenset(INVARIANT_LIST.split())
+
+
+class Suggestions(BaseModel):
+    """The shape the model is constrained to answer in.
+
+    The two fields exist because the model wrote both anyway. Asked only for
+    bullet points, it appended "Gap note: resume does not evidence Docker..."
+    as the last one -- true, useful, and about to be pasted into a resume by
+    any client that renders the list. The content was never the problem, the
+    address was.
+
+    notes defaults to empty: a model with nothing to flag must not fail
+    validation over it.
+    """
+
+    bullet_points: list[str]
+    notes: list[str] = Field(default_factory=list)
 
 
 class SuggestionWriter(Protocol):
@@ -62,15 +139,9 @@ class SuggestionWriter(Protocol):
     reaches a real model is slow, non-deterministic and billed.
     """
 
-    async def write(self, prompt: str) -> list[str]:
-        """Return rewritten resume bullet points for the given prompt."""
+    async def write(self, prompt: str) -> Suggestions:
+        """Return the model's answer: bullet points, and notes about gaps."""
         ...
-
-
-class Suggestions(BaseModel):
-    """The shape the model is constrained to answer in."""
-
-    bullet_points: list[str]
 
 
 class AnthropicSuggestionWriter:
@@ -91,8 +162,8 @@ class AnthropicSuggestionWriter:
         )
         self._model = settings.llm_model
 
-    async def write(self, prompt: str) -> list[str]:
-        """Ask the model for bullet points and return them.
+    async def write(self, prompt: str) -> Suggestions:
+        """Ask the model for an answer and return it whole.
 
         This call is what NFR-2 wants traced in Langfuse -- tokens, latency
         and the chunks the prompt was built from. The tracing wrapper goes
@@ -106,7 +177,7 @@ class AnthropicSuggestionWriter:
         )
         parsed = response.parsed_output
 
-        return list(parsed.bullet_points) if parsed is not None else []
+        return parsed if parsed is not None else Suggestions(bullet_points=[])
 
 
 @dataclass(frozen=True)
@@ -116,13 +187,53 @@ class MatchResult:
     retrieved_chunk_ids is not decoration: it records what the model actually
     saw, so a suggestion can be audited against it later
     (messages.retrieved_chunk_ids in the data model).
+
+    suggestions and notes stay apart all the way to the response: the first
+    is text meant for the resume, the second is what the candidate should
+    know before rewriting it. A client that renders one list cannot then
+    paste the other into a document.
     """
 
     score: float
     matched_keywords: list[str]
     missing_keywords: list[str]
     suggestions: list[str]
+    notes: list[str] = field(default_factory=list)
     retrieved_chunk_ids: list[uuid.UUID] = field(default_factory=list)
+
+
+def singular(token: str) -> str:
+    """Fold a plural onto the form the score is counted in.
+
+    Without this the posting asks for "apis" while the resume says "api" and
+    the term is reported as a gap, which is how a good backend resume scored
+    0.275 in the manual run of 2026-08-23. Both sides of the comparison go
+    through here, so the folding only has to be consistent -- not correct
+    English.
+
+    The rules stay deliberately small. Anything richer means a stemmer, and a
+    stemmer turns "kubernetes" into "kubernet": unreadable in the API response
+    and no better at matching, because the resume is stemmed the same way only
+    when the two words were related to begin with.
+    """
+    if token in INVARIANT:
+        return token
+    if not token.endswith("s") or not token.isalnum():
+        # node.js and its kind keep their punctuation, and their s.
+        return token
+    if token.endswith(("ss", "us", "sis")):
+        # css, status, analysis -- singular already.
+        return token
+    if token.endswith("ies") and len(token) >= MIN_IES_PLURAL_LENGTH:
+        return f"{token[:-3]}y"
+
+    stem = token[:-2]
+    if token.endswith("es") and stem.endswith(("ss", "x", "z", "ch", "sh")):
+        # processes, indexes, matches. "cases" falls through: its stem would
+        # be "cas", which is not one of these endings.
+        return stem
+
+    return token[:-1]
 
 
 def tokenize(text: str) -> list[str]:
@@ -136,11 +247,20 @@ def extract_keywords(text: str, limit: int = MAX_KEYWORDS) -> list[str]:
     Frequency is the whole heuristic: a posting that says "kubernetes" four
     times is asking for kubernetes. Ties keep the order of first appearance,
     so the result is stable for the same input -- the score depends on it.
+
+    Order matters twice. Stopwords are dropped on the written form, because
+    folding "this" first yields "thi", which no list of grammar words
+    contains. Boilerplate is dropped on the folded form instead, so one entry
+    covers "responsibility" and "responsibilities" both. The length floor is
+    applied on the folded form too, so a term that shrinks below it is not
+    counted. Folding also merges counts, so "api" and "apis" reinforce each
+    other in the ranking instead of splitting it.
     """
+    folded = (singular(token) for token in tokenize(text) if token not in STOPWORDS)
     counts = Counter(
-        token
-        for token in tokenize(text)
-        if len(token) >= MIN_KEYWORD_LENGTH and token not in STOPWORDS
+        term
+        for term in folded
+        if len(term) >= MIN_KEYWORD_LENGTH and term not in BOILERPLATE
     )
 
     return [keyword for keyword, _ in counts.most_common(limit)]
@@ -150,11 +270,12 @@ def cover(keywords: list[str], resume: str) -> tuple[list[str], list[str]]:
     """Split a posting's keywords into those the resume has and those it lacks.
 
     Whole terms are compared, not substrings: "java" must not be satisfied by
-    "javascript". The cost is that no stemming or synonyms happen either --
-    "python" and "python3" are different terms here. That is the known limit
-    of a deterministic score, and the reason the LLM half exists.
+    "javascript". Plurals are folded on both sides, so "APIs" in the resume
+    answers "api" in the posting; synonyms still are not, and "python" and
+    "python3" remain different terms. That is the known limit of a
+    deterministic score, and the reason the LLM half exists.
     """
-    present = set(tokenize(resume))
+    present = {singular(token) for token in tokenize(resume)}
     matched = [keyword for keyword in keywords if keyword in present]
     missing = [keyword for keyword in keywords if keyword not in present]
 
@@ -169,6 +290,10 @@ def build_prompt(
     The retrieved chunks are numbered and the instruction points at them, so
     the suggestions are grounded in what the knowledge base holds rather than
     in whatever the model remembers about resumes (FR-3).
+
+    The instruction also has to say what notes is for. A schema field the
+    prompt never mentions comes back empty, and the meta-comment it exists to
+    catch goes back to riding along in bullet_points.
     """
     context = "\n\n".join(
         f"[chunk {index}]\n{chunk.content}" for index, chunk in enumerate(chunks)
@@ -180,7 +305,11 @@ def build_prompt(
         "Write resume bullet points that close the gaps listed below.\n"
         "Ground every bullet point in the numbered context and in the "
         "candidate's own experience; do not invent employers, dates, "
-        "technologies or achievements that appear in neither.\n\n"
+        "technologies or achievements that appear in neither.\n"
+        "A gap the resume gives you nothing to work with is not a bullet "
+        "point: put it in notes, one sentence, addressed to the candidate. "
+        "bullet_points is copied into a resume as it stands, so anything "
+        "written about the resume rather than for it belongs in notes.\n\n"
         f"# Job posting\n{job_post.title or 'Untitled'}\n{job_post.content}\n\n"
         f"# Candidate resume\n{resume}\n\n"
         f"# Missing keywords\n{keywords}\n\n"
@@ -235,12 +364,13 @@ async def match_resume(
         cache,
     )
     chunks += [found.chunk for found in advice]
-    suggestions = await writer.write(build_prompt(job_post, resume, missing, chunks))
+    answer = await writer.write(build_prompt(job_post, resume, missing, chunks))
 
     return MatchResult(
         score=score,
         matched_keywords=matched,
         missing_keywords=missing,
-        suggestions=suggestions,
+        suggestions=list(answer.bullet_points),
+        notes=list(answer.notes),
         retrieved_chunk_ids=[chunk.id for chunk in chunks],
     )

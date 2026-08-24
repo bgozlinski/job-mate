@@ -6,10 +6,13 @@ from app.models.chunk import EMBEDDING_DIMENSIONS
 from app.models.document import Document, SourceType
 from app.services.ingestion import SourceDocument, ingest_document
 from app.services.matching import (
+    BOILERPLATE,
     MAX_KEYWORDS,
+    STOPWORDS,
     cover,
     extract_keywords,
     match_resume,
+    singular,
     tokenize,
 )
 from tests.conftest import FakeEmbeddingModel, FakeSuggestionWriter
@@ -30,7 +33,10 @@ def model() -> FakeEmbeddingModel:
 
 @pytest.fixture
 def writer() -> FakeSuggestionWriter:
-    return FakeSuggestionWriter(["Shipped a python service on kubernetes"])
+    return FakeSuggestionWriter(
+        ["Shipped a python service on kubernetes"],
+        ["The resume does not evidence docker"],
+    )
 
 
 async def store(
@@ -60,7 +66,7 @@ def test_keywords_drop_grammar_and_very_short_terms():
     assert "are" not in keywords
     assert "the" not in keywords
     assert "c" not in keywords
-    assert "developers" in keywords
+    assert "developer" in keywords
 
 
 def test_keywords_are_ordered_by_how_often_the_posting_repeats_them():
@@ -71,6 +77,136 @@ def test_keywords_are_capped():
     text = " ".join(f"term{index}" for index in range(MAX_KEYWORDS * 2))
 
     assert len(extract_keywords(text)) == MAX_KEYWORDS
+
+
+@pytest.mark.parametrize(
+    ("plural", "expected"),
+    [
+        ("apis", "api"),
+        ("endpoints", "endpoint"),
+        ("queries", "query"),
+        ("indexes", "index"),
+        ("matches", "match"),
+        ("processes", "process"),
+        ("cases", "case"),
+        ("microservices", "microservice"),
+    ],
+)
+def test_plurals_fold_to_the_singular(plural: str, expected: str) -> None:
+    assert singular(plural) == expected
+
+
+@pytest.mark.parametrize(
+    "term",
+    [
+        "aws",
+        "kubernetes",
+        "redis",
+        "postgres",
+        "devops",
+        "css",
+        "analysis",
+        "status",
+        "node.js",
+        "series",
+    ],
+)
+def test_terms_that_only_look_plural_are_left_alone(term: str) -> None:
+    """The list is why a rule alone is not enough -- these end in s and stay."""
+    assert singular(term) == term
+
+
+def test_a_term_and_its_plural_count_as_one_keyword():
+    keywords = extract_keywords("We build APIs. The API is documented. APIs again.")
+
+    assert keywords.count("api") == 1
+    assert "apis" not in keywords
+
+
+def test_grammar_is_dropped_before_it_can_be_normalised():
+    """Stopwords are matched on the written form, not the folded one.
+
+    Folding first would turn "this" into "thi", which no stopword list
+    contains, and the word would score as a requirement of the posting.
+    """
+    keywords = extract_keywords("This is what we have: docker and this again")
+
+    assert "thi" not in keywords
+    assert "ha" not in keywords
+    assert "docker" in keywords
+
+
+def test_recruiting_prose_does_not_count_as_a_requirement():
+    """The posting's own voice is not a gap in anyone's resume."""
+    keywords = extract_keywords(
+        "We are looking for someone to join us and build features. "
+        "Requirements: at least three years of solid kubernetes."
+    )
+
+    for prose in (
+        "looking",
+        "join",
+        "build",
+        "requirement",
+        "least",
+        "three",
+        "year",
+        "solid",
+    ):
+        assert prose not in keywords
+    assert "kubernetes" in keywords
+
+
+def test_boilerplate_covers_its_own_plural():
+    """One entry per term: the filter runs after folding, so it has to."""
+    keywords = extract_keywords(
+        "Responsibilities: ship features. Requirements: docker, docker."
+    )
+
+    assert "responsibility" not in keywords
+    assert "requirement" not in keywords
+    assert "docker" in keywords
+
+
+def test_boilerplate_entries_are_written_in_the_folded_form():
+    """A plural entry would sit in the list and never match anything.
+
+    "hands" was exactly that before this test existed: tokens reach the
+    filter already folded to "hand".
+    """
+    assert [term for term in BOILERPLATE if singular(term) != term] == []
+
+
+def test_boilerplate_and_stopwords_do_not_overlap():
+    """Two lists, two reasons, checked at two different moments.
+
+    A term in both is a sign that the boundary between grammar and posting
+    vocabulary has blurred.
+    """
+    assert BOILERPLATE.isdisjoint(STOPWORDS)
+
+
+def test_the_words_kept_countable_on_purpose_survive():
+    """The boundary from the docstrings, pinned down.
+
+    A posting that stresses experience, a team or a job title is saying
+    something about the role -- dropping these would flatten the score.
+    """
+    keywords = extract_keywords(
+        "Senior engineer wanted. Experience leading a team of developers."
+    )
+
+    assert "experience" in keywords
+    assert "team" in keywords
+    assert "engineer" in keywords
+    assert "developer" in keywords
+
+
+def test_cover_sees_through_a_plural_on_either_side():
+    matched, missing = cover(["api"], "Designed REST APIs for internal teams")
+
+    assert matched == ["api"]
+    assert missing == []
 
 
 def test_cover_compares_whole_terms():
@@ -124,6 +260,33 @@ async def test_the_prompt_carries_the_posting_and_the_retrieved_advice(
     # at the candidate is not advice.
     assert OTHER_POST not in prompt
     assert result.suggestions == ["Shipped a python service on kubernetes"]
+
+
+async def test_a_remark_about_the_resume_is_kept_out_of_the_resume(
+    session_factory, model, cache, writer
+):
+    """W-2: the model's gap note used to arrive as the last bullet point.
+
+    Nothing stops a model from writing one, so the schema gives it a place to
+    go. What matters here is that the two lists stay apart on the way out.
+    """
+    async with session_factory() as session:
+        job_post = await store(session, model, cache, JOB_POST, SourceType.JOB_POST)
+
+        result = await match_resume(session, RESUME, job_post, writer, (model, cache))
+
+    assert result.notes == ["The resume does not evidence docker"]
+    assert result.suggestions == ["Shipped a python service on kubernetes"]
+
+
+async def test_the_prompt_says_what_notes_is_for(session_factory, model, cache, writer):
+    """A schema field the instruction never mentions comes back empty."""
+    async with session_factory() as session:
+        job_post = await store(session, model, cache, JOB_POST, SourceType.JOB_POST)
+
+        await match_resume(session, RESUME, job_post, writer, (model, cache))
+
+    assert "notes" in writer.prompts[0]
 
 
 async def test_every_chunk_in_the_prompt_is_recorded_for_audit(
