@@ -72,5 +72,6 @@ async def match(
         matched_keywords=result.matched_keywords,
         missing_keywords=result.missing_keywords,
         suggestions=result.suggestions,
+        notes=result.notes,
         retrieved_chunk_ids=result.retrieved_chunk_ids,
     )
