@@ -52,6 +52,24 @@ Authorization: Bearer {{token}}
 
 < ./frontend-post.json
 
+### Browse the knowledge base: this is where a document_id comes from
+# Newest first, capped at 100 a page. Add &source_type=article to see only the
+# advice sources, or walk the pages with &offset=.
+GET {{host}}/documents?limit=10
+Authorization: Bearer {{token}}
+
+> {%
+    client.test("the three ingested sources are listed", function () {
+        client.assert(response.body.length >= 3,
+            "the postings and the article should all be listed");
+        client.assert(response.body[0].content === undefined,
+            "a listing must not carry the full text of every source");
+        client.assert(response.body.some(function (row) {
+            return row.id === client.global.get("document_id");
+        }), "the posting being matched should be findable here");
+    });
+%}
+
 ### Store a resume that deliberately omits docker, kubernetes and kafka
 POST {{host}}/resumes
 Content-Type: application/json
@@ -78,6 +96,13 @@ Authorization: Bearer {{token}}
             "kubernetes should be reported as missing");
         client.assert(response.body.score > 0 && response.body.score < 1,
             "a partial match should score between 0 and 1");
+    });
+    client.test("remarks stay out of the resume", function () {
+        client.assert(Array.isArray(response.body.notes),
+            "a gap note belongs in notes, not in the bullet points");
+        client.assert(response.body.suggestions.every(function (point) {
+            return !/^\s*gap note/i.test(point);
+        }), "a remark about the resume should not arrive as a resume line");
     });
     client.test("the answer is auditable", function () {
         client.assert(response.body.retrieved_chunk_ids.length > 1,
