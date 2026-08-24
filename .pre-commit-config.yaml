@@ -41,3 +41,15 @@ repos:
         files: ^app/.*\.py$
         pass_filenames: false
         require_serial: true
+
+      # Last, because it is the slowest and needs the stack up (the suite
+      # creates its own database from Settings). pre-commit stashes unstaged
+      # changes first, so this runs against exactly what is being committed --
+      # which is the point: it is what a partially staged change gets caught by.
+      - id: pytest
+        name: pytest
+        entry: uv run pytest -q
+        language: system
+        always_run: true
+        pass_filenames: false
+        require_serial: true
