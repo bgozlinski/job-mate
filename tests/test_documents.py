@@ -58,6 +58,98 @@ async def test_a_repeated_source_answers_with_the_document_already_stored(client
     assert second.json()["chunk_count"] == first.json()["chunk_count"]
 
 
+async def test_the_knowledge_base_can_be_listed(client):
+    """FR-3 needs a document_id, and this is the only way to learn one."""
+    headers = await account(client)
+    created = await client.post("/documents", json=payload(), headers=headers)
+
+    response = await client.get("/documents", headers=headers)
+    body = response.json()
+
+    assert response.status_code == status.HTTP_200_OK
+    assert [row["id"] for row in body] == [created.json()["id"]]
+    assert body[0]["chunk_count"] == created.json()["chunk_count"]
+    assert body[0]["title"] == "Backend engineer"
+    # A listing that carried every article in full would be unusable.
+    assert "content" not in body[0]
+
+
+async def test_the_listing_is_newest_first(client):
+    headers = await account(client)
+    older = await client.post("/documents", json=payload(), headers=headers)
+    newer = await client.post(
+        "/documents",
+        json=payload(content=f"{CONTENT} and one more line"),
+        headers=headers,
+    )
+
+    body = (await client.get("/documents", headers=headers)).json()
+
+    assert [row["id"] for row in body] == [newer.json()["id"], older.json()["id"]]
+
+
+async def test_the_listing_can_be_narrowed_to_one_kind_of_source(client):
+    headers = await account(client)
+    post = await client.post("/documents", json=payload(), headers=headers)
+    await client.post(
+        "/documents",
+        json=payload(source_type="article", content=f"{CONTENT} on careers"),
+        headers=headers,
+    )
+
+    body = (
+        await client.get(
+            "/documents", params={"source_type": "job_post"}, headers=headers
+        )
+    ).json()
+
+    assert [row["id"] for row in body] == [post.json()["id"]]
+
+
+async def test_a_page_can_be_walked_with_limit_and_offset(client):
+    headers = await account(client)
+    ids = []
+    for index in range(3):
+        created = await client.post(
+            "/documents",
+            json=payload(content=f"{CONTENT} number {index}"),
+            headers=headers,
+        )
+        ids.append(created.json()["id"])
+
+    first = (
+        await client.get("/documents", params={"limit": 2}, headers=headers)
+    ).json()
+    second = (
+        await client.get(
+            "/documents", params={"limit": 2, "offset": 2}, headers=headers
+        )
+    ).json()
+
+    # Newest first, so the pages walk backwards through the order of ingestion.
+    assert [row["id"] for row in first] == list(reversed(ids))[:2]
+    assert [row["id"] for row in second] == list(reversed(ids))[2:]
+
+
+@pytest.mark.parametrize(
+    "params",
+    [{"limit": 0}, {"limit": 101}, {"offset": -1}, {"source_type": "nonsense"}],
+)
+async def test_a_listing_that_asks_for_nonsense_is_rejected(client, params):
+    """The page cap is a promise about response size, not a suggestion."""
+    headers = await account(client)
+
+    response = await client.get("/documents", params=params, headers=headers)
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+
+
+async def test_listing_requires_a_token(client):
+    response = await client.get("/documents")
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
 async def test_a_source_that_normalises_to_nothing_is_rejected(client):
     headers = await account(client)
 
