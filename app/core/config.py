@@ -48,8 +48,8 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
 
     anthropic_api_key: SecretStr | None = None
-    llm_model: str = "claude-opus-5"
-
+    """claude-fable-5, claude-opus-5, claude-sonnet-5, claude-haiku-4-5-20251001"""
+    llm_model: str = "claude-sonnet-5"
     jwt_secret_key: SecretStr
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 1440

@@ -39,7 +39,7 @@ Stan całości: `/`, `/health`, `/health/ready`, `/auth/register`, `/auth/login`
 ### 1.4 Dostawcy
 
 - **Embeddingi:** OpenAI `text-embedding-3-small` (1536 wymiarów natywnie — tyle, ile ma kolumna i indeks).
-- **LLM:** Anthropic `claude-opus-5`, structured output przez `messages.parse`. Anthropic nie ma API embeddingów, więc dostawcy są z konieczności różni.
+- **LLM:** Anthropic, structured output przez `messages.parse`. Anthropic nie ma API embeddingów, więc dostawcy są z konieczności różni. Domyślny model zmieniony 2026-08-24 z `claude-opus-5` na `claude-haiku-4-5` — patrz niżej.
 - Oba klucze są **opcjonalne**: aplikacja startuje bez nich, a endpointy, które ich wymagają, odpowiadają 503.
 
 ---
@@ -162,6 +162,33 @@ co następna strona mówi za darmo.
 Nie zrobiono: filtrowania po `metadata` (indeks GIN już jest, więc to jedno `@>` w `where`,
 gdy pojawi się potrzeba) ani `GET /documents/{id}` — czyli jedynego miejsca, gdzie treść
 dokumentu miałaby wracać w całości.
+
+### Zmiana domyślnego modelu LLM (2026-08-24)
+
+`llm_model` domyślnie `claude-haiku-4-5` zamiast `claude-opus-5`. Powód jest strukturalny,
+nie oszczędnościowy: podział pracy w FR-3 zostawia modelowi wyłącznie przeformułowanie
+punktów CV — score, brakujące słowa i uziemienie w chunkach liczy Python. To zadanie o
+wąskim zakresie, z narzuconym schematem wyjścia.
+
+Dwa czynniki, nie jeden:
+
+| | `claude-opus-5` | `claude-haiku-4-5` |
+|---|---|---|
+| Cena (wejście / wyjście za 1M) | 5 / 25 USD | 1 / 5 USD |
+| Okno kontekstu | 1M | 200K |
+| Myślenie | **adaptacyjne, włączone domyślnie** | brak |
+
+Drugi wiersz od dołu jest tym, który naprawdę zmienia rachunek: na Opusie 5 myślenie jest
+włączone, nawet gdy kod nie przekazuje parametru `thinking`, a tokeny myślenia są liczone
+jak wyjściowe — po 25 USD za milion. Haiku ich nie generuje, więc na wyjściu zostają same
+punkty CV.
+
+200K kontekstu wystarcza z zapasem: prompt to ogłoszenie, CV i najwyżej dziesięć chunków.
+
+Pułapka na przyszłość: **`output_config={"effort": ...}` zwraca błąd na Haiku 4.5.** Gdyby
+jakość sugestii okazała się za niska, kolejność podnoszenia to `claude-sonnet-5`
+(3 / 15 USD), potem `claude-opus-5` — i dopiero tam `effort` oraz `thinking` są dostępne.
+Zmiana nie wymaga ruszania kodu, wystarczy `LLM_MODEL` w `.env`.
 
 ### W-5. `Settings` z `extra="ignore"` przemilcza literówki w `.env` (zamknięte, `71ec9ea`)
 
