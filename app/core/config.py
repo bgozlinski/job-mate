@@ -15,9 +15,11 @@ class Settings(BaseSettings):
     secrets are SecretStr so that a repr or a traceback cannot spill them
     into a log (NFR-1).
 
-    The two provider keys are optional because CI has no keys and must
-    still be able to import the application and run the suite; the clients
-    are what fail, and only when something actually asks them to work.
+    The provider and Langfuse keys are optional because CI has no keys and
+    must still be able to import the application and run the suite; the
+    clients are what fail, and only when something actually asks them to
+    work. Langfuse degrades one step further: with no keys the SDK stays
+    quiet and the application behaves as if tracing were switched off.
 
     extra="forbid" turns a misspelt key in .env into a startup failure that
     names it. Ignoring it instead costs an hour: OPEN_API_KEY was accepted
@@ -48,8 +50,18 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
 
     anthropic_api_key: SecretStr | None = None
-    """claude-fable-5, claude-opus-5, claude-sonnet-5, claude-haiku-4-5-20251001"""
-    llm_model: str = "claude-sonnet-5"
+    """claude-fable-5, claude-opus-5, claude-sonnet-5, claude-haiku-4-5.
+
+    The ids are complete as written -- a date suffix appended to one of them
+    is not a pin, it is a 404 from the provider.
+    """
+    llm_model: str = "claude-haiku-4-5"
+
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: SecretStr | None = None
+    langfuse_host: str = "http://langfuse-web:3000"
+    """The compose service; http://localhost:3000 only outside Docker."""
+
     jwt_secret_key: SecretStr
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 1440
