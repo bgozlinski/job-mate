@@ -1,4 +1,5 @@
 .env
+.env.langfuse
 .venv/
 .git/
 .idea/
