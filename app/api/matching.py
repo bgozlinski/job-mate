@@ -9,6 +9,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import OwnedResume, get_db, get_embeddings, get_suggestion_writer
+from app.core.observability import trace_match
 from app.models.document import Document, SourceType
 from app.schemas.matching import MatchCreate, MatchRead
 from app.services.embeddings import EmbeddingModel
@@ -55,9 +56,13 @@ async def match(
         )
 
     try:
-        result = await match_resume(
-            session, resume.content, document, writer, embeddings
-        )
+        # The trace is opened here rather than in the service because this is
+        # the layer that knows who is asking; matching itself has no reason to
+        # learn that Langfuse exists.
+        with trace_match(resume.user_id, document.id):
+            result = await match_resume(
+                session, resume.content, document, writer, embeddings
+            )
     except (AnthropicError, OpenAIError) as exc:
         # Provider messages can carry request URLs and key fragments, so the
         # caller is told what failed, not what it said (NFR-1).

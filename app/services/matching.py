@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from anthropic import AsyncAnthropic
+from langfuse import get_client, observe
 from pydantic import BaseModel, Field
 from redis.asyncio import Redis
 from sqlalchemy import select
@@ -162,12 +163,18 @@ class AnthropicSuggestionWriter:
         )
         self._model = settings.llm_model
 
+    @observe(as_type="generation")
     async def write(self, prompt: str) -> Suggestions:
         """Ask the model for an answer and return it whole.
 
-        This call is what NFR-2 wants traced in Langfuse -- tokens, latency
-        and the chunks the prompt was built from. The tracing wrapper goes
-        around this method once Langfuse is wired up.
+        This is the call NFR-2 wants traced. The decorator records the prompt,
+        the answer and the latency on its own; the token counts have to be
+        handed over, because the provider client is called directly rather
+        than through one of the SDK's integrations, and cost without a token
+        count is not a number anyone can act on.
+
+        Both calls are inert when no keys are configured -- the SDK disables
+        itself and logs once -- so this path runs unchanged in CI.
         """
         response = await self._client.messages.parse(
             model=self._model,
@@ -176,6 +183,14 @@ class AnthropicSuggestionWriter:
             output_format=Suggestions,
         )
         parsed = response.parsed_output
+
+        get_client().update_current_generation(
+            model=self._model,
+            usage_details={
+                "input": response.usage.input_tokens,
+                "output": response.usage.output_tokens,
+            },
+        )
 
         return parsed if parsed is not None else Suggestions(bullet_points=[])
 

@@ -12,6 +12,7 @@ from app.api.matching import router as matching_router
 from app.api.resumes import router as resumes_router
 from app.core.config import get_settings
 from app.core.db import create_engine, create_session_factory
+from app.core.observability import create_tracer
 from app.core.redis import create_redis
 from app.services.embeddings import OpenAIEmbeddingModel
 from app.services.matching import AnthropicSuggestionWriter
@@ -38,9 +39,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.suggestion_writer = (
         AnthropicSuggestionWriter(settings) if settings.anthropic_api_key else None
     )
+    # Nothing reads this back: building it registers the process-wide client
+    # that @observe in the service layer picks up. It is kept on state only so
+    # shutdown has something to flush.
+    app.state.tracer = create_tracer(settings)
     try:
         yield
     finally:
+        # Before the rest: the SDK batches events in a background thread, and
+        # a container that stops without flushing loses the traces of the last
+        # requests it served -- the ones most likely to be worth reading.
+        if app.state.tracer is not None:
+            app.state.tracer.shutdown()
         await app.state.engine.dispose()
         await app.state.redis.aclose()
 

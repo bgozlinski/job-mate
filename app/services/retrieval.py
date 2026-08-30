@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+from langfuse import get_client, observe
 from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,10 +58,17 @@ class Match:
     distance: float
 
 
+@observe(name="retrieval", capture_input=False, capture_output=False)
 async def search(
     session: AsyncSession, query: SearchQuery, model: EmbeddingModel, cache: Redis
 ) -> list[Match]:
     """Return the chunks closest to the query, nearest first.
+
+    The span is filled by hand rather than captured: the arguments include a
+    database session and a Redis client, which have no useful serialisation,
+    and the return value carries whole chunks whose text the prompt on the
+    generation span already holds. What is worth recording is the audit trail
+    NFR-2 asks for -- which chunks came back, and how far they sat.
 
     The query is embedded with the same model and through the same cache as
     the chunks were: distances between vectors from two different models mean
@@ -95,5 +103,19 @@ async def search(
         statement = statement.where(Document.source_type.in_(query.source_types))
 
     rows = await session.execute(statement)
+    matches = [Match(chunk=chunk, distance=float(value)) for chunk, value in rows]
 
-    return [Match(chunk=chunk, distance=float(value)) for chunk, value in rows]
+    get_client().update_current_span(
+        input={
+            "text": query.text,
+            "k": query.k,
+            "filters": query.filters,
+            "source_types": [source.value for source in query.source_types],
+        },
+        output={
+            "chunk_ids": [str(match.chunk.id) for match in matches],
+            "distances": [round(match.distance, 4) for match in matches],
+        },
+    )
+
+    return matches
