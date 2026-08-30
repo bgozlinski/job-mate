@@ -75,5 +75,153 @@ services:
       retries: 3
       start_period: 40s
 
+  # --- Langfuse (NFR-2: trace'y wywolan LLM i retrievalu) --------------------
+  # Self-hosted v3 to szesc kontenerow. Konfiguracja siedzi w .env.langfuse, a
+  # nie w .env: serwis `api` montuje .env i ma Settings(extra="forbid"), wiec
+  # kazdy klucz Langfuse'a w tamtym pliku wywalilby aplikacje na starcie.
+  #
+  # Uwaga na dwa poziomy zmiennych. `env_file` trafia do kontenera, ale NIE do
+  # interpolacji ${...} w tym YAML-u -- compose czyta do niej wylacznie root-owy
+  # .env. Dlatego healthchecki ponizej maja wartosci wpisane na sztywno.
+
+  langfuse-web:
+    image: langfuse/langfuse:4
+    container_name: langfuse-web-service
+    restart: unless-stopped
+    env_file:
+      - .env.langfuse
+    ports:
+      - "3000:3000"
+    depends_on:
+      langfuse-db:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+    healthcheck:
+      # Nie localhost: serwer Next.js w trybie standalone slucha wylacznie na
+      # adresie spod $HOSTNAME, czyli na IP kontenera w sieci compose. Na 127.0.0.1
+      # nie ma nikogo i proba przez loopback dostaje "connection refused" bez konca.
+      # Publikacja portu 3000 dziala mimo to, bo Docker robi DNAT na IP kontenera.
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider \"http://$$HOSTNAME:3000/api/public/health\" || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      # Pierwszy start odpala migracje Prismy i ClickHouse'a -- zanim serwer
+      # zaczyna odpowiadac, mija ponad minute.
+      start_period: 120s
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:4
+    container_name: langfuse-worker-service
+    restart: unless-stopped
+    env_file:
+      - .env.langfuse
+    depends_on:
+      langfuse-db:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+      # Migracje Prismy i ClickHouse'a odpala wylacznie web. Bez tego czekania
+      # worker startuje rownolegle i przez pierwsze sekundy zasypuje logi bledami
+      # "relation does not exist" -- nieszkodliwymi, ale mylacymi przy diagnozie.
+      langfuse-web:
+        condition: service_healthy
+    # Bez healthchecka celowo: nic od workera nie zalezy, a jego brak w stanie
+    # "healthy" jest tu poprawny. To on konsumuje kolejke BullMQ i zapisuje
+    # trace'y do ClickHouse -- bez niego UI wstaje, ale zostaje puste.
+
+  langfuse-db:
+    image: postgres:17-alpine
+    container_name: langfuse-db-service
+    restart: unless-stopped
+    env_file:
+      - .env.langfuse
+    volumes:
+      - langfuse_postgres_data:/var/lib/postgresql/data
+    # Bez publikacji portu: 5432 na hoscie nalezy do `db`, a do tej bazy
+    # wchodza tylko web i worker z sieci compose.
+    healthcheck:
+      # Na sztywno, bo ${POSTGRES_USER} z .env.langfuse jest tu niewidoczne --
+      # interpolacja czyta root-owy .env, gdzie ta zmienna znaczy co innego.
+      test: [ "CMD-SHELL", "pg_isready -U langfuse -d langfuse" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  langfuse-redis:
+    image: redis:8-alpine
+    container_name: langfuse-redis-service
+    restart: unless-stopped
+    env_file:
+      - .env.langfuse
+    # $$ zostaje zjedzone przez compose i do powloki w kontenerze trafia $, wiec
+    # haslo bierze sie ze zmiennej srodowiskowej zamiast byc zduplikowane w YAML-u.
+    command: sh -c 'redis-server --requirepass "$$REDIS_AUTH"'
+    healthcheck:
+      test: [ "CMD-SHELL", "redis-cli -a \"$$REDIS_AUTH\" ping | grep -q PONG" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  clickhouse:
+    image: docker.io/clickhouse/clickhouse-server:25.12
+    container_name: clickhouse-service
+    restart: unless-stopped
+    user: "101:101"
+    env_file:
+      - .env.langfuse
+    volumes:
+      - langfuse_clickhouse_data:/var/lib/clickhouse
+      - langfuse_clickhouse_logs:/var/log/clickhouse-server
+    # Porty 8123/9000 nie ida na hosta: 9000 kolidowaloby z MinIO, a klientami
+    # sa wylacznie web i worker.
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio-service
+    restart: unless-stopped
+    env_file:
+      - .env.langfuse
+    # mkdir przed startem serwera tworzy bucket `langfuse` -- MinIO nie zrobi
+    # tego sam, a worker bez niego wpada w petle bledow zapisu.
+    entrypoint: sh
+    command: -c 'mkdir -p /data/langfuse && minio server /data --address ":9000" --console-address ":9001"'
+    ports:
+      # 9090, bo 9000 na hoscie jest zajete koncepcyjnie przez ClickHouse; ten
+      # numer musi sie zgadzac z LANGFUSE_S3_MEDIA_UPLOAD_EXTERNAL_ENDPOINT.
+      - "9090:9000"
+      # Konsola MinIO -- wygodna do podejrzenia, czy eventy faktycznie leca.
+      - "9091:9001"
+    volumes:
+      - langfuse_minio_data:/data
+    healthcheck:
+      test: [ "CMD", "mc", "ready", "local" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
 volumes:
   postgres_data:
+  langfuse_postgres_data:
+    driver: local
+  langfuse_clickhouse_data:
+    driver: local
+  langfuse_clickhouse_logs:
+    driver: local
+  langfuse_minio_data:
+    driver: local
