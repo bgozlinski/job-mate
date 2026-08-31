@@ -1,17 +1,36 @@
 """Adding sources to the knowledge base (FR-1) and browsing it (FR-6)."""
 
+import json
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from openai import APIError
+from pydantic import ValidationError
 from redis.asyncio import Redis
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_cache, get_current_user, get_db, get_embedding_model
+from app.api.uploads import basename, read_within_limit, text_of
 from app.models.chunk import Chunk
 from app.models.document import Document, SourceType
-from app.schemas.document import DocumentCreate, DocumentRead
+from app.schemas.document import (
+    MAX_CONTENT_LENGTH,
+    MAX_TITLE_LENGTH,
+    DocumentCreate,
+    DocumentRead,
+    DocumentUpload,
+)
 from app.services.embeddings import EmbeddingModel
 from app.services.ingestion import EmptyDocumentError, SourceDocument, ingest_document
 
@@ -129,14 +148,105 @@ async def create_document(
     Rate limiting (NFR-2) belongs on this route: it is the one that spends
     money at a third-party API.
     """
-    source = SourceDocument(
-        source_type=payload.source_type,
-        content=payload.content,
-        title=payload.title,
-        source_url=str(payload.source_url) if payload.source_url else None,
-        metadata=payload.metadata,
+    return await _ingest(
+        SourceDocument(
+            source_type=payload.source_type,
+            content=payload.content,
+            title=payload.title,
+            source_url=str(payload.source_url) if payload.source_url else None,
+            metadata=payload.metadata,
+        ),
+        session,
+        cache,
+        model,
+        response,
     )
 
+
+@router.post("/upload")
+async def upload_document(  # noqa: PLR0913, PLR0917 -- four are dependencies
+    session: Session,
+    cache: Cache,
+    model: Embeddings,
+    response: Response,
+    file: Annotated[UploadFile, File()],
+    source_type: Annotated[str, Form()],
+    title: Annotated[str | None, Form()] = None,
+    source_url: Annotated[str | None, Form()] = None,
+    metadata: Annotated[str | None, Form()] = None,
+) -> DocumentRead:
+    """Ingest a source from an uploaded PDF, DOCX or text file (FR-1).
+
+    The same knowledge base as the JSON route, reached with a file instead
+    of a paste, and answering the same way: 201 for a new source, 200 with
+    the existing one for a duplicate.
+
+    No file hash is stored, and that is the point. A document is identified
+    by the hash of its normalised text, so the same posting sent once as a
+    PDF and once as a DOCX is correctly one document -- two different files,
+    one source. Hashing the bytes here would break that, which is the
+    opposite of what it does for resumes, where the hash is what makes a
+    re-upload recognisable.
+
+    The fields are declared one by one rather than as a single Form model:
+    FastAPI flattens such a model only when every field is scalar, and
+    metadata is an object, so the whole thing arrives as one missing field.
+    They are validated together anyway, by handing them to DocumentUpload --
+    a known source_type, a real URL and metadata that parses -- so the two
+    routes reject the same input for the same reasons.
+
+    The length limit the JSON route gets from its schema is applied by hand:
+    a 5 MB file of prose parses to far more text than MAX_CONTENT_LENGTH
+    allows, and nothing would otherwise stop it.
+
+    The title falls back to the filename, which is the only name an upload
+    comes with and better than nothing in a listing.
+    """
+    try:
+        form = DocumentUpload(
+            source_type=source_type,  # type: ignore[arg-type]
+            title=title,
+            source_url=source_url,  # type: ignore[arg-type]
+            metadata=metadata,  # type: ignore[arg-type]
+        )
+    except (ValidationError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="The form carries a field this route cannot read",
+        ) from exc
+
+    data = await read_within_limit(file)
+    content = await text_of(data)
+
+    if len(content) > MAX_CONTENT_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"The document is longer than {MAX_CONTENT_LENGTH} characters",
+        )
+
+    return await _ingest(
+        SourceDocument(
+            source_type=form.source_type,
+            content=content,
+            title=form.title or basename(file.filename, MAX_TITLE_LENGTH),
+            source_url=str(form.source_url) if form.source_url else None,
+            metadata=form.metadata,
+        ),
+        session,
+        cache,
+        model,
+        response,
+    )
+
+
+async def _ingest(
+    source: SourceDocument,
+    session: AsyncSession,
+    cache: Redis,
+    model: EmbeddingModel,
+    response: Response,
+) -> DocumentRead:
+    """Store a source however it arrived, and describe what came of it."""
     try:
         ingested = await ingest_document(session, source, model, cache)
     except EmptyDocumentError as exc:

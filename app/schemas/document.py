@@ -1,10 +1,11 @@
 """Schemas for adding sources to the knowledge base."""
 
+import json
 import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 from app.models.document import SourceType
 
@@ -28,6 +29,42 @@ class DocumentCreate(BaseModel):
     title: str | None = Field(default=None, max_length=MAX_TITLE_LENGTH)
     source_url: HttpUrl | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class DocumentUpload(BaseModel):
+    """Everything an upload carries beside the file itself.
+
+    A model rather than four separate Form parameters so the handler keeps a
+    signature a reader can take in, and so the same validation the JSON route
+    gets for free -- a known source_type, a real URL -- applies here too.
+
+    content is absent on purpose: it is the file.
+    """
+
+    source_type: SourceType
+    title: str | None = Field(default=None, max_length=MAX_TITLE_LENGTH)
+    source_url: HttpUrl | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("metadata", mode="before")
+    @classmethod
+    def _from_json(cls, value: object) -> object:
+        """Accept metadata as a JSON string, which is all multipart can carry.
+
+        Multipart has no notion of a nested value, so the field arrives as
+        text. Anything that is not a JSON object fails validation here and
+        becomes a 422 naming the field, exactly as the JSON route would.
+        """
+        if value is None:
+            return {}
+
+        if not isinstance(value, str):
+            return value
+
+        if not value.strip():
+            return {}
+
+        return json.loads(value)
 
 
 class DocumentRead(BaseModel):
