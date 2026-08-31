@@ -18,8 +18,13 @@ Jedenaście commitów, od `e6cde1d` do `315432f`.
 | `6a427200d6e5` | `documents` — natywny ENUM `source_type`, `metadata` JSONB `NOT NULL DEFAULT '{}'`, **unikalny** indeks na `content_hash` |
 | `2602641fd962` | `chunks` — `embedding vector(1536)`, indeks HNSW `vector_cosine_ops`, FK `ON DELETE CASCADE`, unikalne `(document_id, chunk_index)`; `CREATE EXTENSION vector` |
 | `05239445d2bc` | indeks GIN `jsonb_path_ops` na `documents.metadata` |
+| `9fb0b6464575` | `resumes` — `file_hash`, `mime_type`, `original_filename` (nullable) + `UNIQUE (user_id, file_hash)`; pochodzenie wgranego pliku, deduplikacja per właściciel |
+| `7c1776aa283c` | `documents.requirements` JSONB nullable — wymagania odczytane przez LLM (W-1 (c)) |
+| `51b84c9a0089` | `resumes.skills` JSONB nullable — umiejętności odczytane z CV, druga strona porównania |
 
 Razem z etapem 1: `users` (`28548320470c`), `resumes` (`128f54098c8a`). Brakuje `sessions` i `messages` — to etap 4.
+
+Trzy ostatnie migracje są z 2026-08-30/31 i wszystkie kolumny w nich są **nullable** z tego samego powodu: opisują fakt, którego wiersz może nie mieć (dokument sprzed zmiany, brak klucza LLM, CV wklejone jako tekst), a brak tego faktu kosztuje jakość, nie funkcję.
 
 ### 1.2 Warstwa serwisów
 
@@ -30,7 +35,7 @@ Razem z etapem 1: `users` (`28548320470c`), `resumes` (`128f54098c8a`). Brakuje 
 | `app/services/ingestion.py` | dokument + chunki w jednej transakcji, deduplikacja | — |
 | `app/services/retrieval.py` | wyszukiwanie hybrydowe: filtr JSONB / `source_type` + `<=>` | `DEFAULT_K = 5`, `MAX_K = 50` |
 | `app/services/matching.py` | score deterministyczny + sugestie z LLM (FR-3) | `MAX_KEYWORDS = 40`, `ADVICE_CHUNKS = 5` |
-| `app/services/requirements.py` | ekstrakcja wymagań oferty przez LLM (W-1 (c), 2026-08-31) | `MAX_REQUIREMENTS = 30`, `MAX_TERM_WORDS = 3` |
+| `app/services/requirements.py` | ekstrakcja wymagań oferty i umiejętności z CV przez LLM (W-1 (c), 2026-08-31) | `MAX_REQUIREMENTS = 30`, `MAX_TERM_WORDS = 3` |
 | `app/services/extraction.py` | plik → tekst: PDF, DOCX, TXT (2026-08-30) | `MAX_FILE_BYTES = 5 MiB`, `MIN_EXTRACTED_CHARS = 100` |
 | `app/services/rate_limit.py` | budżet żądań per konto w Redisie (NFR-2, 2026-08-31) | `match` 20/h, `ingest` 60/h |
 
@@ -154,8 +159,41 @@ zakazuje powtarzania tego samego pojęcia. `postgresql` się dopasowało, `sql` 
 wymaganie liczone dwa razy, raz jako luka. Zostawione świadomie: poprawka promptu wymaga
 pomiaru tą samą drogą, nie zgadywania. Kandydat na dataset w Langfuse.
 
-**Zostaje w backlogu:** ekstrakcja po stronie CV. Dziś lista modelu jest porównywana z
-surowymi tokenami CV, więc `containerisation` w ofercie nie trafi na `Docker` w CV.
+**Druga strona porównania (2026-08-31).** CV też jest czytane przez LLM, a wynik ląduje w
+`resumes.skills` (JSONB, nullable, migracja `51b84c9a0089`). Bez tego lista wymagań trafiała
+na surowe tokeny CV i `automated testing` z oferty nie miało jak spotkać „unit and
+integration tests" z CV, a `kubernetes` — `k8s`.
+
+Jeden protokół `SkillExtractor` dla obu stron, prompt jako argument konstruktora zamiast
+podklasy: odczyty różnią się jednym stringiem, a dzielą wywołanie, tracing i czyszczenie.
+Czytane tym samym słownikiem celowo — wymaganie i umiejętność, która na nie odpowiada,
+muszą wrócić zapisane tak samo, inaczej porównanie jest bezwartościowe. Stąd jedyna
+wyróżniająca instrukcja promptu CV: rozwiń skrót (`k8s` → `kubernetes`).
+
+**`evidence()` to suma, nie zamiana.** Terminy, którymi CV odpowiada, to tokeny jego
+własnego tekstu **∪** tokeny wyekstrahowanej listy. Lista modelu jest streszczeniem i może
+pominąć słowo stojące w tekście wprost, więc zastąpienie tekstu listą gubiłoby dopasowania,
+które dziś działają. Odczyt CV może wyłącznie dodać trafienie — pilnuje tego osobny test.
+
+`PATCH` zmieniający `content` **czyści** `skills` zamiast czytać ponownie: opisywałyby tekst,
+którego już nie ma, i odpowiadałyby na wymagania, których nowe CV nie spełnia. Czyszczenie
+cofa do słów nowego tekstu (uczciwie), ponowny odczyt dokładałby wywołanie LLM do trasy,
+która nigdy go nie miała, przy edycji mogącej być poprawką literówki. Zmiana samego
+`target_role` umiejętności nie rusza.
+
+Obie trasy zapisujące CV wydają teraz pieniądze, więc dostały budżet `ingest` (NFR-2).
+
+**Pomiar na `examples/` (ten sam payload):** score **0.267 (4/15) → 0.333 (5/15)**. Zysk to
+`automated testing`: wymagane przez ofertę, udowodnione w CV jako „unit and integration
+tests", niewidoczne dla każdej wcześniejszej wersji tego porównania. Nic, co dopasowywało
+się wcześniej, nie przestało. Model wyciągnął z CV: `python`, `rest apis`, `flask`,
+`fastapi`, `postgresql`, `unit testing`, `integration testing`, `mentoring`,
+`deployment automation`, `production monitoring`.
+
+**Drugie znalezisko przy okazji:** model zwraca z CV umiejętności prawdziwe, ale takie, o
+które żadna oferta nie zapyta w tych słowach (`mentoring`, `production monitoring`).
+Nieszkodliwe, bo suma tylko dodaje — warte obserwacji, gdyby lista miała kiedyś służyć do
+czegoś poza porównaniem.
 
 ### W-2. LLM dokleja meta-komentarz do `bullet_points` (zamknięte 2026-08-24)
 
@@ -294,8 +332,8 @@ Konsekwencja niespójności scaffoldu opisanej w `CLAUDE.md` (`uv sync --no-inst
 | ~~Langfuse + rate limiting~~ | sekcja 4 | zrobione 2026-08-31 |
 | Rozważyć usunięcie `langchain-text-splitters` (ciągnie `langsmith`, `requests`, `orjson`) | przegląd zależności przy chunkingu | otwarte |
 | ~~Ekstrakcja wymagań przez LLM, wariant (c)~~ | W-1 | zrobione 2026-08-31 |
-| Ekstrakcja umiejętności z CV (druga strona porównania) | W-1 | otwarte |
-| Prompt ekstrakcji: `sql` obok `postgresql` | W-1 | otwarte |
+| ~~Ekstrakcja umiejętności z CV (druga strona porównania)~~ | W-1 | zrobione 2026-08-31 |
+| Prompt ekstrakcji: `sql` obok `postgresql`, `mentoring` z CV | W-1 | otwarte — mierzyć datasetem, nie zgadywać |
 | ~~Naprawa szumu w słowach kluczowych, wariant (a)~~ | W-1 | zrobione 2026-08-24 |
 | ~~`extra="forbid"` w `Settings`~~ | W-5 | zrobione `71ec9ea` |
 
