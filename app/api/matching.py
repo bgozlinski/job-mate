@@ -15,7 +15,7 @@ from app.api.deps import (
     get_suggestion_writer,
     rate_limited,
 )
-from app.core.observability import trace_match
+from app.core.observability import record, traced
 from app.models.document import Document, SourceType
 from app.schemas.matching import MatchCreate, MatchRead
 from app.services.embeddings import EmbeddingModel
@@ -68,9 +68,20 @@ async def match(
         # The trace is opened here rather than in the service because this is
         # the layer that knows who is asking; matching itself has no reason to
         # learn that Langfuse exists.
-        with trace_match(resume.user_id, document.id):
+        with traced("match", resume.user_id, document_id=str(document.id)):
             result = await match_resume(
                 session, resume.content, document, writer, embeddings
+            )
+            # The score belongs on the trace, not only in the response: it is
+            # what tells a reader whether a weak suggestion came from a weak
+            # match or from the model.
+            record(
+                output={
+                    "score": result.score,
+                    "matched": len(result.matched_keywords),
+                    "missing": len(result.missing_keywords),
+                    "chunks": len(result.retrieved_chunk_ids),
+                }
             )
     except (AnthropicError, OpenAIError) as exc:
         # Provider messages can carry request URLs and key fragments, so the

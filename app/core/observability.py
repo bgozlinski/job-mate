@@ -3,6 +3,7 @@
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any
 
 from langfuse import Langfuse, LangfuseOtelSpanAttributes, get_client
 from opentelemetry import trace
@@ -33,23 +34,31 @@ def create_tracer(settings: Settings) -> Langfuse | None:
 
 
 @contextmanager
-def trace_match(user_id: uuid.UUID, document_id: uuid.UUID) -> Iterator[None]:
-    """Open the span that retrieval and generation become children of.
+def traced(name: str, user_id: uuid.UUID, **payload: Any) -> Iterator[None]:
+    """Open the span everything the request does becomes a child of.
 
     A context manager rather than a decorator on the route: @observe rewrites
-    the signature FastAPI reads its dependencies from. Without a root here the
-    two would land as separate traces, and a retrieval nobody can line up with
-    the answer it fed is exactly what NFR-2 is meant to prevent.
+    the signature FastAPI reads its dependencies from. Without a root, the
+    work underneath lands as separate traces, and a retrieval nobody can line
+    up with the answer it fed is exactly what NFR-2 is meant to prevent.
 
     The caller is attached as an OpenTelemetry attribute because that is the
     whole of the v4 surface for it -- there is no update_current_trace any
     more. Only the id goes on: cost per user is the question, and an email on
     a trace is one more copy of it to protect (NFR-1).
     """
-    with get_client().start_as_current_observation(
-        name="match", input={"document_id": str(document_id)}
-    ):
+    with get_client().start_as_current_observation(name=name, input=payload):
         trace.get_current_span().set_attribute(
             LangfuseOtelSpanAttributes.TRACE_USER_ID, str(user_id)
         )
         yield
+
+
+def record(**payload: Any) -> None:
+    """Add to the span that is open, if any.
+
+    Named for what it is used for: hanging the outcome of a request on its
+    own trace once the work is done. A no-op when nothing is traced, so a
+    caller never has to ask whether tracing is on.
+    """
+    get_client().update_current_span(**payload)

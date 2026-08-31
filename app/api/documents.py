@@ -1,6 +1,7 @@
 """Adding sources to the knowledge base (FR-1) and browsing it (FR-6)."""
 
 import json
+import uuid
 from typing import Annotated
 
 from fastapi import (
@@ -21,6 +22,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
+    CurrentUser,
     get_cache,
     get_current_user,
     get_db,
@@ -28,6 +30,7 @@ from app.api.deps import (
     rate_limited,
 )
 from app.api.uploads import basename, read_within_limit, text_of
+from app.core.observability import record, traced
 from app.models.chunk import Chunk
 from app.models.document import Document, SourceType
 from app.schemas.document import (
@@ -43,9 +46,9 @@ from app.services.ingestion import EmptyDocumentError, SourceDocument, ingest_do
 router = APIRouter(
     prefix="/documents",
     tags=["documents"],
-    # Authentication is a property of the route, not an argument the handler
-    # uses: the knowledge base is shared, so nothing here is scoped to the
-    # caller the way resumes are.
+    # Authentication is a property of every route here. The knowledge base is
+    # shared, so nothing is scoped to the caller the way resumes are -- the
+    # ingesting routes name the user only to put a cost on their trace.
     dependencies=[Depends(get_current_user)],
 )
 
@@ -137,8 +140,9 @@ async def list_documents(
 
 
 @router.post("", dependencies=[Ingesting])
-async def create_document(
+async def create_document(  # noqa: PLR0913, PLR0917 -- four are dependencies
     payload: DocumentCreate,
+    user: CurrentUser,
     session: Session,
     cache: Cache,
     model: Embeddings,
@@ -165,6 +169,7 @@ async def create_document(
             source_url=str(payload.source_url) if payload.source_url else None,
             metadata=payload.metadata,
         ),
+        user.id,
         session,
         cache,
         model,
@@ -173,7 +178,8 @@ async def create_document(
 
 
 @router.post("/upload", dependencies=[Ingesting])
-async def upload_document(  # noqa: PLR0913, PLR0917 -- four are dependencies
+async def upload_document(  # noqa: PLR0913, PLR0917 -- five are dependencies
+    user: CurrentUser,
     session: Session,
     cache: Cache,
     model: Embeddings,
@@ -241,6 +247,7 @@ async def upload_document(  # noqa: PLR0913, PLR0917 -- four are dependencies
             source_url=str(form.source_url) if form.source_url else None,
             metadata=form.metadata,
         ),
+        user.id,
         session,
         cache,
         model,
@@ -248,14 +255,35 @@ async def upload_document(  # noqa: PLR0913, PLR0917 -- four are dependencies
     )
 
 
-async def _ingest(
+async def _ingest(  # noqa: PLR0913, PLR0917 -- four are dependencies
+    source: SourceDocument,
+    user_id: uuid.UUID,
+    session: AsyncSession,
+    cache: Redis,
+    model: EmbeddingModel,
+    response: Response,
+) -> DocumentRead:
+    """Store a source however it arrived, and describe what came of it.
+
+    The trace opens here rather than in either route, so both shapes of
+    request produce the same one. Until this existed the embedding calls
+    ingestion pays for were invisible: a hundred-page article was
+    indistinguishable from no traffic at all (NFR-2).
+    """
+    with traced(
+        "ingest", user_id, source_type=source.source_type.value, title=source.title
+    ):
+        return await _store(source, session, cache, model, response)
+
+
+async def _store(
     source: SourceDocument,
     session: AsyncSession,
     cache: Redis,
     model: EmbeddingModel,
     response: Response,
 ) -> DocumentRead:
-    """Store a source however it arrived, and describe what came of it."""
+    """Do the ingesting, inside whatever trace the caller opened."""
     try:
         ingested = await ingest_document(session, source, model, cache)
     except EmptyDocumentError as exc:
@@ -274,5 +302,15 @@ async def _ingest(
     response.status_code = (
         status.HTTP_201_CREATED if ingested.created else status.HTTP_200_OK
     )
+    described = await _read(session, ingested.document)
+    # A duplicate costs nothing at the API, and a trace that does not say so
+    # makes the deduplication in FR-1 invisible next to a real ingestion.
+    record(
+        output={
+            "document_id": str(ingested.document.id),
+            "created": ingested.created,
+            "chunks": described.chunk_count,
+        }
+    )
 
-    return await _read(session, ingested.document)
+    return described

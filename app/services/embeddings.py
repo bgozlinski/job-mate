@@ -11,6 +11,7 @@ from array import array
 from collections.abc import Sequence
 from typing import Protocol
 
+from langfuse import get_client, observe
 from openai import AsyncOpenAI
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
@@ -175,6 +176,7 @@ async def _write_cache(cache: Redis, entries: dict[str, list[float]]) -> None:
         return
 
 
+@observe(as_type="embedding", capture_input=False, capture_output=False)
 async def embed_texts(
     texts: Sequence[str], model: EmbeddingModel, cache: Redis
 ) -> list[list[float]]:
@@ -184,6 +186,19 @@ async def embed_texts(
     chunks.chunk_index positionally. Texts that repeat within one call are
     embedded once, and anything already in Redis never reaches the API --
     which is the whole point of NFR-2a.
+
+    What the span records is that point: how many texts were asked for, how
+    many the cache answered, and how many batches still went to the provider.
+    Without those three numbers the cache is a claim rather than a measured
+    saving, and NFR-2a is what it exists to satisfy.
+
+    Neither the texts nor the vectors are captured. The texts are chunks of a
+    document whose content is already on the trace above, and 1536 floats per
+    text would bury every other field in the span.
+
+    Token counts are absent because EmbeddingModel returns vectors and
+    nothing else; putting real costs here means widening that protocol, and
+    a fabricated number would be worse than none.
     """
     if not texts:
         return []
@@ -199,10 +214,12 @@ async def embed_texts(
     }
     missing = [text for text in unique if text not in vectors]
     fresh: dict[str, list[float]] = {}
+    calls = 0
 
     for start in range(0, len(missing), BATCH_SIZE):
         batch = missing[start : start + BATCH_SIZE]
         embedded = await model.embed(batch)
+        calls += 1
 
         if len(embedded) != len(batch):
             raise ValueError("The embeddings API returned the wrong number of vectors")
@@ -213,5 +230,16 @@ async def embed_texts(
         cache, {cache_key(model, text): vector for text, vector in fresh.items()}
     )
     vectors.update(fresh)
+
+    get_client().update_current_generation(
+        model=model.name,
+        output={
+            "requested": len(texts),
+            "distinct": len(unique),
+            "cache_hits": len(unique) - len(missing),
+            "embedded": len(missing),
+            "api_calls": calls,
+        },
+    )
 
     return [vectors[text] for text in texts]
