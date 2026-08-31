@@ -38,6 +38,10 @@ class ResumeRead(BaseModel):
 
     user_id is left out on purpose: a caller only ever sees their own
     resumes, so the column carries no information for them.
+
+    original_filename is shown back because it is how the owner recognises
+    which upload this row is. file_hash stays out: it identifies the file
+    the text came from and is of no use to the caller.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -45,4 +49,5 @@ class ResumeRead(BaseModel):
     id: uuid.UUID
     content: str
     target_role: str | None
+    original_filename: str | None = None
     created_at: datetime

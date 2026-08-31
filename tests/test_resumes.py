@@ -43,7 +43,13 @@ async def test_create_returns_201_and_the_stored_resume(client: AsyncClient) -> 
     )
 
     assert response.status_code == status.HTTP_201_CREATED
-    assert set(response.json()) == {"id", "content", "target_role", "created_at"}
+    assert set(response.json()) == {
+        "id",
+        "content",
+        "target_role",
+        "original_filename",
+        "created_at",
+    }
     assert response.json()["content"] == CONTENT
     assert response.json()["target_role"] == "Backend Engineer"
 
