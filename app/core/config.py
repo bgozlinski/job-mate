@@ -57,6 +57,16 @@ class Settings(BaseSettings):
     """
     llm_model: str = "claude-haiku-4-5"
 
+    match_rate_limit: int = 20
+    ingest_rate_limit: int = 60
+    rate_limit_window_seconds: int = 3600
+    """Per account, per hour, on the two routes that spend money (NFR-2).
+
+    Two budgets rather than one: a match costs an LLM call on top of its
+    embeddings, and sharing a counter would let an afternoon of filling the
+    knowledge base lock a user out of the feature they came for.
+    """
+
     langfuse_public_key: str | None = None
     langfuse_secret_key: SecretStr | None = None
     langfuse_host: str = "http://langfuse-web:3000"

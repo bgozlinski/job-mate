@@ -1,21 +1,25 @@
 """Dependencies shared by the routers: a session and the caller."""
 
+import time
 import uuid
-from collections.abc import AsyncIterator
-from typing import Annotated
+from collections.abc import AsyncIterator, Callable, Coroutine
+from typing import Annotated, Any
 
 import jwt
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from redis.asyncio import Redis
+from redis.exceptions import RedisError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.auth.security import decode_access_token
+from app.core.config import Settings, get_settings
 from app.models.resume import Resume
 from app.models.user import User
 from app.services.embeddings import EmbeddingModel
 from app.services.matching import SuggestionWriter
+from app.services.rate_limit import RateLimit, consume
 
 bearer_scheme = HTTPBearer()
 
@@ -125,6 +129,62 @@ async def get_suggestion_writer(request: Request) -> SuggestionWriter:
     writer: SuggestionWriter | None = request.app.state.suggestion_writer
 
     return _configured(writer, "The language model")
+
+
+def get_config() -> Settings:
+    """Hand out the settings as a dependency.
+
+    A dependency rather than a direct call so a test can tighten a limit to
+    something it can reach in a few requests, instead of sending twenty.
+    """
+    return get_settings()
+
+
+type Limiter = Callable[..., Coroutine[Any, Any, None]]
+
+
+def rate_limited(scope: str, budget: Callable[[Settings], int]) -> Limiter:
+    """Build the dependency that caps one route's traffic per account (NFR-2).
+
+    Counted per account rather than per address: the caller is authenticated
+    anyway, and behind the container's proxy every request appears to come
+    from the same address, which would make an IP limit either useless or a
+    way for one user to lock out the rest.
+
+    A Redis outage refuses the request instead of waving it through. That is
+    the opposite of what the embeddings cache does with the same error, and
+    for the opposite reason: a cache that is down costs money and a limiter
+    that is down stops counting it. This route is the one that spends, so it
+    does not run while the thing that bounds the spending is unavailable.
+    """
+
+    async def dependency(
+        user: CurrentUser,
+        cache: Annotated[Redis, Depends(get_cache)],
+        settings: Annotated[Settings, Depends(get_config)],
+        response: Response,
+    ) -> None:
+        limit = RateLimit(budget(settings), settings.rate_limit_window_seconds)
+
+        try:
+            verdict = await consume(cache, scope, str(user.id), limit, time.time())
+        except RedisError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The rate limiter is unavailable",
+            ) from exc
+
+        response.headers["RateLimit-Limit"] = str(limit.requests)
+        response.headers["RateLimit-Remaining"] = str(verdict.remaining)
+
+        if not verdict.allowed:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many requests",
+                headers={"Retry-After": str(verdict.retry_after)},
+            )
+
+    return dependency
 
 
 async def get_owned_resume(

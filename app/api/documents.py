@@ -20,7 +20,13 @@ from redis.asyncio import Redis
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_cache, get_current_user, get_db, get_embedding_model
+from app.api.deps import (
+    get_cache,
+    get_current_user,
+    get_db,
+    get_embedding_model,
+    rate_limited,
+)
 from app.api.uploads import basename, read_within_limit, text_of
 from app.models.chunk import Chunk
 from app.models.document import Document, SourceType
@@ -46,6 +52,10 @@ router = APIRouter(
 Session = Annotated[AsyncSession, Depends(get_db)]
 Cache = Annotated[Redis, Depends(get_cache)]
 Embeddings = Annotated[EmbeddingModel, Depends(get_embedding_model)]
+
+Ingesting = Depends(rate_limited("ingest", lambda s: s.ingest_rate_limit))
+"""Both ingestion routes share one budget: they cost the same embeddings
+calls, and which shape the source arrived in does not change the bill."""
 
 DEFAULT_PAGE_SIZE = 20
 MAX_PAGE_SIZE = 100
@@ -126,7 +136,7 @@ async def list_documents(
     return [_describe(document, chunk_count) for document, chunk_count in rows]
 
 
-@router.post("")
+@router.post("", dependencies=[Ingesting])
 async def create_document(
     payload: DocumentCreate,
     session: Session,
@@ -145,8 +155,7 @@ async def create_document(
     than 409: the caller's intent, having this text in the knowledge base,
     is satisfied, and the body tells them which document it is.
 
-    Rate limiting (NFR-2) belongs on this route: it is the one that spends
-    money at a third-party API.
+    The route is rate limited (NFR-2): it spends money at a third-party API.
     """
     return await _ingest(
         SourceDocument(
@@ -163,7 +172,7 @@ async def create_document(
     )
 
 
-@router.post("/upload")
+@router.post("/upload", dependencies=[Ingesting])
 async def upload_document(  # noqa: PLR0913, PLR0917 -- four are dependencies
     session: Session,
     cache: Cache,

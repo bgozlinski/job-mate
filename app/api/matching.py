@@ -8,7 +8,13 @@ from openai import APIError as OpenAIError
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import OwnedResume, get_db, get_embeddings, get_suggestion_writer
+from app.api.deps import (
+    OwnedResume,
+    get_db,
+    get_embeddings,
+    get_suggestion_writer,
+    rate_limited,
+)
 from app.core.observability import trace_match
 from app.models.document import Document, SourceType
 from app.schemas.matching import MatchCreate, MatchRead
@@ -22,7 +28,10 @@ Embeddings = Annotated[tuple[EmbeddingModel, Redis], Depends(get_embeddings)]
 Writer = Annotated[SuggestionWriter, Depends(get_suggestion_writer)]
 
 
-@router.post("/{resume_id}/match")
+@router.post(
+    "/{resume_id}/match",
+    dependencies=[Depends(rate_limited("match", lambda s: s.match_rate_limit))],
+)
 async def match(
     payload: MatchCreate,
     resume: OwnedResume,
@@ -41,8 +50,8 @@ async def match(
     rather than a surprising result.
 
     This is the most expensive route in the application -- it embeds a query
-    and then calls an LLM -- which makes it the first place the rate limiting
-    from NFR-2 has to go.
+    and then calls an LLM -- which is why it carries the tighter of the two
+    rate limits (NFR-2).
     """
     document = await session.get(Document, payload.document_id)
 
