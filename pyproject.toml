@@ -33,10 +33,18 @@ dev = [
     "pytest-asyncio>=1.4.0",
     "ruff>=0.16.1",
 ]
+ui = [
+    "httpx>=0.28.1",
+    "streamlit>=1.62.0",
+]
 
 [tool.ruff]
 extend-exclude = ["migrations/versions"]
 force-exclude = true
+# ui/ is a second import root: it has no __init__.py, so `client` is a
+# top-level module there, and without this isort files it under the
+# third-party packages it sits next to alphabetically.
+src = [".", "ui"]
 
 [tool.ruff.lint]
 select = [
@@ -62,7 +70,7 @@ convention = "pep257"
 exclude_dirs = [".venv", ".git", "tests"]
 
 [tool.mypy]
-files = ["app", "migrations", "tests"]
+files = ["app", "migrations", "tests", "ui"]
 strict = true
 plugins = ["pydantic.mypy"]
 
