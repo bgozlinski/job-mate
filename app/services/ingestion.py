@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+from anthropic import APIError as AnthropicError
 from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -12,6 +13,7 @@ from app.models.chunk import Chunk
 from app.models.document import Document, SourceType
 from app.services.chunking import content_hash, normalize_content, split_content
 from app.services.embeddings import EmbeddingModel, embed_texts
+from app.services.requirements import RequirementExtractor
 
 
 class EmptyDocumentError(ValueError):
@@ -47,6 +49,25 @@ class Ingested:
     created: bool
 
 
+async def _requirements(
+    source: SourceDocument, content: str, extractor: RequirementExtractor | None
+) -> list[str] | None:
+    """Read the posting's requirements, or leave the column empty.
+
+    Every way of not getting them is the same answer -- None -- because they
+    are an improvement on the score, not a precondition for storing the
+    document. A provider that is down must not lose an ingestion that has
+    already paid for its embeddings.
+    """
+    if extractor is None or source.source_type is not SourceType.JOB_POST:
+        return None
+
+    try:
+        return await extractor.extract(content)
+    except AnthropicError:
+        return None
+
+
 async def _by_hash(session: AsyncSession, digest: str) -> Document | None:
     """Find the document with this content hash, if there is one."""
     document: Document | None = await session.scalar(
@@ -61,6 +82,7 @@ async def ingest_document(
     source: SourceDocument,
     model: EmbeddingModel,
     cache: Redis,
+    extractor: RequirementExtractor | None = None,
 ) -> Ingested:
     """Split, embed and store a source, or return the duplicate it repeats.
 
@@ -74,6 +96,14 @@ async def ingest_document(
     lookup that precedes it: two concurrent requests carrying the same text
     both pass that lookup, and only the database can reject the loser. The
     lookup is there to save an embeddings call in the common case.
+
+    A job post also has its requirements read out by an LLM, once, here --
+    they belong to the posting, and doing it in /match instead would pay for
+    a call per candidate (W-1 variant c). Only job posts: an article has
+    nothing a resume is scored against. The extractor is optional and a
+    failure is survivable, because ingestion working without an LLM key is
+    what lets development and CI run, and matching falls back to the
+    frequency heuristic for a document that has none.
     """
     normalized = normalize_content(source.content)
     texts = split_content(normalized)
@@ -95,6 +125,7 @@ async def ingest_document(
         content=normalized,
         content_hash=digest,
         doc_metadata=source.metadata,
+        requirements=await _requirements(source, normalized, extractor),
     )
     document.chunks = [
         Chunk(chunk_index=index, content=text, embedding=vector)

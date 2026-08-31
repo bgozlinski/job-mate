@@ -282,19 +282,49 @@ def extract_keywords(text: str, limit: int = MAX_KEYWORDS) -> list[str]:
 
 
 def cover(keywords: list[str], resume: str) -> tuple[list[str], list[str]]:
-    """Split a posting's keywords into those the resume has and those it lacks.
+    """Split a posting's requirements into those the resume has and those it lacks.
 
     Whole terms are compared, not substrings: "java" must not be satisfied by
     "javascript". Plurals are folded on both sides, so "APIs" in the resume
     answers "api" in the posting; synonyms still are not, and "python" and
     "python3" remain different terms. That is the known limit of a
     deterministic score, and the reason the LLM half exists.
+
+    A requirement of several words is met when the resume has all of them,
+    not necessarily together. Extracted requirements are phrases -- "message
+    queues", "ci cd" -- and demanding the exact sequence would report a gap
+    against a resume that says "maintained the message queue consumers".
+    Loose enough to be wrong sometimes, which beats a rule that is wrong
+    almost always.
     """
     present = {singular(token) for token in tokenize(resume)}
-    matched = [keyword for keyword in keywords if keyword in present]
-    missing = [keyword for keyword in keywords if keyword not in present]
+    wanted = {
+        keyword: [singular(token) for token in tokenize(keyword)]
+        for keyword in keywords
+    }
+    matched = [
+        keyword
+        for keyword, terms in wanted.items()
+        if terms and all(term in present for term in terms)
+    ]
+    missing = [keyword for keyword in keywords if keyword not in matched]
 
     return matched, missing
+
+
+def requirements_of(job_post: Document) -> list[str]:
+    """Return what the posting asks for, however it came to be known.
+
+    The extracted list when ingestion managed to read one, and the frequency
+    heuristic otherwise. Both are lists of terms the same coverage rule runs
+    over, so the score means the same thing either way -- what differs is how
+    much of it is noise (W-1).
+
+    An extraction that came back empty falls back too: a posting with no
+    requirements at all would otherwise score 0.0 for everyone, which reads
+    as a perfect mismatch rather than as a missing measurement.
+    """
+    return job_post.requirements or extract_keywords(job_post.content)
 
 
 def build_prompt(
@@ -361,9 +391,14 @@ async def match_resume(
     An empty knowledge base is not an error: the prompt then carries the
     posting alone, and the result still records which chunks it was built
     from.
+
+    What the score is computed over comes from requirements_of: the list an
+    LLM read out of the posting at ingestion, or the frequency heuristic for
+    a posting that has none. Either way the number is computed here, in
+    Python, from a list that can be inspected (W-1 variant c).
     """
     model, cache = embeddings
-    keywords = extract_keywords(job_post.content)
+    keywords = requirements_of(job_post)
     matched, missing = cover(keywords, resume)
     score = round(len(matched) / len(keywords), 3) if keywords else 0.0
 

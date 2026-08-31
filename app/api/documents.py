@@ -27,6 +27,7 @@ from app.api.deps import (
     get_current_user,
     get_db,
     get_embedding_model,
+    get_requirement_extractor,
     rate_limited,
 )
 from app.api.uploads import basename, read_within_limit, text_of
@@ -42,6 +43,7 @@ from app.schemas.document import (
 )
 from app.services.embeddings import EmbeddingModel
 from app.services.ingestion import EmptyDocumentError, SourceDocument, ingest_document
+from app.services.requirements import RequirementExtractor
 
 router = APIRouter(
     prefix="/documents",
@@ -55,6 +57,7 @@ router = APIRouter(
 Session = Annotated[AsyncSession, Depends(get_db)]
 Cache = Annotated[Redis, Depends(get_cache)]
 Embeddings = Annotated[EmbeddingModel, Depends(get_embedding_model)]
+Extractor = Annotated[RequirementExtractor | None, Depends(get_requirement_extractor)]
 
 Ingesting = Depends(rate_limited("ingest", lambda s: s.ingest_rate_limit))
 """Both ingestion routes share one budget: they cost the same embeddings
@@ -140,12 +143,13 @@ async def list_documents(
 
 
 @router.post("", dependencies=[Ingesting])
-async def create_document(  # noqa: PLR0913, PLR0917 -- four are dependencies
+async def create_document(  # noqa: PLR0913, PLR0917 -- five are dependencies
     payload: DocumentCreate,
     user: CurrentUser,
     session: Session,
     cache: Cache,
     model: Embeddings,
+    extractor: Extractor,
     response: Response,
 ) -> DocumentRead:
     """Ingest a source, or return the one it duplicates.
@@ -173,16 +177,18 @@ async def create_document(  # noqa: PLR0913, PLR0917 -- four are dependencies
         session,
         cache,
         model,
+        extractor,
         response,
     )
 
 
 @router.post("/upload", dependencies=[Ingesting])
-async def upload_document(  # noqa: PLR0913, PLR0917 -- five are dependencies
+async def upload_document(  # noqa: PLR0913, PLR0917 -- six are dependencies
     user: CurrentUser,
     session: Session,
     cache: Cache,
     model: Embeddings,
+    extractor: Extractor,
     response: Response,
     file: Annotated[UploadFile, File()],
     source_type: Annotated[str, Form()],
@@ -251,16 +257,18 @@ async def upload_document(  # noqa: PLR0913, PLR0917 -- five are dependencies
         session,
         cache,
         model,
+        extractor,
         response,
     )
 
 
-async def _ingest(  # noqa: PLR0913, PLR0917 -- four are dependencies
+async def _ingest(  # noqa: PLR0913, PLR0917 -- five are dependencies
     source: SourceDocument,
     user_id: uuid.UUID,
     session: AsyncSession,
     cache: Redis,
     model: EmbeddingModel,
+    extractor: RequirementExtractor | None,
     response: Response,
 ) -> DocumentRead:
     """Store a source however it arrived, and describe what came of it.
@@ -273,19 +281,20 @@ async def _ingest(  # noqa: PLR0913, PLR0917 -- four are dependencies
     with traced(
         "ingest", user_id, source_type=source.source_type.value, title=source.title
     ):
-        return await _store(source, session, cache, model, response)
+        return await _store(source, session, cache, model, extractor, response)
 
 
-async def _store(
+async def _store(  # noqa: PLR0913, PLR0917 -- five are dependencies
     source: SourceDocument,
     session: AsyncSession,
     cache: Redis,
     model: EmbeddingModel,
+    extractor: RequirementExtractor | None,
     response: Response,
 ) -> DocumentRead:
     """Do the ingesting, inside whatever trace the caller opened."""
     try:
-        ingested = await ingest_document(session, source, model, cache)
+        ingested = await ingest_document(session, source, model, cache, extractor)
     except EmptyDocumentError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

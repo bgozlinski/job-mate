@@ -83,6 +83,19 @@ class Document(Base):
         default=dict,
         server_default=text("'{}'::jsonb"),
     )
+    requirements: Mapped[list[str] | None] = mapped_column(JSONB)
+    """What an LLM read out of the posting, or NULL when nobody has.
+
+    Kept apart from metadata rather than folded into it: metadata is supplied
+    by the caller and is what retrieval filters on, and mixing model output
+    into it would let a request pass off its own list as extracted, or a
+    filter match on a skill it never meant to.
+
+    Nullable because it is a fact about the posting that may be missing --
+    documents ingested before this existed have none, and so does one
+    ingested while no LLM key was configured. Matching falls back to the
+    frequency heuristic for those, so a NULL costs quality, not the feature.
+    """
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

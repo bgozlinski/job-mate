@@ -16,6 +16,7 @@ from app.core.observability import create_tracer
 from app.core.redis import create_redis
 from app.services.embeddings import OpenAIEmbeddingModel
 from app.services.matching import AnthropicSuggestionWriter
+from app.services.requirements import AnthropicRequirementExtractor
 
 
 @asynccontextmanager
@@ -38,6 +39,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     app.state.suggestion_writer = (
         AnthropicSuggestionWriter(settings) if settings.anthropic_api_key else None
+    )
+    # Optional in the same way and for the same reason: no key means postings
+    # are ingested without their requirements read, and matching falls back
+    # to counting words.
+    app.state.requirement_extractor = (
+        AnthropicRequirementExtractor(settings) if settings.anthropic_api_key else None
     )
     # Nothing reads this back: building it registers the process-wide client
     # that @observe in the service layer picks up. It is kept on state only so

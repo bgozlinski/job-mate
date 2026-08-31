@@ -20,6 +20,7 @@ from app.models.user import User
 from app.services.embeddings import EmbeddingModel
 from app.services.matching import SuggestionWriter
 from app.services.rate_limit import RateLimit, consume
+from app.services.requirements import RequirementExtractor
 
 bearer_scheme = HTTPBearer()
 
@@ -185,6 +186,19 @@ def rate_limited(scope: str, budget: Callable[[Settings], int]) -> Limiter:
             )
 
     return dependency
+
+
+async def get_requirement_extractor(request: Request) -> RequirementExtractor | None:
+    """Hand out the shared extractor, or nothing when no key is configured.
+
+    None rather than a 503, unlike the other two providers: a posting whose
+    requirements were never read is still worth storing, and matching has a
+    heuristic to fall back on. Refusing the ingestion instead would make an
+    optional improvement a hard dependency.
+    """
+    extractor: RequirementExtractor | None = request.app.state.requirement_extractor
+
+    return extractor
 
 
 async def get_owned_resume(
