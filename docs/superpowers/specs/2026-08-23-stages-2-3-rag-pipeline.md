@@ -30,11 +30,14 @@ Razem z etapem 1: `users` (`28548320470c`), `resumes` (`128f54098c8a`). Brakuje 
 | `app/services/ingestion.py` | dokument + chunki w jednej transakcji, deduplikacja | — |
 | `app/services/retrieval.py` | wyszukiwanie hybrydowe: filtr JSONB / `source_type` + `<=>` | `DEFAULT_K = 5`, `MAX_K = 50` |
 | `app/services/matching.py` | score deterministyczny + sugestie z LLM (FR-3) | `MAX_KEYWORDS = 40`, `ADVICE_CHUNKS = 5` |
+| `app/services/requirements.py` | ekstrakcja wymagań oferty przez LLM (W-1 (c), 2026-08-31) | `MAX_REQUIREMENTS = 30`, `MAX_TERM_WORDS = 3` |
+| `app/services/extraction.py` | plik → tekst: PDF, DOCX, TXT (2026-08-30) | `MAX_FILE_BYTES = 5 MiB`, `MIN_EXTRACTED_CHARS = 100` |
+| `app/services/rate_limit.py` | budżet żądań per konto w Redisie (NFR-2, 2026-08-31) | `match` 20/h, `ingest` 60/h |
 
 ### 1.3 API
 
 Nowe w tych etapach: `POST /documents`, `POST /resumes/{resume_id}/match`.
-Stan całości: `/`, `/health`, `/health/ready`, `/auth/register`, `/auth/login`, `/auth/me`, `/resumes` (POST, GET), `/resumes/{id}` (GET, PATCH, DELETE), `/documents` (POST, GET — listowanie dołożone 2026-08-24 przy zamykaniu W-4), `/resumes/{id}/match` (POST).
+Stan całości: `/`, `/health`, `/health/ready`, `/auth/register`, `/auth/login`, `/auth/me`, `/resumes` (POST, GET), `/resumes/upload` (POST), `/resumes/{id}` (GET, PATCH, DELETE), `/documents` (POST, GET — listowanie dołożone 2026-08-24 przy zamykaniu W-4), `/documents/upload` (POST), `/resumes/{id}/match` (POST). Obie trasy `upload` dołożone 2026-08-30/31: CV i ogłoszenie wchodzą jako PDF / DOCX / tekst.
 
 ### 1.4 Dostawcy
 
@@ -67,7 +70,7 @@ Stan całości: `/`, `/health`, `/health/ready`, `/auth/register`, `/auth/login`
 
 Kolejność: od najbardziej wpływającej na jakość produktu.
 
-### W-1. Szum w słowach kluczowych zaniża score (zamknięte 2026-08-24, wariant (a))
+### W-1. Szum w słowach kluczowych zaniża score (zamknięte 2026-08-31, wariant (c))
 
 `extract_keywords` bierze wszystko, co nie jest gramatycznym stopwordem, więc do listy trafiają `looking`, `join`, `team`, `take`, `part`, `requirements`, `responsibilities`, `build`, `write`, `review`, `code`. To nie są luki w CV — to proza ogłoszenia.
 
@@ -112,8 +115,47 @@ Uwaga na przyszłość: score jest ułamkiem, więc usuwanie szumu zabiera też 
 years"). Liczba rośnie mniej, niż sugeruje poprawa jakości listy. Próg `MAX_KEYWORDS = 40`
 przestał przy okazji wiązać: krótka oferta ma 32 terminy treściowe.
 
-**Zostaje w backlogu:** wariant (c) — LLM wyciąga listę wymagań, potem dopasowanie
-deterministyczne. To on jest docelowy; (a) tylko odszumia heurystykę częstotliwościową.
+**Naprawa (2026-08-31) — wariant (c), docelowy.** `app/services/requirements.py`: LLM
+czyta ofertę i zwraca listę wymagań, `cover()` i score liczą się dalej w Pythonie z tej
+listy. Model dostarcza dane, nie ocenę — to warunek z rekomendacji powyżej i jedyne, co
+utrzymuje score powtarzalnym.
+
+Ekstrakcja biegnie **raz, przy ingestion**, i ląduje w `documents.requirements` (JSONB,
+nullable, migracja `7c1776aa283c`). Wymagania są własnością oferty, nie pary CV↔oferta:
+w `/match` kosztowałyby wywołanie LLM na każdego kandydata i weszły w drogę NFR-3.
+Tylko `job_post` — do artykułu nikt nic nie porównuje. Duplikat nie jest czytany drugi raz.
+
+Osobna kolumna, nie `metadata`: `metadata` pochodzi od klienta i po niej filtruje
+retrieval, więc wmieszanie wyjścia modelu pozwoliłoby podać własną listę jako
+wyekstrahowaną albo trafić filtrem w umiejętność, której nikt nie wpisał.
+
+Każdy sposób na brak listy kończy się tak samo — powrotem do heurystyki z wariantu (a):
+brak klucza, awaria providera, dokument sprzed tej zmiany, pusta odpowiedź. `NULL` kosztuje
+jakość, nie funkcję, a ingestion, która opłaciła już embeddingi, nie ginie przez milczenie
+LLM. To dlatego wariant (a) zostaje w kodzie i nie jest długiem.
+
+`cover()` uznaje wymaganie wielowyrazowe za spełnione, gdy CV ma **wszystkie** jego słowa,
+niekoniecznie obok siebie: wymagania modelu to frazy (`message queues`, `ci/cd pipelines`),
+a żądanie dokładnej sekwencji raportowałoby lukę wobec CV mówiącego „maintained the message
+queue consumers".
+
+**Pomiar na `examples/` (ten sam payload):** score **0.312 (10/32) → 0.267 (4/15)**.
+Model zwrócił 15 wymagań zamiast 32 terminów: `python`, `fastapi`, `rest apis`,
+`postgresql`, `sql`, `docker`, `kubernetes`, `ci/cd pipelines`, `rabbitmq`, `kafka`,
+`redis`, `terraform`, `prometheus`, `grafana`, `automated testing`.
+
+**Liczby nie są porównywalne** — mianownik zmienił znaczenie, a usuwanie szumu zabiera
+trafienia razem z nim (ta sama pułapka, co przy wariancie (a), tylko mocniejsza).
+Porównywalne jest to, że `missing_keywords` to dziś wyłącznie realne luki, bez `year`,
+`engineer` i `team`.
+
+**Wada widoczna w tym samym przebiegu:** model dał `sql` obok `postgresql`, mimo że prompt
+zakazuje powtarzania tego samego pojęcia. `postgresql` się dopasowało, `sql` nie — jedno
+wymaganie liczone dwa razy, raz jako luka. Zostawione świadomie: poprawka promptu wymaga
+pomiaru tą samą drogą, nie zgadywania. Kandydat na dataset w Langfuse.
+
+**Zostaje w backlogu:** ekstrakcja po stronie CV. Dziś lista modelu jest porównywana z
+surowymi tokenami CV, więc `containerisation` w ofercie nie trafi na `Docker` w CV.
 
 ### W-2. LLM dokleja meta-komentarz do `bullet_points` (zamknięte 2026-08-24)
 
@@ -210,8 +252,19 @@ Konsekwencja niespójności scaffoldu opisanej w `CLAUDE.md` (`uv sync --no-inst
 
 ## 4. Czego świadomie nie zrobiono
 
-- **Langfuse (NFR-2)** — brak trace'ów wywołań LLM i retrievalu. Miejsce wpięcia zaznaczone w docstringu `AnthropicSuggestionWriter.write`.
-- **Rate limiting (NFR-2)** — `/resumes/{id}/match` wydaje pieniądze dwukrotnie (embedding zapytania + LLM) i jest pierwszym kandydatem.
+- ~~**Langfuse (NFR-2)**~~ — zrobione 2026-08-31, self-hosted w compose. Jeden trace na
+  żądanie: `match` / `ingest` jako korzeń z `user_id`, pod nim `retrieval` (chunk_ids i
+  dystanse), `embed_texts` (trafienia w cache i wywołania API — pomiar NFR-2a) oraz
+  `write` (prompt, odpowiedź, tokeny). Score dopięty do korzenia. **Nie ma tokenów przy
+  embeddingach**: `EmbeddingModel` zwraca same wektory, więc realny koszt wymaga
+  rozszerzenia tego protokołu. Datasety i eksperymenty nietknięte — pierwsze zastosowanie
+  to prompt ekstrakcji z W-1.
+- ~~**Rate limiting (NFR-2)**~~ — zrobione 2026-08-31. Per konto (nie per IP: za proxy w
+  Dockerze wszystkie żądania mają ten sam adres), licznik w Redisie w namespace
+  `ratelimit:*`, osobnym od cache'u embeddingów. Dwa budżety: `match` 20/h i `ingest` 60/h,
+  żeby napełnianie bazy wiedzy nie odcinało od dopasowania. Awaria Redisa daje 503, nie
+  przepuszcza — odwrotnie niż cache, bo limiter, który nie liczy, przestaje ograniczać
+  wydatki. Okno stałe, więc realny sufit na granicy okien to dwukrotność limitu.
 - **`db/schema.sql`** ze spec sekcji 5 nie istnieje i nie powstanie — źródłem prawdy dla schematu jest Alembic; spec należy przy okazji poprawić.
 - **`AnthropicSuggestionWriter` i `OpenAIEmbeddingModel` nie mają testów** przeciwko prawdziwym API (brak kluczy w CI). Cała logika wokół nich jest testowana na fake'ach.
 
@@ -238,9 +291,11 @@ Konsekwencja niespójności scaffoldu opisanej w `CLAUDE.md` (`uv sync --no-inst
 |---|---|---|
 | ~~Pole `notes` w schemacie sugestii~~ | W-2 | zrobione 2026-08-24 |
 | ~~`GET /documents`~~ | W-4 | zrobione 2026-08-24 |
-| Langfuse + rate limiting | sekcja 4 | otwarte — następne w kolejce |
+| ~~Langfuse + rate limiting~~ | sekcja 4 | zrobione 2026-08-31 |
 | Rozważyć usunięcie `langchain-text-splitters` (ciągnie `langsmith`, `requests`, `orjson`) | przegląd zależności przy chunkingu | otwarte |
-| Ekstrakcja wymagań przez LLM, wariant (c) | W-1 | otwarte — docelowe rozwiązanie |
+| ~~Ekstrakcja wymagań przez LLM, wariant (c)~~ | W-1 | zrobione 2026-08-31 |
+| Ekstrakcja umiejętności z CV (druga strona porównania) | W-1 | otwarte |
+| Prompt ekstrakcji: `sql` obok `postgresql` | W-1 | otwarte |
 | ~~Naprawa szumu w słowach kluczowych, wariant (a)~~ | W-1 | zrobione 2026-08-24 |
 | ~~`extra="forbid"` w `Settings`~~ | W-5 | zrobione `71ec9ea` |
 
