@@ -15,6 +15,7 @@ from app.api.deps import (
     get_db,
     get_embedding_model,
     get_requirement_extractor,
+    get_resume_skill_extractor,
     get_suggestion_writer,
 )
 from app.core.config import get_settings
@@ -218,6 +219,7 @@ async def client(
     # None by default: ingestion without an extractor is the configuration
     # CI runs in, and a test that wants requirements read supplies its own.
     app.dependency_overrides[get_requirement_extractor] = lambda: None
+    app.dependency_overrides[get_resume_skill_extractor] = lambda: None
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as test_client:

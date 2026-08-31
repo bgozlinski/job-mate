@@ -43,7 +43,7 @@ from app.schemas.document import (
 )
 from app.services.embeddings import EmbeddingModel
 from app.services.ingestion import EmptyDocumentError, SourceDocument, ingest_document
-from app.services.requirements import RequirementExtractor
+from app.services.requirements import SkillExtractor
 
 router = APIRouter(
     prefix="/documents",
@@ -57,7 +57,7 @@ router = APIRouter(
 Session = Annotated[AsyncSession, Depends(get_db)]
 Cache = Annotated[Redis, Depends(get_cache)]
 Embeddings = Annotated[EmbeddingModel, Depends(get_embedding_model)]
-Extractor = Annotated[RequirementExtractor | None, Depends(get_requirement_extractor)]
+Extractor = Annotated[SkillExtractor | None, Depends(get_requirement_extractor)]
 
 Ingesting = Depends(rate_limited("ingest", lambda s: s.ingest_rate_limit))
 """Both ingestion routes share one budget: they cost the same embeddings
@@ -268,7 +268,7 @@ async def _ingest(  # noqa: PLR0913, PLR0917 -- five are dependencies
     session: AsyncSession,
     cache: Redis,
     model: EmbeddingModel,
-    extractor: RequirementExtractor | None,
+    extractor: SkillExtractor | None,
     response: Response,
 ) -> DocumentRead:
     """Store a source however it arrived, and describe what came of it.
@@ -289,7 +289,7 @@ async def _store(  # noqa: PLR0913, PLR0917 -- five are dependencies
     session: AsyncSession,
     cache: Redis,
     model: EmbeddingModel,
-    extractor: RequirementExtractor | None,
+    extractor: SkillExtractor | None,
     response: Response,
 ) -> DocumentRead:
     """Do the ingesting, inside whatever trace the caller opened."""

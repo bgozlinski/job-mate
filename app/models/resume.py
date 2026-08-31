@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -62,6 +63,18 @@ class Resume(Base):
     )
     content: Mapped[str] = mapped_column(Text())
     target_role: Mapped[str | None] = mapped_column(Text())
+    skills: Mapped[list[str] | None] = mapped_column(JSONB)
+    """What an LLM read out of the CV, or NULL when nobody has.
+
+    The other half of documents.requirements, read with the same vocabulary so
+    that a requirement and the skill answering it come back spelled the same
+    way -- which is the entire point of asking a model rather than comparing
+    raw words.
+
+    Nullable for the same reasons and with the same consequence: a resume
+    stored before this existed, or while no LLM key was configured, still
+    matches, on the words of its own text.
+    """
     file_hash: Mapped[str | None] = mapped_column(String(CONTENT_HASH_LENGTH))
     mime_type: Mapped[str | None] = mapped_column(String(MAX_MIME_LENGTH))
     original_filename: Mapped[str | None] = mapped_column(String(MAX_FILENAME_LENGTH))

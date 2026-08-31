@@ -3,12 +3,19 @@
 import hashlib
 from typing import Annotated
 
+from anthropic import APIError as AnthropicError
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUser, OwnedResume, get_db
+from app.api.deps import (
+    CurrentUser,
+    OwnedResume,
+    get_db,
+    get_resume_skill_extractor,
+    rate_limited,
+)
 from app.api.uploads import basename, read_within_limit, text_of
 from app.models.resume import MAX_FILENAME_LENGTH, Resume
 from app.schemas.resume import (
@@ -18,21 +25,50 @@ from app.schemas.resume import (
     ResumeUpdate,
 )
 from app.services.extraction import media_type
+from app.services.requirements import SkillExtractor
 
 router = APIRouter(prefix="/resumes", tags=["resumes"])
 
 Session = Annotated[AsyncSession, Depends(get_db)]
+Extractor = Annotated[SkillExtractor | None, Depends(get_resume_skill_extractor)]
+
+Reading = Depends(rate_limited("ingest", lambda s: s.ingest_rate_limit))
+"""Storing a resume now reads it with an LLM, so the two routes that do it
+spend money and share the budget the knowledge base already has."""
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+async def read_skills(
+    content: str, extractor: SkillExtractor | None
+) -> list[str] | None:
+    """Read the resume's skills, or leave the column empty.
+
+    Every way of not getting them is the same answer -- None -- because
+    they widen the comparison rather than enable it: a resume nobody read
+    still matches, on the words of its own text. Losing the resume because
+    a provider is down would be the worse trade by far.
+    """
+    if extractor is None:
+        return None
+
+    try:
+        return await extractor.extract(content)
+    except AnthropicError:
+        return None
+
+
+@router.post("", status_code=status.HTTP_201_CREATED, dependencies=[Reading])
 async def create_resume(
-    payload: ResumeCreate, user: CurrentUser, session: Session
+    payload: ResumeCreate,
+    user: CurrentUser,
+    session: Session,
+    extractor: Extractor,
 ) -> ResumeRead:
-    """Store a new resume for the caller."""
+    """Store a new resume for the caller, reading its skills on the way in."""
     resume = Resume(
         user_id=user.id,
         content=payload.content,
         target_role=payload.target_role,
+        skills=await read_skills(payload.content, extractor),
     )
     session.add(resume)
     await session.commit()
@@ -40,10 +76,11 @@ async def create_resume(
     return ResumeRead.model_validate(resume)
 
 
-@router.post("/upload", status_code=status.HTTP_201_CREATED)
+@router.post("/upload", status_code=status.HTTP_201_CREATED, dependencies=[Reading])
 async def upload_resume(
     user: CurrentUser,
     session: Session,
+    extractor: Extractor,
     file: Annotated[UploadFile, File()],
     target_role: Annotated[str | None, Form(max_length=MAX_ROLE_LENGTH)] = None,
 ) -> ResumeRead:
@@ -64,6 +101,7 @@ async def upload_resume(
         user_id=user.id,
         content=content,
         target_role=target_role,
+        skills=await read_skills(content, extractor),
         file_hash=hashlib.sha256(data).hexdigest(),
         mime_type=media_type(data),
         original_filename=basename(file.filename, MAX_FILENAME_LENGTH),
@@ -112,6 +150,13 @@ async def update_resume(
     """
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(resume, field, value)
+
+    if payload.content is not None:
+        # The stored skills describe text that no longer exists. Clearing
+        # them falls back to the words of the new content, which is honest;
+        # re-reading would put an LLM call on a route that has never had
+        # one, for an edit that may be a typo fix.
+        resume.skills = None
 
     await session.commit()
 

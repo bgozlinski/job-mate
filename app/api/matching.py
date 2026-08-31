@@ -70,7 +70,12 @@ async def match(
         # learn that Langfuse exists.
         with traced("match", resume.user_id, document_id=str(document.id)):
             result = await match_resume(
-                session, resume.content, document, writer, embeddings
+                session,
+                resume.content,
+                document,
+                writer,
+                embeddings,
+                resume.skills,
             )
             # The score belongs on the trace, not only in the response: it is
             # what tells a reader whether a weak suggestion came from a weak

@@ -10,6 +10,7 @@ from app.services.matching import (
     MAX_KEYWORDS,
     STOPWORDS,
     cover,
+    evidence,
     extract_keywords,
     match_resume,
     singular,
@@ -203,21 +204,23 @@ def test_the_words_kept_countable_on_purpose_survive():
 
 
 def test_cover_sees_through_a_plural_on_either_side():
-    matched, missing = cover(["api"], "Designed REST APIs for internal teams")
+    matched, missing = cover(
+        ["api"], evidence("Designed REST APIs for internal teams", None)
+    )
 
     assert matched == ["api"]
     assert missing == []
 
 
 def test_cover_compares_whole_terms():
-    matched, missing = cover(["java"], "Senior javascript developer")
+    matched, missing = cover(["java"], evidence("Senior javascript developer", None))
 
     assert matched == []
     assert missing == ["java"]
 
 
 def test_cover_ignores_case():
-    matched, _ = cover(["python"], "PYTHON everywhere")
+    matched, _ = cover(["python"], evidence("PYTHON everywhere", None))
 
     assert matched == ["python"]
 

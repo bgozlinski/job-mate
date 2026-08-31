@@ -1,4 +1,4 @@
-"""Reading a posting's requirements with an LLM (FR-3, W-1 variant c).
+"""Reading skills out of a posting and out of a resume with an LLM (W-1 (c)).
 
 The frequency heuristic in matching.py counts what a posting repeats, which
 is only a proxy for what it asks for: "experience with containerisation"
@@ -10,10 +10,16 @@ stops there; coverage and the number are computed in Python from that list,
 exactly as they were from the heuristic's. A score a model invents cannot be
 reproduced, explained or tested, and FR-3 asks for one that can.
 
-Extraction happens once, when a document is ingested, because the
-requirements are a property of the posting rather than of any pairing with a
-resume. Doing it in /match instead would pay for an LLM call on every
-candidate and put it in the way of the < 500 ms retrieval target.
+Extraction happens once, when the document or the resume is stored, because
+what it reads is a property of that text rather than of any pairing. Doing it
+in /match instead would pay for two LLM calls on every candidate and put them
+in the way of the < 500 ms retrieval target.
+
+Both sides go through the same shape -- text in, terms out -- and differ only
+in the prompt. What a posting demands and what a resume evidences are read
+with the same vocabulary on purpose: a requirement and a skill that mean the
+same thing have to come back spelled the same way, or the comparison between
+them is worthless.
 """
 
 from typing import Protocol
@@ -55,6 +61,29 @@ Job posting:
 {content}
 """
 
+RESUME_PROMPT = """\
+Read the resume below and list the skills, technologies and qualifications \
+it gives evidence of.
+
+Rules:
+- One skill per entry, lower case.
+- Only what the resume actually evidences. Do not infer a skill from a \
+neighbouring one: a resume naming Docker does not thereby know Kubernetes.
+- Use the ordinary full name of a technology, so that the same skill written \
+in two ways comes back once: "k8s" as "kubernetes", "postgres" as \
+"postgresql", "js" as "javascript".
+- At most three words per entry.
+- Leave out job titles, employer names, dates and schools. Leave out generic \
+traits: "team player", "hard working".
+- No duplicates, and no entry that is a restatement of another.
+
+Resume:
+{content}
+"""
+"""The other half of the comparison. The instruction to expand an abbreviation
+is what this whole call is for: the resume says k8s, the posting says
+kubernetes, and no rule about plurals will ever bring those together."""
+
 
 class Requirements(BaseModel):
     """The shape the model is constrained to answer in."""
@@ -62,16 +91,17 @@ class Requirements(BaseModel):
     skills: list[str] = Field(default_factory=list)
 
 
-class RequirementExtractor(Protocol):
-    """What ingestion needs from an LLM.
+class SkillExtractor(Protocol):
+    """What storing a posting or a resume needs from an LLM.
 
-    A protocol for the same reason the writer and the embeddings client are
-    ones: a test that reaches a real model is slow, non-deterministic and
-    billed.
+    One protocol for both sides: the two differ in what they are asked, not
+    in what they hand back. A protocol for the same reason the writer and the
+    embeddings client are ones -- a test that reaches a real model is slow,
+    non-deterministic and billed.
     """
 
     async def extract(self, content: str) -> list[str]:
-        """Return the posting's requirements, cleaned and deduplicated."""
+        """Return the terms read out of the text, cleaned and deduplicated."""
         ...
 
 
@@ -95,10 +125,15 @@ def clean(skills: list[str]) -> list[str]:
     return list(seen)[:MAX_REQUIREMENTS]
 
 
-class AnthropicRequirementExtractor:
-    """The real provider: Claude, constrained to a schema."""
+class AnthropicSkillExtractor:
+    """The real provider: Claude, constrained to a schema.
 
-    def __init__(self, settings: Settings) -> None:
+    The prompt is a constructor argument rather than a subclass: the two
+    readings differ in one string and share every line of the call, the
+    tracing and the cleaning.
+    """
+
+    def __init__(self, settings: Settings, prompt: str = PROMPT) -> None:
         """Build the client, failing loudly when no key is configured."""
         if settings.anthropic_api_key is None:
             raise RuntimeError("anthropic_api_key is not configured")
@@ -107,19 +142,22 @@ class AnthropicRequirementExtractor:
             api_key=settings.anthropic_api_key.get_secret_value()
         )
         self._model = settings.llm_model
+        self._prompt = prompt
 
     @observe(as_type="generation")
     async def extract(self, content: str) -> list[str]:
-        """Ask the model what the posting requires.
+        """Ask the model what the text says a candidate can do, or must.
 
         Traced like the other provider call (NFR-2), and for a sharper reason
-        here: this one runs during ingestion, where nobody is waiting for it
-        and an unnoticed cost would accumulate quietly.
+        here: this one runs while something is being stored, where nobody is
+        waiting for it and an unnoticed cost would accumulate quietly.
         """
         response = await self._client.messages.parse(
             model=self._model,
             max_tokens=1024,
-            messages=[{"role": "user", "content": PROMPT.format(content=content)}],
+            messages=[
+                {"role": "user", "content": self._prompt.format(content=content)}
+            ],
             output_format=Requirements,
         )
         parsed = response.parsed_output

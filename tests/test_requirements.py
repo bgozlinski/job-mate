@@ -6,10 +6,11 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.api.deps import get_requirement_extractor
+from app.api.deps import get_requirement_extractor, get_resume_skill_extractor
 from app.main import app
 from app.models.document import Document, SourceType
-from app.services.matching import cover, requirements_of
+from app.models.resume import Resume
+from app.services.matching import cover, evidence, requirements_of
 from app.services.requirements import MAX_REQUIREMENTS, MAX_TERM_WORDS, clean
 from tests.test_documents import account, payload
 
@@ -74,14 +75,18 @@ def test_cleaning_drops_empty_entries() -> None:
 
 def test_a_requirement_of_several_words_is_met_by_all_of_them() -> None:
     """ "message queues" is answered by a resume saying "the message queue"."""
-    matched, missing = cover(["message queues"], "maintained the message queue")
+    matched, missing = cover(
+        ["message queues"], evidence("maintained the message queue", None)
+    )
 
     assert matched == ["message queues"]
     assert missing == []
 
 
 def test_a_requirement_is_not_met_by_half_of_it() -> None:
-    matched, missing = cover(["message queues"], "wrote messages to users")
+    matched, missing = cover(
+        ["message queues"], evidence("wrote messages to users", None)
+    )
 
     assert missing == ["message queues"]
 
@@ -202,3 +207,108 @@ async def test_the_score_is_computed_over_the_extracted_list(
     assert body["matched_keywords"] == ["docker"]
     assert body["missing_keywords"] == ["kubernetes", "message queues"]
     assert body["score"] == pytest.approx(1 / 3, abs=0.001)
+
+
+async def test_a_resume_is_read_when_it_is_stored(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    fake = FakeExtractor(["kubernetes", "docker"])
+    app.dependency_overrides[get_resume_skill_extractor] = lambda: fake
+    headers = await account(client)
+
+    await client.post("/resumes", json={"content": "ran k8s in anger"}, headers=headers)
+
+    async with session_factory() as session:
+        resume = await session.scalar(select(Resume))
+
+    assert resume is not None
+    assert resume.skills == ["kubernetes", "docker"]
+
+
+def test_extracted_skills_widen_what_a_resume_answers_with() -> None:
+    """The resume says k8s; only the model turns that into kubernetes."""
+    matched, missing = cover(
+        ["kubernetes"], evidence("orchestrated k8s clusters", ["kubernetes"])
+    )
+
+    assert matched == ["kubernetes"]
+    assert missing == []
+
+
+def test_reading_a_resume_never_costs_a_match() -> None:
+    """An extracted list is a summary and may leave out what the text has."""
+    matched, _ = cover(["docker"], evidence("shipped docker images", ["kubernetes"]))
+
+    assert matched == ["docker"]
+
+
+def test_a_resume_without_skills_still_matches_on_its_own_words() -> None:
+    matched, _ = cover(["docker"], evidence("shipped docker images", None))
+
+    assert matched == ["docker"]
+
+
+async def test_a_provider_outage_still_stores_the_resume(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    app.dependency_overrides[get_resume_skill_extractor] = BrokenExtractor
+    headers = await account(client)
+
+    response = await client.post(
+        "/resumes", json={"content": "a resume"}, headers=headers
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+
+    async with session_factory() as session:
+        resume = await session.scalar(select(Resume))
+
+    assert resume is not None
+    assert resume.skills is None
+
+
+async def test_rewriting_a_resume_drops_skills_read_from_the_old_text(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Stale skills would answer requirements the new text cannot."""
+    fake = FakeExtractor(["kubernetes"])
+    app.dependency_overrides[get_resume_skill_extractor] = lambda: fake
+    headers = await account(client)
+    stored = await client.post("/resumes", json={"content": "ran k8s"}, headers=headers)
+
+    await client.patch(
+        f"/resumes/{stored.json()['id']}",
+        json={"content": "wrote frontend code"},
+        headers=headers,
+    )
+
+    async with session_factory() as session:
+        resume = await session.scalar(select(Resume))
+
+    assert resume is not None
+    assert resume.skills is None
+
+
+async def test_editing_only_the_role_keeps_the_skills(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    fake = FakeExtractor(["kubernetes"])
+    app.dependency_overrides[get_resume_skill_extractor] = lambda: fake
+    headers = await account(client)
+    stored = await client.post("/resumes", json={"content": "ran k8s"}, headers=headers)
+
+    await client.patch(
+        f"/resumes/{stored.json()['id']}",
+        json={"target_role": "Platform Engineer"},
+        headers=headers,
+    )
+
+    async with session_factory() as session:
+        resume = await session.scalar(select(Resume))
+
+    assert resume is not None
+    assert resume.skills == ["kubernetes"]

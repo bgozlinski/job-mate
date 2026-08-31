@@ -20,7 +20,7 @@ from app.models.user import User
 from app.services.embeddings import EmbeddingModel
 from app.services.matching import SuggestionWriter
 from app.services.rate_limit import RateLimit, consume
-from app.services.requirements import RequirementExtractor
+from app.services.requirements import SkillExtractor
 
 bearer_scheme = HTTPBearer()
 
@@ -188,7 +188,7 @@ def rate_limited(scope: str, budget: Callable[[Settings], int]) -> Limiter:
     return dependency
 
 
-async def get_requirement_extractor(request: Request) -> RequirementExtractor | None:
+async def get_requirement_extractor(request: Request) -> SkillExtractor | None:
     """Hand out the shared extractor, or nothing when no key is configured.
 
     None rather than a 503, unlike the other two providers: a posting whose
@@ -196,7 +196,14 @@ async def get_requirement_extractor(request: Request) -> RequirementExtractor | 
     heuristic to fall back on. Refusing the ingestion instead would make an
     optional improvement a hard dependency.
     """
-    extractor: RequirementExtractor | None = request.app.state.requirement_extractor
+    extractor: SkillExtractor | None = request.app.state.requirement_extractor
+
+    return extractor
+
+
+async def get_resume_skill_extractor(request: Request) -> SkillExtractor | None:
+    """Hand out the extractor that reads a CV, or nothing when no key is set."""
+    extractor: SkillExtractor | None = request.app.state.resume_skill_extractor
 
     return extractor
 

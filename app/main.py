@@ -16,7 +16,7 @@ from app.core.observability import create_tracer
 from app.core.redis import create_redis
 from app.services.embeddings import OpenAIEmbeddingModel
 from app.services.matching import AnthropicSuggestionWriter
-from app.services.requirements import AnthropicRequirementExtractor
+from app.services.requirements import RESUME_PROMPT, AnthropicSkillExtractor
 
 
 @asynccontextmanager
@@ -44,7 +44,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # are ingested without their requirements read, and matching falls back
     # to counting words.
     app.state.requirement_extractor = (
-        AnthropicRequirementExtractor(settings) if settings.anthropic_api_key else None
+        AnthropicSkillExtractor(settings) if settings.anthropic_api_key else None
+    )
+    app.state.resume_skill_extractor = (
+        AnthropicSkillExtractor(settings, RESUME_PROMPT)
+        if settings.anthropic_api_key
+        else None
     )
     # Nothing reads this back: building it registers the process-wide client
     # that @observe in the service layer picks up. It is kept on state only so

@@ -13,7 +13,7 @@ from app.models.chunk import Chunk
 from app.models.document import Document, SourceType
 from app.services.chunking import content_hash, normalize_content, split_content
 from app.services.embeddings import EmbeddingModel, embed_texts
-from app.services.requirements import RequirementExtractor
+from app.services.requirements import SkillExtractor
 
 
 class EmptyDocumentError(ValueError):
@@ -50,7 +50,7 @@ class Ingested:
 
 
 async def _requirements(
-    source: SourceDocument, content: str, extractor: RequirementExtractor | None
+    source: SourceDocument, content: str, extractor: SkillExtractor | None
 ) -> list[str] | None:
     """Read the posting's requirements, or leave the column empty.
 
@@ -82,7 +82,7 @@ async def ingest_document(
     source: SourceDocument,
     model: EmbeddingModel,
     cache: Redis,
-    extractor: RequirementExtractor | None = None,
+    extractor: SkillExtractor | None = None,
 ) -> Ingested:
     """Split, embed and store a source, or return the duplicate it repeats.
 

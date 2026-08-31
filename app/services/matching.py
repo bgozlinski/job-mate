@@ -281,7 +281,27 @@ def extract_keywords(text: str, limit: int = MAX_KEYWORDS) -> list[str]:
     return [keyword for keyword, _ in counts.most_common(limit)]
 
 
-def cover(keywords: list[str], resume: str) -> tuple[list[str], list[str]]:
+def evidence(resume: str, skills: list[str] | None) -> set[str]:
+    """Build the set of terms a resume can answer a requirement with.
+
+    The words of the resume itself, plus the words of whatever an LLM read
+    out of it. A union rather than a replacement: the extracted list is a
+    summary and may leave out a term that is written in the text, so reading
+    the resume can only ever add a match, never take one away.
+
+    What it adds is the spelling: the resume says k8s and the posting says
+    kubernetes, and only the model bridges those two. No rule about plurals
+    was ever going to.
+    """
+    terms = {singular(token) for token in tokenize(resume)}
+
+    for skill in skills or []:
+        terms.update(singular(token) for token in tokenize(skill))
+
+    return terms
+
+
+def cover(keywords: list[str], present: set[str]) -> tuple[list[str], list[str]]:
     """Split a posting's requirements into those the resume has and those it lacks.
 
     Whole terms are compared, not substrings: "java" must not be satisfied by
@@ -297,7 +317,6 @@ def cover(keywords: list[str], resume: str) -> tuple[list[str], list[str]]:
     Loose enough to be wrong sometimes, which beats a rule that is wrong
     almost always.
     """
-    present = {singular(token) for token in tokenize(resume)}
     wanted = {
         keyword: [singular(token) for token in tokenize(keyword)]
         for keyword in keywords
@@ -373,12 +392,13 @@ async def _job_post_chunks(session: AsyncSession, job_post: Document) -> list[Ch
     return list(chunks)
 
 
-async def match_resume(
+async def match_resume(  # noqa: PLR0913, PLR0917 -- four are collaborators
     session: AsyncSession,
     resume: str,
     job_post: Document,
     writer: SuggestionWriter,
     embeddings: tuple[EmbeddingModel, Redis],
+    skills: list[str] | None = None,
 ) -> MatchResult:
     """Score a resume against a posting and suggest how to close the gaps.
 
@@ -394,12 +414,14 @@ async def match_resume(
 
     What the score is computed over comes from requirements_of: the list an
     LLM read out of the posting at ingestion, or the frequency heuristic for
-    a posting that has none. Either way the number is computed here, in
-    Python, from a list that can be inspected (W-1 variant c).
+    a posting that has none. What it is compared against comes from evidence:
+    the words of the resume, widened by the skills read out of it. Either way
+    the number is computed here, in Python, from two lists that can be
+    inspected (W-1 variant c).
     """
     model, cache = embeddings
     keywords = requirements_of(job_post)
-    matched, missing = cover(keywords, resume)
+    matched, missing = cover(keywords, evidence(resume, skills))
     score = round(len(matched) / len(keywords), 3) if keywords else 0.0
 
     chunks = await _job_post_chunks(session, job_post)
