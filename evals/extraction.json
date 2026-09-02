@@ -1,0 +1,143 @@
+{
+  "about": "Hand-labelled cases for the two extraction prompts (job-post-skills and resume-skills). Unlike the matching dataset this one calls a real model, so it costs money, needs a key and gives a slightly different answer every run -- which is why the runner can repeat each case and report how often a term survives.",
+  "labelled_by": "Claude, 2026-09-02 -- review before trusting any number computed from this",
+  "how_terms_are_compared": "An expected term counts as produced when the list covers it under the project's own cover()/evidence() rule, not by string equality: 'brake systems' is answered by 'brake system repair'. Extraction is measured the way the score will read it, not the way it is spelled. A forbidden term counts as violated when one produced entry and it contain each other's words in either direction.",
+  "pairs": [
+    {
+      "id": "garage-mechanic",
+      "domain": "other",
+      "posting": {
+        "text": "Car mechanic wanted for an independent garage. You will service and repair passenger cars: brake systems, suspension, clutch replacement and seasonal tyre fitting. Reading fault codes on the diagnostic computer is part of the daily work. Air conditioning servicing is a plus. A category B driving licence is required; we will pay for the air conditioning certificate. We offer a stable salary, private healthcare and a tool budget.",
+        "must_include": ["brake systems", "suspension", "clutch replacement", "tyre fitting", "category b licence"],
+        "must_exclude": ["healthcare", "salary", "tool budget"],
+        "notes": "The licence is required and has to appear; the air conditioning certificate is paid for by the employer, so a candidate need not already hold it."
+      },
+      "resume": {
+        "text": "Car mechanic, six years in an independent garage. Replaced brakes, clutches and suspension parts on passenger cars. Read fault codes with the diagnostic computer and did the seasonal tyre changes. Hold a category B driving licence and a first aid certificate from the local Red Cross course.",
+        "must_include": ["brake replacement", "suspension", "category b licence", "first aid"],
+        "must_exclude": ["red cross", "air conditioning"],
+        "notes": "Red Cross is the awarding body, not a skill. Air conditioning work is nowhere in this resume and must not be inferred from the garage."
+      },
+      "must_agree": ["category b licence", "suspension"]
+    },
+    {
+      "id": "hotel-kitchen",
+      "domain": "other",
+      "posting": {
+        "text": "Line cook for a hotel restaurant, 120 covers an evening. You will run the cold starters section, prepare mise en place for the service and keep the HACCP records and temperature logs. Knowledge of the fourteen allergens is required. Uniform and staff meals provided, plus a share of the service charge. We are a friendly team and look for a team player.",
+        "must_include": ["haccp", "cold section", "mise en place", "allergens"],
+        "must_exclude": ["staff meals", "uniform", "team player", "service charge"],
+        "notes": "Perks and the closing pitch are what the employer offers. Allergen knowledge is a legal requirement in a kitchen and belongs in the list."
+      },
+      "resume": {
+        "text": "Cook, four seasons in hotel kitchens. Ran the cold starters section on my own during service, prepared mise en place for the whole brigade, kept the HACCP paperwork and the fridge temperature logs. Trained two commis chefs.",
+        "must_include": ["haccp", "cold section", "mise en place"],
+        "must_exclude": ["pastry", "head chef"],
+        "notes": "Running the cold section is not pastry work, and training two commis chefs is not a head chef title."
+      },
+      "must_agree": ["haccp", "mise en place"]
+    },
+    {
+      "id": "warehouse",
+      "domain": "other",
+      "posting": {
+        "text": "Warehouse operative for a distribution centre. Picking and packing orders with a hand scanner, loading pallets, taking part in the quarterly stock count. A forklift licence is required for the reach truck. Two-shift work. We offer a canteen, a quarterly bonus and free parking.",
+        "must_include": ["forklift licence", "picking", "packing", "stock counting", "shift work"],
+        "must_exclude": ["canteen", "bonus", "free parking"],
+        "notes": "Shift work is a named condition a resume can evidence, unlike a trait. The perks are the employer's side of the deal."
+      },
+      "resume": {
+        "text": "Warehouse operative, three years in a distribution centre. Picked and packed orders on a hand scanner, drove the reach truck on every shift and ran the quarterly stock counts. Forklift licence valid until 2029.",
+        "must_include": ["forklift licence", "picking", "packing", "stock counting"],
+        "must_exclude": ["2029", "distribution centre"],
+        "notes": "The expiry date is a date and the distribution centre is an employer, not skills."
+      },
+      "must_agree": ["forklift licence", "picking", "stock counting"]
+    },
+    {
+      "id": "care-home",
+      "domain": "other",
+      "posting": {
+        "text": "Care assistant for a residential home, days and nights. You will support residents with washing, dressing and meals, keep the daily care records and administer medication once trained. An enhanced DBS check is required before starting. Compassionate people welcome; we pay for the NVQ.",
+        "must_include": ["personal care", "record keeping", "medication administration", "dbs check"],
+        "must_exclude": ["compassionate", "nvq"],
+        "notes": "The DBS check is a hard requirement. The NVQ is paid for by the employer, and compassion is a trait no resume evidences."
+      },
+      "resume": {
+        "text": "Care assistant in a residential home for two years. Supported residents with washing, dressing and meals, kept the daily care notes and reported changes to the nurse on duty. Enhanced DBS check from 2025.",
+        "must_include": ["personal care", "record keeping", "dbs check"],
+        "must_exclude": ["medication administration", "nursing"],
+        "notes": "The line that matters: reporting to the nurse is not nursing, and nothing here says this person gives medication. A model that awards it makes the resume claim a regulated task."
+      },
+      "must_agree": ["personal care", "record keeping", "dbs check"]
+    },
+    {
+      "id": "office-admin",
+      "domain": "other",
+      "posting": {
+        "text": "Office administrator for a construction firm. Booking purchase invoices, keeping the department budget in Excel, managing the directors' calendars and handling incoming correspondence. Experience with an ERP is welcome. Fruit Fridays, a friendly team and a modern office in the city centre.",
+        "must_include": ["invoice processing", "excel", "calendar management", "erp"],
+        "must_exclude": ["fruit fridays", "friendly team", "modern office"],
+        "notes": "The last sentence is entirely the employer's side and none of it is a skill."
+      },
+      "resume": {
+        "text": "Office administrator, five years. Booked purchase invoices in SAP, kept the department budget in MS Excel with pivot tables, managed two directors' calendars and handled the incoming post.",
+        "must_include": ["invoice processing", "excel", "calendar management", "sap"],
+        "must_exclude": ["directors", "incoming post"],
+        "notes": "MS Excel has to come back as excel, which is the normalisation rule doing its work."
+      },
+      "must_agree": ["invoice processing", "excel", "calendar management"]
+    },
+    {
+      "id": "delivery-driver",
+      "domain": "other",
+      "posting": {
+        "text": "Delivery driver for a regional wholesaler. Daily routes of up to 300 km, loading and unloading the van, collecting signatures on the handheld. Category C licence and a valid driver qualification card required; tachograph experience expected. Fuel card and a company phone provided.",
+        "must_include": ["category c licence", "driver qualification card", "tachograph"],
+        "must_exclude": ["fuel card", "company phone"],
+        "notes": "Two separate credentials, and the tachograph is a tool. Everything in the last sentence is equipment the employer hands over."
+      },
+      "resume": {
+        "text": "Delivery driver, four years with a regional wholesaler. Ran daily routes of 250 to 300 km, loaded and unloaded the van myself, kept the tachograph discs in order. Category C licence and a current driver qualification card.",
+        "must_include": ["category c licence", "driver qualification card", "tachograph"],
+        "must_exclude": ["category c+e licence", "wholesaler"],
+        "notes": "C is not C+E. A model that rounds a credential upwards is worse than one that misses it."
+      },
+      "must_agree": ["category c licence", "driver qualification card", "tachograph"]
+    },
+    {
+      "id": "retail-shop",
+      "domain": "other",
+      "posting": {
+        "text": "Shop assistant for a city-centre store. Serving customers at the till, taking cash and card payments, replenishing shelves and doing the daily cash-up. Weekend availability required. Staff discount and a Christmas bonus.",
+        "must_include": ["customer service", "cash handling", "stock replenishment", "weekend availability"],
+        "must_exclude": ["staff discount", "christmas bonus"],
+        "notes": "Customer service is a named duty here, not a trait -- the boundary the prompt was rewritten to draw."
+      },
+      "resume": {
+        "text": "Shop assistant for two years in a city-centre store. Served customers at the till, took cash and card payments, replenished the shelves before opening and did the daily cash-up. Worked most weekends.",
+        "must_include": ["customer service", "cash handling", "stock replenishment"],
+        "must_exclude": ["management", "visual merchandising"],
+        "notes": "Replenishing shelves is not visual merchandising, and nobody here managed anyone."
+      },
+      "must_agree": ["customer service", "cash handling", "stock replenishment"]
+    },
+    {
+      "id": "backend-engineer",
+      "domain": "software",
+      "posting": {
+        "text": "Backend engineer for a payments team. Building REST APIs in Python with FastAPI, working with PostgreSQL, running services in Docker. Kubernetes experience is a plus. We use GitHub Actions for CI. Private healthcare, a training budget and a hybrid model of two days in the office.",
+        "must_include": ["python", "fastapi", "postgresql", "docker", "rest apis"],
+        "must_exclude": ["healthcare", "training budget", "hybrid"],
+        "notes": "The one software pair, kept so that a change cannot improve the trades at the expense of the vocabulary the project started with."
+      },
+      "resume": {
+        "text": "Backend developer, seven years. Built REST APIs in Python, first with Flask and now FastAPI, against a Postgres database. Packaged every service as a Docker image and shipped it through GitHub Actions.",
+        "must_include": ["python", "fastapi", "postgresql", "docker", "github actions"],
+        "must_exclude": ["kubernetes", "django"],
+        "notes": "Postgres must come back as postgresql. Kubernetes is the inference trap: a resume naming Docker does not thereby know it."
+      },
+      "must_agree": ["python", "fastapi", "postgresql", "docker"]
+    }
+  ]
+}
