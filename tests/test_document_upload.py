@@ -35,7 +35,7 @@ async def upload(
     content_type: str = PDF,
     **form: str,
 ) -> Response:
-    fields = {"source_type": "job_post"} | form
+    fields = dict(form)
 
     return await client.post(
         "/documents/upload",
@@ -51,9 +51,7 @@ async def test_a_pdf_upload_is_ingested(client: AsyncClient) -> None:
     response = await upload(client, headers, _pdf_with(POSTING))
 
     assert response.status_code == status.HTTP_201_CREATED
-    body = response.json()
-    assert body["source_type"] == "job_post"
-    assert body["chunk_count"] >= 1
+    assert response.json()["chunk_count"] >= 1
 
 
 async def test_a_docx_upload_is_ingested(client: AsyncClient) -> None:
@@ -137,7 +135,7 @@ async def test_an_upload_deduplicates_against_a_pasted_document(
     headers = await account(client)
     pasted = await client.post(
         "/documents",
-        json={"source_type": "job_post", "content": CONTENT},
+        json={"content": CONTENT},
         headers=headers,
     )
 
@@ -199,19 +197,10 @@ async def test_a_source_url_that_is_not_a_url_is_refused(client: AsyncClient) ->
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
-async def test_an_unknown_source_type_is_refused(client: AsyncClient) -> None:
-    headers = await account(client)
-
-    response = await upload(client, headers, _pdf_with(POSTING), source_type="blog")
-
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
-
-
 async def test_uploading_without_a_token_is_refused(client: AsyncClient) -> None:
     response = await client.post(
         "/documents/upload",
         files={"file": ("posting.pdf", _pdf_with(POSTING), PDF)},
-        data={"source_type": "job_post"},
     )
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED

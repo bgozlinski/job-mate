@@ -26,8 +26,6 @@ DOCUMENT_GENERATION_KEY = "document_uploader_generation"
 
 UPLOAD_TYPES = ["pdf", "docx", "txt", "md"]
 
-SOURCE_TYPES = ["job_post", "article", "qa"]
-
 MAX_RESUME_LENGTH = 100_000
 MAX_DOCUMENT_LENGTH = 200_000
 
@@ -35,7 +33,6 @@ PAGE_SIZE = 20
 MAX_PAGE_SIZE = 100
 
 SHOWN_KEY = "documents_shown"
-FILTER_KEY = "documents_source_type"
 MATCH_KEY = "match_result"
 
 MATCH_BUDGET = 20
@@ -268,11 +265,6 @@ def report_ingest(response: httpx.Response | None) -> bool:
     return True
 
 
-def reset_documents_page() -> None:
-    """Start the listing from the first page again after the filter changes."""
-    st.session_state[SHOWN_KEY] = PAGE_SIZE
-
-
 def render_document_upload() -> None:
     """Ingest a source from a file, then empty the widget that carried it."""
     generation = int(st.session_state.get(DOCUMENT_GENERATION_KEY, 0))
@@ -282,9 +274,6 @@ def render_document_upload() -> None:
             "Source file (max 5 MB)",
             type=UPLOAD_TYPES,
             key=f"document-file-{generation}",
-        )
-        source_type = st.selectbox(
-            "Source type", SOURCE_TYPES, key=f"document-type-{generation}"
         )
         title = st.text_input("Title (optional)", key=f"document-title-{generation}")
         url = st.text_input("Source URL (optional)", key=f"document-url-{generation}")
@@ -306,11 +295,7 @@ def render_document_upload() -> None:
     if parsed is None:
         return
 
-    data = (
-        {"source_type": str(source_type)}
-        | text_field("title", title)
-        | text_field("source_url", url)
-    )
+    data = text_field("title", title) | text_field("source_url", url)
     # Multipart has no notion of a nested value, so metadata travels as JSON
     # text and the route parses it back.
     if parsed:
@@ -332,9 +317,6 @@ def render_document_paste() -> None:
     """Ingest a source typed or pasted straight into the page."""
     with st.form("document-paste", clear_on_submit=True):
         content = st.text_area("Source text", height=200, key="document-paste-content")
-        source_type = st.selectbox(
-            "Source type", SOURCE_TYPES, key="document-paste-type"
-        )
         title = st.text_input("Title (optional)", key="document-paste-title")
         url = st.text_input("Source URL (optional)", key="document-paste-url")
         metadata = st.text_area(
@@ -360,7 +342,7 @@ def render_document_paste() -> None:
         return
 
     payload: dict[str, Any] = (
-        {"source_type": str(source_type), "content": content, "metadata": parsed}
+        {"content": content, "metadata": parsed}
         | text_field("title", title)
         | text_field("source_url", url)
     )
@@ -377,7 +359,7 @@ def render_document(document: Any) -> None:
     title = document["title"] or "untitled"
 
     with st.container(border=True):
-        st.markdown(f"**{title}** - {document['source_type']}")
+        st.markdown(f"**{title}**")
         st.caption(
             f"{created:%Y-%m-%d %H:%M} | {chunks_label(document['chunk_count'])}"
             f" | {document['id']}"
@@ -398,22 +380,13 @@ def render_document(document: Any) -> None:
 
 
 def render_document_list() -> None:
-    """List the knowledge base, a page at a time, optionally filtered."""
-    source_type = st.selectbox(
-        "Source type",
-        ["all", *SOURCE_TYPES],
-        key=FILTER_KEY,
-        on_change=reset_documents_page,
-    )
+    """List the knowledge base, a page at a time."""
     shown = int(st.session_state.get(SHOWN_KEY, PAGE_SIZE))
 
     # Asking for every row shown so far, from the top, rather than paging by
     # offset: the listing is rewritten by every ingestion above it, and a
     # stale offset over a shifted list is what shows a row twice.
     params: dict[str, Any] = {"limit": shown, "offset": 0}
-    if source_type != "all":
-        params["source_type"] = source_type
-
     response = authorized("GET", "/documents", params=params)
     if response is None or not succeeded(response, httpx.codes.OK):
         return
@@ -462,13 +435,9 @@ def render_documents() -> None:
 def fetch_job_posts() -> list[Any] | None:
     """Fetch the postings a resume can be matched against.
 
-    Filtered in the request rather than in the page: matching against an
-    article is a 422, and a posting that cannot be picked is better than an
-    error explaining why it should not have been.
+    Every document is one: the knowledge base holds nothing else.
     """
-    response = authorized(
-        "GET", "/documents", params={"source_type": "job_post", "limit": MAX_PAGE_SIZE}
-    )
+    response = authorized("GET", "/documents", params={"limit": MAX_PAGE_SIZE})
     if response is None or not succeeded(response, httpx.codes.OK):
         return None
 

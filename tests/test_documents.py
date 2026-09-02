@@ -26,7 +26,6 @@ async def account(
 
 def payload(**overrides: object) -> dict[str, object]:
     return {
-        "source_type": "job_post",
         "content": CONTENT,
         "title": "Backend engineer",
         "source_url": "https://example.com/jobs/1",
@@ -88,24 +87,6 @@ async def test_the_listing_is_newest_first(client):
     assert [row["id"] for row in body] == [newer.json()["id"], older.json()["id"]]
 
 
-async def test_the_listing_can_be_narrowed_to_one_kind_of_source(client):
-    headers = await account(client)
-    post = await client.post("/documents", json=payload(), headers=headers)
-    await client.post(
-        "/documents",
-        json=payload(source_type="article", content=f"{CONTENT} on careers"),
-        headers=headers,
-    )
-
-    body = (
-        await client.get(
-            "/documents", params={"source_type": "job_post"}, headers=headers
-        )
-    ).json()
-
-    assert [row["id"] for row in body] == [post.json()["id"]]
-
-
 async def test_a_page_can_be_walked_with_limit_and_offset(client):
     headers = await account(client)
     ids = []
@@ -133,7 +114,7 @@ async def test_a_page_can_be_walked_with_limit_and_offset(client):
 
 @pytest.mark.parametrize(
     "params",
-    [{"limit": 0}, {"limit": 101}, {"offset": -1}, {"source_type": "nonsense"}],
+    [{"limit": 0}, {"limit": 101}, {"offset": -1}],
 )
 async def test_a_listing_that_asks_for_nonsense_is_rejected(client, params):
     """The page cap is a promise about response size, not a suggestion."""
@@ -165,7 +146,6 @@ async def test_a_source_that_normalises_to_nothing_is_rejected(client):
     [
         {"content": ""},
         {"content": "x" * (MAX_CONTENT_LENGTH + 1)},
-        {"source_type": "blog"},
         {"source_url": "not-a-url"},
     ],
 )

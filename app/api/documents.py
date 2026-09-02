@@ -33,7 +33,7 @@ from app.api.deps import (
 from app.api.uploads import basename, read_within_limit, text_of
 from app.core.observability import record, traced
 from app.models.chunk import Chunk
-from app.models.document import Document, SourceType
+from app.models.document import Document
 from app.schemas.document import (
     MAX_CONTENT_LENGTH,
     MAX_TITLE_LENGTH,
@@ -74,7 +74,6 @@ def _describe(document: Document, chunk_count: int) -> DocumentRead:
     """Build the public view of a document from a row and its chunk count."""
     return DocumentRead(
         id=document.id,
-        source_type=document.source_type,
         title=document.title,
         source_url=document.source_url,
         metadata=document.doc_metadata,
@@ -100,7 +99,6 @@ async def _read(session: AsyncSession, document: Document) -> DocumentRead:
 @router.get("")
 async def list_documents(
     session: Session,
-    source_type: SourceType | None = None,
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[DocumentRead]:
@@ -114,7 +112,7 @@ async def list_documents(
     ingestion. Deleting is what stays with an admin.
 
     The content is not in the response -- DocumentRead leaves it out -- so a
-    page stays small no matter how long the articles are.
+    page stays small no matter how long the postings are.
 
     Ordering is by created_at and then by id, because two sources ingested in
     the same moment would otherwise have no defined order and offset paging
@@ -128,9 +126,6 @@ async def list_documents(
     counted = select(Document, func.count(Chunk.id)).outerjoin(
         Chunk, Chunk.document_id == Document.id
     )
-
-    if source_type is not None:
-        counted = counted.where(Document.source_type == source_type)
 
     rows = await session.execute(
         counted.group_by(Document.id)
@@ -167,7 +162,6 @@ async def create_document(  # noqa: PLR0913, PLR0917 -- five are dependencies
     """
     return await _ingest(
         SourceDocument(
-            source_type=payload.source_type,
             content=payload.content,
             title=payload.title,
             source_url=str(payload.source_url) if payload.source_url else None,
@@ -191,7 +185,6 @@ async def upload_document(  # noqa: PLR0913, PLR0917 -- six are dependencies
     extractor: Extractor,
     response: Response,
     file: Annotated[UploadFile, File()],
-    source_type: Annotated[str, Form()],
     title: Annotated[str | None, Form()] = None,
     source_url: Annotated[str | None, Form()] = None,
     metadata: Annotated[str | None, Form()] = None,
@@ -213,8 +206,8 @@ async def upload_document(  # noqa: PLR0913, PLR0917 -- six are dependencies
     FastAPI flattens such a model only when every field is scalar, and
     metadata is an object, so the whole thing arrives as one missing field.
     They are validated together anyway, by handing them to DocumentUpload --
-    a known source_type, a real URL and metadata that parses -- so the two
-    routes reject the same input for the same reasons.
+    a real URL and metadata that parses -- so the two routes reject the same
+    input for the same reasons.
 
     The length limit the JSON route gets from its schema is applied by hand:
     a 5 MB file of prose parses to far more text than MAX_CONTENT_LENGTH
@@ -225,7 +218,6 @@ async def upload_document(  # noqa: PLR0913, PLR0917 -- six are dependencies
     """
     try:
         form = DocumentUpload(
-            source_type=source_type,  # type: ignore[arg-type]
             title=title,
             source_url=source_url,  # type: ignore[arg-type]
             metadata=metadata,  # type: ignore[arg-type]
@@ -247,7 +239,6 @@ async def upload_document(  # noqa: PLR0913, PLR0917 -- six are dependencies
 
     return await _ingest(
         SourceDocument(
-            source_type=form.source_type,
             content=content,
             title=form.title or basename(file.filename, MAX_TITLE_LENGTH),
             source_url=str(form.source_url) if form.source_url else None,
@@ -275,12 +266,10 @@ async def _ingest(  # noqa: PLR0913, PLR0917 -- five are dependencies
 
     The trace opens here rather than in either route, so both shapes of
     request produce the same one. Until this existed the embedding calls
-    ingestion pays for were invisible: a hundred-page article was
+    ingestion pays for were invisible: a hundred-page posting was
     indistinguishable from no traffic at all (NFR-2).
     """
-    with traced(
-        "ingest", user_id, source_type=source.source_type.value, title=source.title
-    ):
+    with traced("ingest", user_id, title=source.title):
         return await _store(source, session, cache, model, extractor, response)
 
 

@@ -1,8 +1,0 @@
-{
-  "source_type": "article",
-  "title": "Writing resume bullet points",
-  "metadata": {
-    "topic": "resume"
-  },
-  "content": "A strong resume bullet point starts with an action verb, names the technology, and ends with a measurable result. Prefer 'Cut API p95 latency from 800 ms to 120 ms by adding Redis caching' over 'Responsible for performance'. Mirror the vocabulary of the job posting: if the posting says Kubernetes, do not write 'container orchestration'. Quantify scale where you can: requests per second, dataset size, team size. Keep each bullet to one line and drop responsibilities the role does not ask for."
-}

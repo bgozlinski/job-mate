@@ -103,9 +103,19 @@ kubernetes, and no rule about plurals will ever bring those together."""
 MATCH_SUGGESTIONS_TEMPLATE = """\
 You are helping a candidate adapt their resume to one job posting.
 Write resume bullet points that close the gaps listed below.
-Ground every bullet point in the numbered context and in the candidate's own \
+Ground every bullet point in the posting and in the candidate's own \
 experience; do not invent employers, dates, technologies or achievements that \
 appear in neither.
+
+Write them the way a strong resume is written:
+- Open with what the candidate did, not with a duty they were responsible for.
+- Name the technology the posting names, in the posting's own words: write \
+"Kubernetes" where the posting says Kubernetes, not "container \
+orchestration".
+- Keep the number the resume already gives you -- latency, throughput, \
+dataset or team size -- and never invent one it does not.
+- One line per entry, past tense, no adjectives about the candidate.
+
 A gap the resume gives you nothing to work with is not a bullet point: put it \
 in notes, one sentence, addressed to the candidate. bullet_points is copied \
 into a resume as it stands, so anything written about the resume rather than \
@@ -120,14 +130,17 @@ for it belongs in notes.
 
 # Missing keywords
 {{keywords}}
-
-# Context
-{{context}}
 """
 """The sections are part of the prompt rather than of the code: what the model
 is shown, in what order, under which heading, is the thing being tuned. The
-code only decides what goes into each -- numbering the chunks, and saying
-"none" where retrieval found nothing.
+code only decides what goes into each, and says "none" where there is nothing.
+
+How to write a bullet point used to arrive as retrieved chunks of career
+articles. The knowledge base holds nothing but postings now, so the advice
+lives here instead -- which is the better address for it anyway: it is the
+same advice on every match, and here it is versioned and its effect is
+measurable, rather than being whatever five chunks a nearest-neighbour search
+happened to return.
 
 The instruction about notes has to stay whatever else changes. A schema field
 the prompt never mentions comes back empty, and the meta-comment it exists to

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.db import Base
 from app.models.chunk import EMBEDDING_DIMENSIONS, Chunk
-from app.models.document import Document, SourceType
+from app.models.document import Document
 from app.services.chunking import split_content
 from app.services.ingestion import (
     EmptyDocumentError,
@@ -27,7 +27,6 @@ def model():
 
 def job_post(content: str = LONG_CONTENT) -> SourceDocument:
     return SourceDocument(
-        source_type=SourceType.JOB_POST,
         content=content,
         title="Backend engineer",
         metadata={"role": "backend", "seniority": "mid"},

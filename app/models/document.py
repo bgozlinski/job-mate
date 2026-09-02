@@ -1,11 +1,10 @@
-"""The documents table: the sources the knowledge base is built from."""
+"""The documents table: the job postings a resume is matched against."""
 
 import uuid
 from datetime import datetime
-from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import DateTime, Enum, Index, String, Text, func, text
+from sqlalchemy import DateTime, Index, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,23 +18,15 @@ CONTENT_HASH_LENGTH = 64
 """Width of a sha256 hex digest, which is what app.services.chunking produces."""
 
 
-class SourceType(StrEnum):
-    """What kind of source a document came from (FR-1).
-
-    A native Postgres enum rather than a free string: the three values are
-    part of the data model, and the database refuses a fourth one instead of
-    letting a typo reach the retrieval filter. The price is that adding a
-    value later needs its own migration (ALTER TYPE), which is acceptable
-    for a set this stable.
-    """
-
-    JOB_POST = "job_post"
-    ARTICLE = "article"
-    QA = "qa"
-
-
 class Document(Base):
-    """One ingested source: a job post, a career article or a Q&A entry.
+    """One ingested job posting.
+
+    A document used to carry a source_type telling a posting from a career
+    article or a Q&A entry. The application only compares a resume with a
+    posting, so the column said the same thing about every row and is gone:
+    a distinction nothing branches on is a distinction the schema should not
+    keep. Bringing back a second kind of source means a migration, which is
+    the honest price of not carrying an unused column until then.
 
     The knowledge base is global, not owned by anyone: it is administered
     (FR-6) and shared by every user, so there is no user_id here and no
@@ -64,13 +55,6 @@ class Document(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
-    source_type: Mapped[SourceType] = mapped_column(
-        Enum(
-            SourceType,
-            name="source_type",
-            values_callable=lambda enum: [member.value for member in enum],
-        )
-    )
     title: Mapped[str | None] = mapped_column(Text())
     source_url: Mapped[str | None] = mapped_column(Text())
     content: Mapped[str] = mapped_column(Text())

@@ -213,7 +213,6 @@ async def test_the_limit_applies_to_uploads_too(
     response = await client.post(
         "/documents/upload",
         files={"file": ("posting.txt", b"a posting with plenty of words " * 20)},
-        data={"source_type": "job_post"},
         headers=headers,
     )
 

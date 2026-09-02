@@ -16,7 +16,6 @@ JOB_POST = (
     "Backend engineer. We need python, python, python and kubernetes. "
     "You will work with postgres and write tests."
 )
-ARTICLE = "Career advice: quantify every bullet point with a number and a result."
 RESUME = "Backend developer with python and postgres experience. I write tests."
 
 
@@ -37,14 +36,11 @@ async def create_resume(client: AsyncClient, headers: dict[str, str]) -> str:
 
 
 async def create_document(
-    client: AsyncClient,
-    headers: dict[str, str],
-    content: str = JOB_POST,
-    source_type: str = "job_post",
+    client: AsyncClient, headers: dict[str, str], content: str = JOB_POST
 ) -> str:
     response = await client.post(
         "/documents",
-        json={"source_type": source_type, "content": content, "title": "Posting"},
+        json={"content": content, "title": "Posting"},
         headers=headers,
     )
 
@@ -59,7 +55,6 @@ async def owner(client: AsyncClient) -> dict[str, str]:
 async def test_a_resume_is_matched_against_a_posting(client, owner, suggestion_writer):
     resume_id = await create_resume(client, owner)
     document_id = await create_document(client, owner)
-    await create_document(client, owner, ARTICLE, "article")
 
     response = await client.post(
         f"/resumes/{resume_id}/match", json={"document_id": document_id}, headers=owner
@@ -77,8 +72,9 @@ async def test_a_resume_is_matched_against_a_posting(client, owner, suggestion_w
     assert body["notes"] == suggestion_writer.notes
     assert body["notes"] not in body["suggestions"]
     assert body["retrieved_chunk_ids"]
-    # The advice article reached the prompt, which is what grounding means.
-    assert ARTICLE in suggestion_writer.prompts[0]
+    # The posting reached the prompt, which is what grounding means now that
+    # the knowledge base holds nothing else.
+    assert JOB_POST in suggestion_writer.prompts[0]
 
 
 async def test_somebody_elses_resume_is_not_found(client, owner):
@@ -119,17 +115,6 @@ async def test_an_unknown_document_is_not_found(client, owner):
     )
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
-
-
-async def test_an_article_cannot_be_matched_against(client, owner):
-    resume_id = await create_resume(client, owner)
-    article_id = await create_document(client, owner, ARTICLE, "article")
-
-    response = await client.post(
-        f"/resumes/{resume_id}/match", json={"document_id": article_id}, headers=owner
-    )
-
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 async def test_matching_requires_a_token(client, owner):

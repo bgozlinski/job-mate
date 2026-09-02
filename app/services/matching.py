@@ -4,8 +4,8 @@ The score and the missing keywords are computed here, in Python, and only the
 rewritten bullet points come from an LLM. That split is deliberate: a number a
 model invents cannot be reproduced, explained or tested, while a coverage
 ratio can. The model is left with the one job it is better at -- phrasing --
-and even that is grounded in retrieved chunks rather than free generation,
-which is what FR-3 asks for.
+and even that is tied to the posting and the resume it was given rather than
+to free generation, which is what FR-3 asks for.
 
 What it writes comes back in two lists. bullet_points is text for the resume;
 notes is what the model has to say about the resume. Keeping them apart is the
@@ -21,16 +21,13 @@ from typing import Protocol
 from anthropic import AsyncAnthropic
 from langfuse import get_client, observe
 from pydantic import BaseModel, Field
-from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.prompts import MATCH_SUGGESTIONS, PromptStore
 from app.models.chunk import Chunk
-from app.models.document import Document, SourceType
-from app.services.embeddings import EmbeddingModel
-from app.services.retrieval import SearchQuery, search
+from app.models.document import Document
 
 MAX_KEYWORDS = 40
 """How many terms of the posting the score is measured against. Not everything
@@ -42,8 +39,6 @@ MIN_KEYWORD_LENGTH = 3
 MIN_IES_PLURAL_LENGTH = 5
 """Below this, an "-ies" word is not treated as a plural. "queries" folds to
 "query", but the same rule on "ties" leaves the single letter "ty"."""
-
-ADVICE_CHUNKS = 5
 
 TOKEN = re.compile(r"[a-z0-9]+(?:[.+#][a-z0-9]+)*[+#]*")
 """Keeps c++, c# and node.js in one piece -- exactly the terms a posting is
@@ -348,34 +343,23 @@ def requirements_of(job_post: Document) -> list[str]:
 
 
 def build_prompt(
-    prompts: PromptStore,
-    job_post: Document,
-    resume: str,
-    missing: list[str],
-    chunks: list[Chunk],
+    prompts: PromptStore, job_post: Document, resume: str, missing: list[str]
 ) -> str:
-    """Fill the match prompt with the request and what retrieval found.
+    """Fill the match prompt with the posting, the resume and the gaps.
 
     The wording lives in app.core.prompts, where it can be versioned and
     changed without a deploy; what stays here is the part that is a decision
-    of the code rather than of the text. The chunks are numbered, because the
-    instruction points at them by number -- that numbering is what grounding
-    means in practice (FR-3).
+    of the code rather than of the text.
 
     An empty section is filled with "none" rather than left blank. A heading
     with nothing under it reads to a model as a section it should invent.
     """
-    context = "\n\n".join(
-        f"[chunk {index}]\n{chunk.content}" for index, chunk in enumerate(chunks)
-    )
-
     return prompts.render(
         MATCH_SUGGESTIONS,
         title=job_post.title or "Untitled",
         posting=job_post.content,
         resume=resume,
         keywords=", ".join(missing) or "none",
-        context=context or "none",
     )
 
 
@@ -390,26 +374,27 @@ async def _job_post_chunks(session: AsyncSession, job_post: Document) -> list[Ch
     return list(chunks)
 
 
-async def match_resume(  # noqa: PLR0913, PLR0917 -- five are collaborators
+async def match_resume(  # noqa: PLR0913, PLR0917 -- four are collaborators
     session: AsyncSession,
     resume: str,
     job_post: Document,
     writer: SuggestionWriter,
     prompts: PromptStore,
-    embeddings: tuple[EmbeddingModel, Redis],
     skills: list[str] | None = None,
 ) -> MatchResult:
     """Score a resume against a posting and suggest how to close the gaps.
 
-    Retrieval feeds the prompt from two directions: the posting's own chunks,
-    so the model sees the requirements as they were written, and the closest
-    chunks of career articles, so the phrasing advice comes from the knowledge
-    base. Job posts are excluded from the second half -- telling a candidate
-    to copy another company's posting is not advice.
+    The prompt is built from the posting and the resume alone. It used to
+    carry retrieved chunks of career articles as well, which is where the
+    phrasing advice came from; the knowledge base now holds nothing but
+    postings, and quoting another company's posting back at a candidate is
+    not advice. What those chunks contributed lives in the prompt instead,
+    where it can be versioned and measured (app.core.prompts).
 
-    An empty knowledge base is not an error: the prompt then carries the
-    posting alone, and the result still records which chunks it was built
-    from.
+    The posting's own fragments are still loaded, and they are what
+    retrieved_chunk_ids records: the text the model was shown is exactly
+    their concatenation, so an answer stays auditable against what went into
+    it (FR-3).
 
     What the score is computed over comes from requirements_of: the list an
     LLM read out of the posting at ingestion, or the frequency heuristic for
@@ -418,26 +403,12 @@ async def match_resume(  # noqa: PLR0913, PLR0917 -- five are collaborators
     the number is computed here, in Python, from two lists that can be
     inspected (W-1 variant c).
     """
-    model, cache = embeddings
     keywords = requirements_of(job_post)
     matched, missing = cover(keywords, evidence(resume, skills))
     score = round(len(matched) / len(keywords), 3) if keywords else 0.0
 
     chunks = await _job_post_chunks(session, job_post)
-    advice = await search(
-        session,
-        SearchQuery(
-            text=" ".join(missing) or job_post.content,
-            source_types=(SourceType.ARTICLE, SourceType.QA),
-            k=ADVICE_CHUNKS,
-        ),
-        model,
-        cache,
-    )
-    chunks += [found.chunk for found in advice]
-    answer = await writer.write(
-        build_prompt(prompts, job_post, resume, missing, chunks)
-    )
+    answer = await writer.write(build_prompt(prompts, job_post, resume, missing))
 
     return MatchResult(
         score=score,

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.deps import get_requirement_extractor, get_resume_skill_extractor
 from app.main import app
-from app.models.document import Document, SourceType
+from app.models.document import Document
 from app.models.resume import Resume
 from app.services.matching import cover, evidence, requirements_of
 from app.services.requirements import MAX_REQUIREMENTS, MAX_TERM_WORDS, clean
@@ -93,7 +93,6 @@ def test_a_requirement_is_not_met_by_half_of_it() -> None:
 
 def test_a_stored_list_is_what_the_score_runs_over() -> None:
     posting = Document(
-        source_type=SourceType.JOB_POST,
         content="a posting that repeats python python python",
         content_hash="x" * 64,
         requirements=["docker"],
@@ -108,7 +107,6 @@ def test_without_a_stored_list_the_heuristic_still_answers(
 ) -> None:
     """A posting nobody read must not score zero for everyone."""
     posting = Document(
-        source_type=SourceType.JOB_POST,
         content="kubernetes kubernetes docker terraform observability pipeline",
         content_hash="y" * 64,
         requirements=stored,
@@ -132,26 +130,6 @@ async def test_ingesting_a_posting_stores_its_requirements(
     assert document is not None
     assert document.requirements == SKILLS
     assert len(extractor.calls) == 1
-
-
-async def test_an_article_is_not_asked_about_requirements(
-    client: AsyncClient,
-    session_factory: async_sessionmaker[AsyncSession],
-    extractor: FakeExtractor,
-) -> None:
-    """Nothing is scored against an article, so reading it would only cost."""
-    headers = await account(client)
-
-    await client.post(
-        "/documents", json=payload(source_type="article"), headers=headers
-    )
-
-    async with session_factory() as session:
-        document = await session.scalar(select(Document))
-
-    assert document is not None
-    assert document.requirements is None
-    assert extractor.calls == []
 
 
 async def test_a_duplicate_is_not_read_twice(

@@ -1,4 +1,4 @@
-"""Storing a source document together with its embedded chunks (FR-1)."""
+"""Storing a job posting together with its embedded chunks (FR-1)."""
 
 from dataclasses import dataclass, field
 from typing import Any
@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chunk import Chunk
-from app.models.document import Document, SourceType
+from app.models.document import Document
 from app.services.chunking import content_hash, normalize_content, split_content
 from app.services.embeddings import EmbeddingModel, embed_texts
 from app.services.requirements import SkillExtractor
@@ -22,7 +22,7 @@ class EmptyDocumentError(ValueError):
 
 @dataclass(frozen=True)
 class SourceDocument:
-    """What the caller supplies about one source.
+    """What the caller supplies about one posting.
 
     metadata is any JSON object; it lands in documents.metadata and is what
     hybrid retrieval later filters on (role, seniority). Validating its shape
@@ -30,7 +30,6 @@ class SourceDocument:
     able to carry fields the API does not know about yet.
     """
 
-    source_type: SourceType
     content: str
     title: str | None = None
     source_url: str | None = None
@@ -50,7 +49,7 @@ class Ingested:
 
 
 async def _requirements(
-    source: SourceDocument, content: str, extractor: SkillExtractor | None
+    content: str, extractor: SkillExtractor | None
 ) -> list[str] | None:
     """Read the posting's requirements, or leave the column empty.
 
@@ -59,7 +58,7 @@ async def _requirements(
     document. A provider that is down must not lose an ingestion that has
     already paid for its embeddings.
     """
-    if extractor is None or source.source_type is not SourceType.JOB_POST:
+    if extractor is None:
         return None
 
     try:
@@ -97,10 +96,9 @@ async def ingest_document(
     both pass that lookup, and only the database can reject the loser. The
     lookup is there to save an embeddings call in the common case.
 
-    A job post also has its requirements read out by an LLM, once, here --
+    The posting also has its requirements read out by an LLM, once, here --
     they belong to the posting, and doing it in /match instead would pay for
-    a call per candidate (W-1 variant c). Only job posts: an article has
-    nothing a resume is scored against. The extractor is optional and a
+    a call per candidate (W-1 variant c). The extractor is optional and a
     failure is survivable, because ingestion working without an LLM key is
     what lets development and CI run, and matching falls back to the
     frequency heuristic for a document that has none.
@@ -119,13 +117,12 @@ async def ingest_document(
 
     vectors = await embed_texts(texts, model, cache)
     document = Document(
-        source_type=source.source_type,
         title=source.title,
         source_url=source.source_url,
         content=normalized,
         content_hash=digest,
         doc_metadata=source.metadata,
-        requirements=await _requirements(source, normalized, extractor),
+        requirements=await _requirements(normalized, extractor),
     )
     document.chunks = [
         Chunk(chunk_index=index, content=text, embedding=vector)

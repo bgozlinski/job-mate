@@ -5,7 +5,6 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chunk import EMBEDDING_DIMENSIONS
-from app.models.document import SourceType
 from app.services.ingestion import SourceDocument, ingest_document
 from app.services.retrieval import MAX_K, Match, SearchQuery, search
 from tests.conftest import FakeEmbeddingModel
@@ -51,9 +50,7 @@ async def store_posts(
     for content, metadata in POSTS:
         await ingest_document(
             session,
-            SourceDocument(
-                source_type=SourceType.JOB_POST, content=content, metadata=metadata
-            ),
+            SourceDocument(content=content, metadata=metadata),
             model,
             cache,
         )

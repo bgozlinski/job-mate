@@ -1,4 +1,4 @@
-"""Schemas for adding sources to the knowledge base."""
+"""Schemas for adding job postings to the knowledge base."""
 
 import json
 import uuid
@@ -7,24 +7,21 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
-from app.models.document import SourceType
-
 MAX_CONTENT_LENGTH = 200_000
-"""Long enough for any job post or career article, short enough that one
-request cannot fill the database or turn into hundreds of embedding calls."""
+"""Long enough for any job posting, short enough that one request cannot fill
+the database or turn into hundreds of embedding calls."""
 
 MAX_TITLE_LENGTH = 500
 
 
 class DocumentCreate(BaseModel):
-    """Payload for ingesting one source.
+    """Payload for ingesting one job posting.
 
     metadata is left as an open object on purpose: it is what hybrid
     retrieval filters on (role, seniority), and the knowledge base has to be
     able to carry keys the API does not know about yet.
     """
 
-    source_type: SourceType
     content: str = Field(min_length=1, max_length=MAX_CONTENT_LENGTH)
     title: str | None = Field(default=None, max_length=MAX_TITLE_LENGTH)
     source_url: HttpUrl | None = None
@@ -34,14 +31,13 @@ class DocumentCreate(BaseModel):
 class DocumentUpload(BaseModel):
     """Everything an upload carries beside the file itself.
 
-    A model rather than four separate Form parameters so the handler keeps a
+    A model rather than three separate Form parameters so the handler keeps a
     signature a reader can take in, and so the same validation the JSON route
-    gets for free -- a known source_type, a real URL -- applies here too.
+    gets for free -- a real URL, metadata that parses -- applies here too.
 
     content is absent on purpose: it is the file.
     """
 
-    source_type: SourceType
     title: str | None = Field(default=None, max_length=MAX_TITLE_LENGTH)
     source_url: HttpUrl | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -68,16 +64,15 @@ class DocumentUpload(BaseModel):
 
 
 class DocumentRead(BaseModel):
-    """Public view of a stored source.
+    """Public view of a stored posting.
 
     The content itself is left out: the caller has just sent it, and a
-    listing of the knowledge base should not ship every article in full.
+    listing of the knowledge base should not ship every posting in full.
     """
 
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    source_type: SourceType
     title: str | None
     source_url: str | None
     metadata: dict[str, Any]
