@@ -38,6 +38,7 @@ Trzy ostatnie migracje są z 2026-08-30/31 i wszystkie kolumny w nich są **null
 | `app/services/requirements.py` | ekstrakcja wymagań oferty i umiejętności z CV przez LLM (W-1 (c), 2026-08-31) | `MAX_REQUIREMENTS = 30`, `MAX_TERM_WORDS = 3` |
 | `app/services/extraction.py` | plik → tekst: PDF, DOCX, TXT (2026-08-30) | `MAX_FILE_BYTES = 5 MiB`, `MIN_EXTRACTED_CHARS = 100` |
 | `app/services/rate_limit.py` | budżet żądań per konto w Redisie (NFR-2, 2026-08-31) | `match` 20/h, `ingest` 60/h |
+| `app/core/prompts.py` | teksty promptów i store, który czyta je z Langfuse albo z repozytorium (2026-09-02) | `CACHE_TTL_SECONDS = 300`, `FETCH_TIMEOUT_SECONDS = 3` |
 
 ### 1.3 API
 
@@ -49,6 +50,60 @@ Stan całości: `/`, `/health`, `/health/ready`, `/auth/register`, `/auth/login`
 - **Embeddingi:** OpenAI `text-embedding-3-small` (1536 wymiarów natywnie — tyle, ile ma kolumna i indeks).
 - **LLM:** Anthropic, structured output przez `messages.parse`. Anthropic nie ma API embeddingów, więc dostawcy są z konieczności różni. Domyślny model zmieniony 2026-08-24 z `claude-opus-5` na `claude-haiku-4-5` — patrz niżej.
 - Oba klucze są **opcjonalne**: aplikacja startuje bez nich, a endpointy, które ich wymagają, odpowiadają 503.
+
+### 1.5 Prompty w Langfuse (2026-09-02)
+
+Teksty promptów wyszły z modułów, które je wysyłają, do `app/core/prompts.py`, a stamtąd do
+Langfuse Prompt Management. Powodem jest W-1: otwarta pozycja „prompt ekstrakcji" wymaga
+porównania dwóch brzmień, a to znaczy zmieniać tekst bez deployu i umieć odczytać koszt
+oraz jakość **per wersja**, nie per commit. `update_current_generation(prompt=...)` podpina
+wersję pod generację w trace'ie i to jest cała różnica między „ten prompt jest lepszy"
+a liczbą.
+
+Trzy prompty: `job-post-skills`, `resume-skills`, `match-suggestions` — ten ostatni to
+instrukcja z `build_prompt` razem z nagłówkami sekcji; w kodzie została tylko ta część,
+która jest decyzją kodu (numerowanie chunków, `"none"` w pustej sekcji). Store za
+protokołem `PromptStore` z jedną metodą `render(name, /, **variables)`. Nazwa promptu jest
+pozycyjna, bo dzieli sygnaturę ze zmiennymi — prompt ze zmienną `name` byłby inaczej nie do
+wyrenderowania (złapane testem, nie recenzją).
+
+Trzy decyzje warte zapamiętania:
+
+- **Fallbackiem jest tekst z repozytorium.** Każde `get_prompt` niesie
+  `fallback=TEMPLATES[name]`, więc nieosiągalny Langfuse kosztuje brzmienie z commita, a nie
+  żądanie. Prompt spoza `TEMPLATES` nie ma podłogi i jest odrzucany, zamiast trafić do
+  modelu jako pusta instrukcja.
+- **Store dostaje klienta zbudowanego w lifespanie, nie `get_client()`.** Klient bez kluczy
+  wyłącza się, a `get_prompt` na wyłączonym kliencie **rzuca zanim dojdzie do fallbacku**
+  (`_resources is None`). `create_prompt_store(None)` odpowiada na ten sam warunek o krok
+  wcześniej — statycznym store'em, na którym stoi CI i każda maszyna bez kluczy.
+- **Nie używamy `compile()` z SDK.** `TemplateParser.compile_template` zostawia niewypełniony
+  placeholder w tekście jako dosłowne `{{content}}`, czyli prompt bez dokumentu — a model
+  odpowiada na to pustą listą, nie do odróżnienia od oferty bez wymagań. Renderuje własne
+  `render_template`, dla którego niewypełniony placeholder **i** nieużyta zmienna to
+  `ValueError`. Ta sama surowość obowiązuje tekst z serwera.
+
+Cache ma TTL 300 s i jest rozgrzewany w lifespanie (`warm()`): `get_prompt` jest
+synchroniczne, więc pierwsze pobranie blokuje pętlę zdarzeń, a na starcie nikt nie czeka.
+Wpis wygasły SDK odświeża w wątku w tle i serwuje w tym czasie stary tekst, więc to jedyne
+blokujące pobranie w procesie.
+
+Seedowanie: `scripts/seed_prompts.py` pisze każdy tekst jako nową wersję z labelką
+`production`, ale tylko gdy różni się od serwowanej — ponowny przebieg jest darmowy, a
+historia wersji zostaje zapisem zmian, nie uruchomień. **Brak seedowania niczego nie psuje**:
+aplikacja jedzie na fallbacku i nikt się nie dowie. To jest właśnie powód, żeby robić to
+świadomie.
+
+**Cena.** Prompt jest od teraz stanem zewnętrznym: `git checkout` starego commita nie
+odtworzy zachowania, jeśli ktoś w międzyczasie przestawił labelkę `production`. Fallback
+ratuje dostępność, nie reprodukowalność.
+
+**Niedomknięte.** `render` wiesza wersję na bieżącej obserwacji. W ekstraktorach jest nią
+generacja (`@observe(as_type="generation")`) i wychodzi dokładnie tak, jak trzeba; w `/match`
+`build_prompt` woła się poza spanem writera, więc atrybuty promptu lądują na spanie `match` —
+prawda, tylko mniej użyteczna. Domknięcie wymaga przeniesienia renderowania do
+`AnthropicSuggestionWriter.write`, co zmienia protokół `SuggestionWriter` (dziś przyjmuje
+gotowy tekst, na czym stoją testy dowodzące ugruntowania z FR-3). Osobna decyzja.
 
 ---
 
@@ -296,7 +351,9 @@ Konsekwencja niespójności scaffoldu opisanej w `CLAUDE.md` (`uv sync --no-inst
   `write` (prompt, odpowiedź, tokeny). Score dopięty do korzenia. **Nie ma tokenów przy
   embeddingach**: `EmbeddingModel` zwraca same wektory, więc realny koszt wymaga
   rozszerzenia tego protokołu. Datasety i eksperymenty nietknięte — pierwsze zastosowanie
-  to prompt ekstrakcji z W-1.
+  to prompt ekstrakcji z W-1. **Prompt management dołożony 2026-09-02** (sekcja 1.5):
+  wersje promptów są podpięte pod generacje, więc porównanie brzmień ma już na czym stanąć —
+  brakuje datasetu.
 - ~~**Rate limiting (NFR-2)**~~ — zrobione 2026-08-31. Per konto (nie per IP: za proxy w
   Dockerze wszystkie żądania mają ten sam adres), licznik w Redisie w namespace
   `ratelimit:*`, osobnym od cache'u embeddingów. Dwa budżety: `match` 20/h i `ingest` 60/h,
@@ -333,7 +390,9 @@ Konsekwencja niespójności scaffoldu opisanej w `CLAUDE.md` (`uv sync --no-inst
 | Rozważyć usunięcie `langchain-text-splitters` (ciągnie `langsmith`, `requests`, `orjson`) | przegląd zależności przy chunkingu | otwarte |
 | ~~Ekstrakcja wymagań przez LLM, wariant (c)~~ | W-1 | zrobione 2026-08-31 |
 | ~~Ekstrakcja umiejętności z CV (druga strona porównania)~~ | W-1 | zrobione 2026-08-31 |
-| Prompt ekstrakcji: `sql` obok `postgresql`, `mentoring` z CV | W-1 | otwarte — mierzyć datasetem, nie zgadywać |
+| Prompt ekstrakcji: `sql` obok `postgresql`, `mentoring` z CV | W-1 | otwarte — infrastruktura gotowa (1.5), brakuje datasetu |
+| ~~Prompty do Langfuse: wersje, labelki, koszt per wersja~~ | W-1 | zrobione 2026-09-02 |
+| Renderowanie promptu `/match` poza spanem writera — wersja ląduje na spanie `match` | sekcja 1.5 | otwarte |
 | ~~Naprawa szumu w słowach kluczowych, wariant (a)~~ | W-1 | zrobione 2026-08-24 |
 | ~~`extra="forbid"` w `Settings`~~ | W-5 | zrobione `71ec9ea` |
 
