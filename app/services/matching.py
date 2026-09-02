@@ -26,6 +26,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
+from app.core.prompts import MATCH_SUGGESTIONS, PromptStore
 from app.models.chunk import Chunk
 from app.models.document import Document, SourceType
 from app.services.embeddings import EmbeddingModel
@@ -347,37 +348,34 @@ def requirements_of(job_post: Document) -> list[str]:
 
 
 def build_prompt(
-    job_post: Document, resume: str, missing: list[str], chunks: list[Chunk]
+    prompts: PromptStore,
+    job_post: Document,
+    resume: str,
+    missing: list[str],
+    chunks: list[Chunk],
 ) -> str:
-    """Assemble the prompt: the request plus what retrieval found.
+    """Fill the match prompt with the request and what retrieval found.
 
-    The retrieved chunks are numbered and the instruction points at them, so
-    the suggestions are grounded in what the knowledge base holds rather than
-    in whatever the model remembers about resumes (FR-3).
+    The wording lives in app.core.prompts, where it can be versioned and
+    changed without a deploy; what stays here is the part that is a decision
+    of the code rather than of the text. The chunks are numbered, because the
+    instruction points at them by number -- that numbering is what grounding
+    means in practice (FR-3).
 
-    The instruction also has to say what notes is for. A schema field the
-    prompt never mentions comes back empty, and the meta-comment it exists to
-    catch goes back to riding along in bullet_points.
+    An empty section is filled with "none" rather than left blank. A heading
+    with nothing under it reads to a model as a section it should invent.
     """
     context = "\n\n".join(
         f"[chunk {index}]\n{chunk.content}" for index, chunk in enumerate(chunks)
     )
-    keywords = ", ".join(missing) or "none"
 
-    return (
-        "You are helping a candidate adapt their resume to one job posting.\n"
-        "Write resume bullet points that close the gaps listed below.\n"
-        "Ground every bullet point in the numbered context and in the "
-        "candidate's own experience; do not invent employers, dates, "
-        "technologies or achievements that appear in neither.\n"
-        "A gap the resume gives you nothing to work with is not a bullet "
-        "point: put it in notes, one sentence, addressed to the candidate. "
-        "bullet_points is copied into a resume as it stands, so anything "
-        "written about the resume rather than for it belongs in notes.\n\n"
-        f"# Job posting\n{job_post.title or 'Untitled'}\n{job_post.content}\n\n"
-        f"# Candidate resume\n{resume}\n\n"
-        f"# Missing keywords\n{keywords}\n\n"
-        f"# Context\n{context or 'none'}\n"
+    return prompts.render(
+        MATCH_SUGGESTIONS,
+        title=job_post.title or "Untitled",
+        posting=job_post.content,
+        resume=resume,
+        keywords=", ".join(missing) or "none",
+        context=context or "none",
     )
 
 
@@ -392,11 +390,12 @@ async def _job_post_chunks(session: AsyncSession, job_post: Document) -> list[Ch
     return list(chunks)
 
 
-async def match_resume(  # noqa: PLR0913, PLR0917 -- four are collaborators
+async def match_resume(  # noqa: PLR0913, PLR0917 -- five are collaborators
     session: AsyncSession,
     resume: str,
     job_post: Document,
     writer: SuggestionWriter,
+    prompts: PromptStore,
     embeddings: tuple[EmbeddingModel, Redis],
     skills: list[str] | None = None,
 ) -> MatchResult:
@@ -436,7 +435,9 @@ async def match_resume(  # noqa: PLR0913, PLR0917 -- four are collaborators
         cache,
     )
     chunks += [found.chunk for found in advice]
-    answer = await writer.write(build_prompt(job_post, resume, missing, chunks))
+    answer = await writer.write(
+        build_prompt(prompts, job_post, resume, missing, chunks)
+    )
 
     return MatchResult(
         score=score,

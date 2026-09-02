@@ -16,10 +16,11 @@ in /match instead would pay for two LLM calls on every candidate and put them
 in the way of the < 500 ms retrieval target.
 
 Both sides go through the same shape -- text in, terms out -- and differ only
-in the prompt. What a posting demands and what a resume evidences are read
-with the same vocabulary on purpose: a requirement and a skill that mean the
-same thing have to come back spelled the same way, or the comparison between
-them is worthless.
+in which prompt they name. What a posting demands and what a resume evidences
+are read with the same vocabulary on purpose: a requirement and a skill that
+mean the same thing have to come back spelled the same way, or the comparison
+between them is worthless. The texts themselves live in app.core.prompts,
+which is where a prompt server will one day answer from instead.
 """
 
 from typing import Protocol
@@ -29,6 +30,7 @@ from langfuse import get_client, observe
 from pydantic import BaseModel, Field
 
 from app.core.config import Settings
+from app.core.prompts import PromptStore
 
 MAX_REQUIREMENTS = 30
 """Enough for a demanding posting, and a ceiling on what one document can
@@ -39,50 +41,6 @@ MAX_TERM_WORDS = 3
 """A requirement long enough to be a sentence cannot be matched against a
 resume by any deterministic rule, so the prompt asks for terms and anything
 longer is dropped rather than trusted."""
-
-PROMPT = """\
-Read the job posting below and list the concrete skills, technologies and \
-qualifications a candidate has to evidence for it.
-
-Rules:
-- One skill per entry, lower case.
-- Name the technology, not the sentence around it: a posting asking for \
-"experience with containerisation" gives "docker" only if it names Docker, \
-otherwise "containerisation".
-- At most three words per entry.
-- Include what the posting states as a requirement or a strong preference. \
-Leave out benefits, company description, the contract type and anything the \
-employer offers rather than asks for.
-- Leave out generic traits with no evidence in a resume: "team player", \
-"good communication", "attention to detail".
-- No duplicates, and no entry that is a restatement of another.
-
-Job posting:
-{content}
-"""
-
-RESUME_PROMPT = """\
-Read the resume below and list the skills, technologies and qualifications \
-it gives evidence of.
-
-Rules:
-- One skill per entry, lower case.
-- Only what the resume actually evidences. Do not infer a skill from a \
-neighbouring one: a resume naming Docker does not thereby know Kubernetes.
-- Use the ordinary full name of a technology, so that the same skill written \
-in two ways comes back once: "k8s" as "kubernetes", "postgres" as \
-"postgresql", "js" as "javascript".
-- At most three words per entry.
-- Leave out job titles, employer names, dates and schools. Leave out generic \
-traits: "team player", "hard working".
-- No duplicates, and no entry that is a restatement of another.
-
-Resume:
-{content}
-"""
-"""The other half of the comparison. The instruction to expand an abbreviation
-is what this whole call is for: the resume says k8s, the posting says
-kubernetes, and no rule about plurals will ever bring those together."""
 
 
 class Requirements(BaseModel):
@@ -128,12 +86,13 @@ def clean(skills: list[str]) -> list[str]:
 class AnthropicSkillExtractor:
     """The real provider: Claude, constrained to a schema.
 
-    The prompt is a constructor argument rather than a subclass: the two
-    readings differ in one string and share every line of the call, the
-    tracing and the cleaning.
+    Which prompt to send is a constructor argument rather than a subclass:
+    the two readings differ in one name and share every line of the call, the
+    tracing and the cleaning. The name rather than the text, so that the
+    wording can later come from somewhere else without this class noticing.
     """
 
-    def __init__(self, settings: Settings, prompt: str = PROMPT) -> None:
+    def __init__(self, settings: Settings, prompts: PromptStore, name: str) -> None:
         """Build the client, failing loudly when no key is configured."""
         if settings.anthropic_api_key is None:
             raise RuntimeError("anthropic_api_key is not configured")
@@ -142,7 +101,8 @@ class AnthropicSkillExtractor:
             api_key=settings.anthropic_api_key.get_secret_value()
         )
         self._model = settings.llm_model
-        self._prompt = prompt
+        self._prompts = prompts
+        self._name = name
 
     @observe(as_type="generation")
     async def extract(self, content: str) -> list[str]:
@@ -156,7 +116,10 @@ class AnthropicSkillExtractor:
             model=self._model,
             max_tokens=1024,
             messages=[
-                {"role": "user", "content": self._prompt.format(content=content)}
+                {
+                    "role": "user",
+                    "content": self._prompts.render(self._name, content=content),
+                }
             ],
             output_format=Requirements,
         )

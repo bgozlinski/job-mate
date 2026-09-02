@@ -2,6 +2,7 @@ import pytest
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.prompts import StaticPromptStore
 from app.models.chunk import EMBEDDING_DIMENSIONS
 from app.models.document import Document, SourceType
 from app.services.ingestion import SourceDocument, ingest_document
@@ -25,6 +26,11 @@ JOB_POST = (
 RESUME = "Backend developer with python and postgres experience. I write tests."
 ARTICLE = "Career advice: quantify every bullet point with a number and a result."
 OTHER_POST = "Frontend engineer wanted: react, typescript and css every day."
+
+
+@pytest.fixture
+def prompts() -> StaticPromptStore:
+    return StaticPromptStore()
 
 
 @pytest.fixture
@@ -226,15 +232,19 @@ def test_cover_ignores_case():
 
 
 async def test_the_score_is_the_share_of_keywords_the_resume_covers(
-    session_factory, model, cache, writer
+    session_factory, model, cache, writer, prompts
 ):
     async with session_factory() as session:
         job_post = await store(session, model, cache, JOB_POST, SourceType.JOB_POST)
-        full = await match_resume(session, JOB_POST, job_post, writer, (model, cache))
-        none = await match_resume(
-            session, "nothing at all", job_post, writer, (model, cache)
+        full = await match_resume(
+            session, JOB_POST, job_post, writer, prompts, (model, cache)
         )
-        partial = await match_resume(session, RESUME, job_post, writer, (model, cache))
+        none = await match_resume(
+            session, "nothing at all", job_post, writer, prompts, (model, cache)
+        )
+        partial = await match_resume(
+            session, RESUME, job_post, writer, prompts, (model, cache)
+        )
 
     assert full.score == 1.0
     assert none.score == 0.0
@@ -244,14 +254,16 @@ async def test_the_score_is_the_share_of_keywords_the_resume_covers(
 
 
 async def test_the_prompt_carries_the_posting_and_the_retrieved_advice(
-    session_factory, model, cache, writer
+    session_factory, model, cache, writer, prompts
 ):
     async with session_factory() as session:
         job_post = await store(session, model, cache, JOB_POST, SourceType.JOB_POST)
         await store(session, model, cache, ARTICLE, SourceType.ARTICLE)
         await store(session, model, cache, OTHER_POST, SourceType.JOB_POST)
 
-        result = await match_resume(session, RESUME, job_post, writer, (model, cache))
+        result = await match_resume(
+            session, RESUME, job_post, writer, prompts, (model, cache)
+        )
 
     prompt = writer.prompts[0]
 
@@ -266,7 +278,7 @@ async def test_the_prompt_carries_the_posting_and_the_retrieved_advice(
 
 
 async def test_a_remark_about_the_resume_is_kept_out_of_the_resume(
-    session_factory, model, cache, writer
+    session_factory, model, cache, writer, prompts
 ):
     """W-2: the model's gap note used to arrive as the last bullet point.
 
@@ -276,30 +288,36 @@ async def test_a_remark_about_the_resume_is_kept_out_of_the_resume(
     async with session_factory() as session:
         job_post = await store(session, model, cache, JOB_POST, SourceType.JOB_POST)
 
-        result = await match_resume(session, RESUME, job_post, writer, (model, cache))
+        result = await match_resume(
+            session, RESUME, job_post, writer, prompts, (model, cache)
+        )
 
     assert result.notes == ["The resume does not evidence docker"]
     assert result.suggestions == ["Shipped a python service on kubernetes"]
 
 
-async def test_the_prompt_says_what_notes_is_for(session_factory, model, cache, writer):
+async def test_the_prompt_says_what_notes_is_for(
+    session_factory, model, cache, writer, prompts
+):
     """A schema field the instruction never mentions comes back empty."""
     async with session_factory() as session:
         job_post = await store(session, model, cache, JOB_POST, SourceType.JOB_POST)
 
-        await match_resume(session, RESUME, job_post, writer, (model, cache))
+        await match_resume(session, RESUME, job_post, writer, prompts, (model, cache))
 
     assert "notes" in writer.prompts[0]
 
 
 async def test_every_chunk_in_the_prompt_is_recorded_for_audit(
-    session_factory, model, cache, writer
+    session_factory, model, cache, writer, prompts
 ):
     async with session_factory() as session:
         job_post = await store(session, model, cache, JOB_POST, SourceType.JOB_POST)
         article = await store(session, model, cache, ARTICLE, SourceType.ARTICLE)
 
-        result = await match_resume(session, RESUME, job_post, writer, (model, cache))
+        result = await match_resume(
+            session, RESUME, job_post, writer, prompts, (model, cache)
+        )
 
         stored = {chunk.id for chunk in job_post.chunks} | {
             chunk.id for chunk in article.chunks
@@ -310,12 +328,14 @@ async def test_every_chunk_in_the_prompt_is_recorded_for_audit(
 
 
 async def test_an_empty_knowledge_base_still_produces_a_match(
-    session_factory, model, cache, writer
+    session_factory, model, cache, writer, prompts
 ):
     async with session_factory() as session:
         job_post = await store(session, model, cache, JOB_POST, SourceType.JOB_POST)
 
-        result = await match_resume(session, RESUME, job_post, writer, (model, cache))
+        result = await match_resume(
+            session, RESUME, job_post, writer, prompts, (model, cache)
+        )
 
     assert result.suggestions
     assert result.retrieved_chunk_ids

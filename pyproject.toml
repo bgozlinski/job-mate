@@ -70,7 +70,7 @@ convention = "pep257"
 exclude_dirs = [".venv", ".git", "tests"]
 
 [tool.mypy]
-files = ["app", "migrations", "tests", "ui"]
+files = ["app", "migrations", "scripts", "tests", "ui"]
 strict = true
 plugins = ["pydantic.mypy"]
 

@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.auth.security import decode_access_token
 from app.core.config import Settings, get_settings
+from app.core.prompts import PromptStore
 from app.models.resume import Resume
 from app.models.user import User
 from app.services.embeddings import EmbeddingModel
@@ -206,6 +207,17 @@ async def get_resume_skill_extractor(request: Request) -> SkillExtractor | None:
     extractor: SkillExtractor | None = request.app.state.resume_skill_extractor
 
     return extractor
+
+
+async def get_prompt_store(request: Request) -> PromptStore:
+    """Hand out the store the prompts are read from.
+
+    Never None, unlike the providers: there is always somewhere to get a
+    prompt from, because the texts ship with the code.
+    """
+    prompts: PromptStore = request.app.state.prompts
+
+    return prompts
 
 
 async def get_owned_resume(

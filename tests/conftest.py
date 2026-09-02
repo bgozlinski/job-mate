@@ -14,12 +14,14 @@ from app.api.deps import (
     get_cache,
     get_db,
     get_embedding_model,
+    get_prompt_store,
     get_requirement_extractor,
     get_resume_skill_extractor,
     get_suggestion_writer,
 )
 from app.core.config import get_settings
 from app.core.db import Base
+from app.core.prompts import StaticPromptStore
 from app.main import app
 from app.models import User  # noqa: F401  -- registers the table on Base.metadata
 from app.models.chunk import EMBEDDING_DIMENSIONS
@@ -205,7 +207,14 @@ async def client(
 
     Both providers are overridden here rather than in the tests that need
     them: an override that is forgotten means a test calling a real API, which
-    costs money and needs keys nobody has in CI.
+    costs money and needs keys nobody has in CI. Prompts come from the shipped
+    texts for the same reason -- reaching Langfuse for one would need keys and
+    a network -- and the store is built here rather than handed over as the
+    class, whose __init__ FastAPI would read as request parameters.
+
+    The extractors are None by default: ingestion without one is the
+    configuration CI runs in, and a test that wants requirements read supplies
+    its own.
     """
 
     async def override_get_db() -> AsyncIterator[AsyncSession]:
@@ -216,8 +225,8 @@ async def client(
     app.dependency_overrides[get_cache] = lambda: cache
     app.dependency_overrides[get_embedding_model] = lambda: embedding_model
     app.dependency_overrides[get_suggestion_writer] = lambda: suggestion_writer
-    # None by default: ingestion without an extractor is the configuration
-    # CI runs in, and a test that wants requirements read supplies its own.
+    prompt_store = StaticPromptStore()
+    app.dependency_overrides[get_prompt_store] = lambda: prompt_store
     app.dependency_overrides[get_requirement_extractor] = lambda: None
     app.dependency_overrides[get_resume_skill_extractor] = lambda: None
 

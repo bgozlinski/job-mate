@@ -12,10 +12,12 @@ from app.api.deps import (
     OwnedResume,
     get_db,
     get_embeddings,
+    get_prompt_store,
     get_suggestion_writer,
     rate_limited,
 )
 from app.core.observability import record, traced
+from app.core.prompts import PromptStore
 from app.models.document import Document, SourceType
 from app.schemas.matching import MatchCreate, MatchRead
 from app.services.embeddings import EmbeddingModel
@@ -26,18 +28,20 @@ router = APIRouter(prefix="/resumes", tags=["matching"])
 Session = Annotated[AsyncSession, Depends(get_db)]
 Embeddings = Annotated[tuple[EmbeddingModel, Redis], Depends(get_embeddings)]
 Writer = Annotated[SuggestionWriter, Depends(get_suggestion_writer)]
+Prompts = Annotated[PromptStore, Depends(get_prompt_store)]
 
 
 @router.post(
     "/{resume_id}/match",
     dependencies=[Depends(rate_limited("match", lambda s: s.match_rate_limit))],
 )
-async def match(
+async def match(  # noqa: PLR0913, PLR0917 -- five are dependencies
     payload: MatchCreate,
     resume: OwnedResume,
     session: Session,
     embeddings: Embeddings,
     writer: Writer,
+    prompts: Prompts,
 ) -> MatchRead:
     """Score one of the caller's resumes against a posting and suggest edits.
 
@@ -65,21 +69,16 @@ async def match(
         )
 
     try:
-        # The trace is opened here rather than in the service because this is
-        # the layer that knows who is asking; matching itself has no reason to
-        # learn that Langfuse exists.
         with traced("match", resume.user_id, document_id=str(document.id)):
             result = await match_resume(
                 session,
                 resume.content,
                 document,
                 writer,
+                prompts,
                 embeddings,
                 resume.skills,
             )
-            # The score belongs on the trace, not only in the response: it is
-            # what tells a reader whether a weak suggestion came from a weak
-            # match or from the model.
             record(
                 output={
                     "score": result.score,
@@ -89,8 +88,6 @@ async def match(
                 }
             )
     except (AnthropicError, OpenAIError) as exc:
-        # Provider messages can carry request URLs and key fragments, so the
-        # caller is told what failed, not what it said (NFR-1).
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="A provider the match depends on is unavailable",
