@@ -8,7 +8,7 @@
 
 ## 1. Opis projektu
 
-JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Generation). System pobiera ogłoszenia o pracę oraz treści z poradami kariery, a następnie pomaga użytkownikowi dopasować CV do docelowej roli i przygotować się do rozmowy rekrutacyjnej. Odpowiedzi są oparte na wyszukanych dokumentach, a nie generowane wyłącznie przez LLM — co ogranicza halucynacje i pozwala zweryfikować sugestie.
+JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Generation). System pobiera ogłoszenia o pracę, a następnie pomaga użytkownikowi dopasować CV do docelowej roli i przygotować się do rozmowy rekrutacyjnej. Odpowiedzi są ugruntowane w zapisanych dokumentach i w CV kandydata, a nie generowane swobodnie przez LLM — co ogranicza halucynacje i pozwala zweryfikować sugestie. Od 2026-09-02 baza wiedzy zawiera wyłącznie ogłoszenia (FR-1), więc dopasowanie CV nie korzysta już z wyszukiwania wektorowego; retrieval zostaje w kodzie pod etap 4.
 
 **Cele:**
 - Nauka i praktyczne zastosowanie pełnego pipeline'u RAG (ingestion → chunking → embedding → retrieval → generacja)
@@ -32,9 +32,14 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 ## 3. Wymagania funkcjonalne
 
 ### FR-1. Ingestion dokumentów
-- System przyjmuje ogłoszenia o pracę (wklejony tekst lub URL) oraz artykuły z poradami kariery.
+- System przyjmuje **wyłącznie ogłoszenia o pracę** (wklejony tekst albo plik PDF / DOCX / TXT).
 - Dokumenty są dzielone na chunki (500–1000 tokenów z overlapem), embedowane i zapisywane w bazie.
 - Duplikaty są odrzucane na podstawie hasha treści.
+
+> **Zmiana 2026-09-02.** Wcześniej baza wiedzy przyjmowała też artykuły z poradami kariery i wpisy Q&A
+> (`documents.source_type`). Program ma porównywać CV z ofertą i nic poza tym, więc kolumna rozróżniała
+> rodzaje źródeł, na które nic już nie reagowało — została usunięta razem z wierszami innymi niż ogłoszenia
+> (migracja `7712a7f5bd98`). Konsekwencje dla FR-3 i FR-4 opisane przy tych wymaganiach.
 
 ### FR-2. Profil użytkownika
 - Użytkownik może się zarejestrować i zalogować (uwierzytelnianie JWT).
@@ -46,7 +51,15 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
   - wynik dopasowania (score),
   - brakujące słowa kluczowe i umiejętności,
   - proponowane bullet pointy dopasowane do ogłoszenia.
-- Sugestie są oparte na wyszukanych chunkach (top-k z ogłoszenia i artykułów z poradami), a nie na swobodnej generacji LLM.
+- Sugestie są ugruntowane w treści wybranego ogłoszenia i w CV kandydata, a nie w swobodnej generacji LLM: model nie może wymyślić pracodawcy, daty, technologii ani osiągnięcia, którego nie ma w żadnym z nich.
+- Score i brakujące słowa kluczowe liczone są w Pythonie z dwóch list, które da się obejrzeć — liczba pochodząca od modelu nie byłaby powtarzalna ani testowalna.
+
+> **Zmiana 2026-09-02.** Wcześniej sugestie miały być oparte na top-k chunkach z ogłoszenia **i artykułów
+> z poradami**. Po usunięciu artykułów (FR-1) wskazówki „jak pisać punkt CV" są częścią promptu
+> `match-suggestions`, wersjonowanego w Langfuse. Ta sama porada obowiązuje przy każdym dopasowaniu, więc
+> prompt jest dla niej właściwszym adresem niż baza wiedzy: jest wersjonowana i mierzalna, zamiast być tym,
+> co akurat zwróciło wyszukiwanie najbliższych sąsiadów. Ceną jest to, że retrieval wektorowy nie bierze już
+> udziału w FR-3.
 
 ### FR-4. Symulacja rozmowy rekrutacyjnej (LangGraph)
 - System generuje pytania typowe dla docelowej roli, wyszukane w bazie wiedzy.
@@ -56,6 +69,11 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
   - warunek zakończenia: limit pytań lub decyzja użytkownika.
 - Tryb konwersacyjny: pytanie → odpowiedź użytkownika → feedback od LLM.
 - Pełna historia sesji jest zapisywana; każde wywołanie LLM trace'owane w Langfuse.
+
+> **Do rozstrzygnięcia przed etapem 4 (2026-09-02).** Pytania miały pochodzić z wpisów `qa` w bazie wiedzy,
+> a tej kategorii już nie ma (FR-1). Do wyboru: wyprowadzać pytania z ogłoszenia i CV, przywrócić osobną
+> kategorię źródeł kolejną migracją, albo trzymać zestaw pytań w prompcie. Dopóki decyzji nie ma, pierwszy
+> punkt wyżej opisuje zamiar, nie stan.
 
 ### FR-5. Eksport
 - Użytkownik może wyeksportować poprawione CV do formatu Markdown / PDF / DOCX.
@@ -79,7 +97,7 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 
 - `users` — konta użytkowników (e-mail, hash hasła)
 - `resumes` — wersje CV per użytkownik (surowy tekst, docelowa rola)
-- `documents` — źródła wiedzy: `job_post` / `article` / `qa`; deduplikacja po `content_hash`; `metadata JSONB` (rola, seniority) umożliwia filtrowane wyszukiwanie hybrydowe
+- `documents` — ogłoszenia o pracę (od 2026-09-02 baza wiedzy nie zawiera niczego innego, więc nie ma kolumny rozróżniającej rodzaj źródła); deduplikacja po `content_hash`; `metadata JSONB` (rola, seniority) umożliwia filtrowane wyszukiwanie hybrydowe; `requirements JSONB` — wymagania odczytane przez LLM przy zapisie
 - `chunks` — fragmenty dokumentów z embeddingami `vector(1536)`; indeks HNSW z metryką kosinusową (Redis pełni rolę cache'a przed API embeddingów; Postgres pozostaje źródłem prawdy)
 - `sessions` — sesje przeglądu CV lub mock interview per użytkownik
 - `messages` — kolejne wypowiedzi w sesji; przechowuje `retrieved_chunk_ids` do audytu tego, co model faktycznie widział, oraz koszt tokenów
@@ -92,7 +110,7 @@ documents 1—N chunks
 sessions N—1 resumes (opcjonalnie)
 ```
 
-Pełny DDL dostępny w repozytorium (`db/schema.sql`).
+Źródłem prawdy dla schematu jest Alembic (`migrations/versions/`); plik `db/schema.sql` nie istnieje i nie powstanie.
 
 ## 6. Architektura wysokopoziomowa
 
@@ -100,8 +118,8 @@ Pełny DDL dostępny w repozytorium (`db/schema.sql`).
 [Web UI] → [FastAPI]
               ├── Auth (JWT)
               ├── Serwis ingestion (LangChain) → chunking → Redis cache → API embeddingów → pgvector
-              ├── Serwis retrieval (LangChain) → wyszukiwanie hybrydowe (filtr metadata + wektory)
-              ├── Serwis generacji → API LLM (prompt = zapytanie + wyszukane chunki)
+              ├── Serwis retrieval → wyszukiwanie hybrydowe (filtr metadata + wektory) — gotowy, od 2026-09-02 nie wołany przez żadną trasę
+              ├── Serwis generacji → API LLM (prompt = ogłoszenie + CV + prompt z Langfuse)
               └── Mock interview (LangGraph) → stanowy graf rozmowy
                         ↓                ↘
                   [PostgreSQL + pgvector]  [Langfuse — trace'y, koszty, ewaluacja]

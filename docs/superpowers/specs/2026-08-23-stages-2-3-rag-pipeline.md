@@ -21,6 +21,7 @@ Jedenaście commitów, od `e6cde1d` do `315432f`.
 | `9fb0b6464575` | `resumes` — `file_hash`, `mime_type`, `original_filename` (nullable) + `UNIQUE (user_id, file_hash)`; pochodzenie wgranego pliku, deduplikacja per właściciel |
 | `7c1776aa283c` | `documents.requirements` JSONB nullable — wymagania odczytane przez LLM (W-1 (c)) |
 | `51b84c9a0089` | `resumes.skills` JSONB nullable — umiejętności odczytane z CV, druga strona porównania |
+| `7712a7f5bd98` | usunięcie `documents.source_type` i typu enum wraz z wierszami innymi niż ogłoszenia (1.6, 2026-09-02) |
 
 Razem z etapem 1: `users` (`28548320470c`), `resumes` (`128f54098c8a`). Brakuje `sessions` i `messages` — to etap 4.
 
@@ -33,8 +34,8 @@ Trzy ostatnie migracje są z 2026-08-30/31 i wszystkie kolumny w nich są **null
 | `app/services/chunking.py` | normalizacja, `content_hash` (sha256), podział na fragmenty | 750 tokenów ≈ 3000 znaków, overlap 100 tokenów |
 | `app/services/embeddings.py` | embeddingi za cache'em w Redisie (NFR-2a) | TTL 30 dni, batch 128, float32+base64 |
 | `app/services/ingestion.py` | dokument + chunki w jednej transakcji, deduplikacja | — |
-| `app/services/retrieval.py` | wyszukiwanie hybrydowe: filtr JSONB / `source_type` + `<=>` | `DEFAULT_K = 5`, `MAX_K = 50` |
-| `app/services/matching.py` | score deterministyczny + sugestie z LLM (FR-3) | `MAX_KEYWORDS = 40`, `ADVICE_CHUNKS = 5` |
+| `app/services/retrieval.py` | wyszukiwanie hybrydowe: filtr JSONB + `<=>` — **od 2026-09-02 nie wołane przez żadną trasę** (1.6) | `DEFAULT_K = 5`, `MAX_K = 50` |
+| `app/services/matching.py` | score deterministyczny + sugestie z LLM (FR-3) | `MAX_KEYWORDS = 40` (`ADVICE_CHUNKS` usunięte w 1.6) |
 | `app/services/requirements.py` | ekstrakcja wymagań oferty i umiejętności z CV przez LLM (W-1 (c), 2026-08-31) | `MAX_REQUIREMENTS = 30`, `MAX_TERM_WORDS = 3` |
 | `app/services/extraction.py` | plik → tekst: PDF, DOCX, TXT (2026-08-30) | `MAX_FILE_BYTES = 5 MiB`, `MIN_EXTRACTED_CHARS = 100` |
 | `app/services/rate_limit.py` | budżet żądań per konto w Redisie (NFR-2, 2026-08-31) | `match` 20/h, `ingest` 60/h |
@@ -62,7 +63,8 @@ a liczbą.
 
 Trzy prompty: `job-post-skills`, `resume-skills`, `match-suggestions` — ten ostatni to
 instrukcja z `build_prompt` razem z nagłówkami sekcji; w kodzie została tylko ta część,
-która jest decyzją kodu (numerowanie chunków, `"none"` w pustej sekcji). Store za
+która jest decyzją kodu (numerowanie chunków — sekcja `# Context` wypadła później, w 1.6 —
+oraz `"none"` w pustej sekcji). Store za
 protokołem `PromptStore` z jedną metodą `render(name, /, **variables)`. Nazwa promptu jest
 pozycyjna, bo dzieli sygnaturę ze zmiennymi — prompt ze zmienną `name` byłby inaczej nie do
 wyrenderowania (złapane testem, nie recenzją).
@@ -104,6 +106,47 @@ generacja (`@observe(as_type="generation")`) i wychodzi dokładnie tak, jak trze
 prawda, tylko mniej użyteczna. Domknięcie wymaga przeniesienia renderowania do
 `AnthropicSuggestionWriter.write`, co zmienia protokół `SuggestionWriter` (dziś przyjmuje
 gotowy tekst, na czym stoją testy dowodzące ugruntowania z FR-3). Osobna decyzja.
+
+### 1.6 Baza wiedzy to wyłącznie ogłoszenia (2026-09-02)
+
+Decyzja produktowa: program ma porównywać CV z ofertą i nic poza tym. `documents.source_type`
+(`job_post` / `article` / `qa`) rozróżniał więc rodzaje źródeł, na które nic już nie reagowało —
+kolumna, typ enum i dwa artykuły z dev bazy zostały usunięte migracją `7712a7f5bd98`. Spec
+poprawiony w trzech miejscach (FR-1, FR-3, sekcja 5), bo inaczej rozjazd wyglądałby po miesiącu
+jak bug.
+
+Co zniknęło razem z kolumną, bo utrzymywało rozróżnienie, którego nie ma: filtr `source_type`
+w listowaniu `/documents`, pole w obu trasach ingestion, walidacja 422 w `/match`
+(„a resume can only be matched against a job post"), `SearchQuery.source_types`, warunek
+„czytaj wymagania tylko dla ogłoszeń" w `ingestion` oraz selectbox i filtr w UI.
+
+**Trzy skutki, które nie są oczywiste z samego diffa:**
+
+- **`/match` przestało dotykać OpenAI.** Drugie pobranie w `match_resume` — wyszukiwanie chunków
+  artykułów — było jedynym miejscem, gdzie ta trasa embedowała cokolwiek. Poszło ono, a razem
+  z nim parametr `embeddings`, zależność `get_embeddings` w trasie i martwy już
+  `except OpenAIError`. Trasa jest tańsza i szybsza, bo robi mniej, a nie dlatego, że coś
+  zoptymalizowano.
+- **Porady przeniosły się do promptu `match-suggestions`** (cztery reguły pisania punktu CV).
+  To jest lepszy adres, niż wygląda: ta sama porada obowiązuje przy każdym dopasowaniu, więc
+  bycie „tym, co akurat zwróciło pięć najbliższych sąsiadów" nigdy nie było jej zaletą.
+  Od 1.5 jest wersjonowana i mierzalna.
+- **Sekcja `# Context` wypadła z promptu.** Bez artykułów niosłaby chunki tego samego ogłoszenia,
+  które prompt ma już w całości — czysta duplikacja tokenów. `retrieved_chunk_ids` dalej niesie
+  chunki ogłoszenia i dalej jest uczciwe: tekst pokazany modelowi to dokładnie ich sklejenie.
+
+**Cena, świadoma.** `app/services/retrieval.py` nie jest wołany przez żadną trasę. pgvector,
+indeks HNSW i cache embeddingów pracują teraz wyłącznie przy ingestion. Retrieval zostaje
+w kodzie (ma własne testy, a etap 4 będzie go potrzebował), ale do etapu 4 projekt nie jest
+pipeline'em RAG w części odpowiadającej na pytanie — jest nim tylko w części zapisującej.
+
+**Do rozstrzygnięcia przed etapem 4:** pytania na mock interview miały pochodzić z wpisów `qa`.
+Kategorii nie ma. Notatka o tym siedzi przy FR-4 w spec.
+
+**Weryfikacja:** `alembic upgrade` → `downgrade` → `upgrade` → `check` czysto; po migracji
+w dev bazie 7 ogłoszeń, 0 osieroconych chunków, `pg_type` nie zna już `source_type`. 267 testów
+(sześć usuniętych razem z rozróżnieniem, dwa przepisane, bo zmieniło się *dlaczego* przechodzą).
+Nowa wersja promptu w Langfuse, kontener wstaje bez ani jednego „Returning fallback prompt".
 
 ---
 
@@ -391,6 +434,9 @@ Konsekwencja niespójności scaffoldu opisanej w `CLAUDE.md` (`uv sync --no-inst
 | ~~Ekstrakcja wymagań przez LLM, wariant (c)~~ | W-1 | zrobione 2026-08-31 |
 | ~~Ekstrakcja umiejętności z CV (druga strona porównania)~~ | W-1 | zrobione 2026-08-31 |
 | Prompt ekstrakcji: `sql` obok `postgresql`, `mentoring` z CV | W-1 | otwarte — infrastruktura gotowa (1.5), brakuje datasetu |
+| ~~Baza wiedzy wyłącznie z ogłoszeń: usunięcie `source_type`~~ | decyzja produktowa | zrobione 2026-09-02 |
+| `retrieval.py` bez żadnego wołającego — zostawić pod etap 4 czy usunąć | 1.6 | otwarte |
+| Skąd pytania na mock interview po zniknięciu `qa` | 1.6, FR-4 | otwarte — przed etapem 4 |
 | ~~Prompty do Langfuse: wersje, labelki, koszt per wersja~~ | W-1 | zrobione 2026-09-02 |
 | Renderowanie promptu `/match` poza spanem writera — wersja ląduje na spanie `match` | sekcja 1.5 | otwarte |
 | ~~Naprawa szumu w słowach kluczowych, wariant (a)~~ | W-1 | zrobione 2026-08-24 |
