@@ -34,7 +34,6 @@ Trzy ostatnie migracje są z 2026-08-30/31 i wszystkie kolumny w nich są **null
 | `app/services/chunking.py` | normalizacja, `content_hash` (sha256), podział na fragmenty | 750 tokenów ≈ 3000 znaków, overlap 100 tokenów |
 | `app/services/embeddings.py` | embeddingi za cache'em w Redisie (NFR-2a) | TTL 30 dni, batch 128, float32+base64 |
 | `app/services/ingestion.py` | dokument + chunki w jednej transakcji, deduplikacja | — |
-| `app/services/retrieval.py` | wyszukiwanie hybrydowe: filtr JSONB + `<=>` — **od 2026-09-02 nie wołane przez żadną trasę** (1.6) | `DEFAULT_K = 5`, `MAX_K = 50` |
 | `app/services/matching.py` | score deterministyczny + sugestie z LLM (FR-3) | `MAX_KEYWORDS = 40` (`ADVICE_CHUNKS` usunięte w 1.6) |
 | `app/services/requirements.py` | ekstrakcja wymagań oferty i umiejętności z CV przez LLM (W-1 (c), 2026-08-31) | `MAX_REQUIREMENTS = 30`, `MAX_TERM_WORDS = 3` |
 | `app/services/extraction.py` | plik → tekst: PDF, DOCX, TXT (2026-08-30) | `MAX_FILE_BYTES = 5 MiB`, `MIN_EXTRACTED_CHARS = 100` |
@@ -135,10 +134,18 @@ w listowaniu `/documents`, pole w obu trasach ingestion, walidacja 422 w `/match
   które prompt ma już w całości — czysta duplikacja tokenów. `retrieved_chunk_ids` dalej niesie
   chunki ogłoszenia i dalej jest uczciwe: tekst pokazany modelowi to dokładnie ich sklejenie.
 
-**Cena, świadoma.** `app/services/retrieval.py` nie jest wołany przez żadną trasę. pgvector,
-indeks HNSW i cache embeddingów pracują teraz wyłącznie przy ingestion. Retrieval zostaje
-w kodzie (ma własne testy, a etap 4 będzie go potrzebował), ale do etapu 4 projekt nie jest
-pipeline'em RAG w części odpowiadającej na pytanie — jest nim tylko w części zapisującej.
+**Cena, świadoma.** Po tej zmianie `app/services/retrieval.py` nie miał już żadnego
+wołającego i **został usunięty razem ze swoimi testami** (tego samego dnia; decyzja: kod bez
+wołającego to kod, który cicho gnije, a `git log` pamięta go lepiej niż katalog `services/`).
+Do etapu 4 projekt nie jest więc pipeline'em RAG w części odpowiadającej na pytanie — jest nim
+wyłącznie w części zapisującej.
+
+Skutek do świadomego przyjęcia: **embeddingi nie mają dziś czytelnika**. Ingestion nadal płaci
+OpenAI za wektory, Redis nadal je cache'uje (NFR-2a), `chunks.embedding vector(1536)` i indeks
+HNSW nadal stoją — tylko nikt w nie nie zagląda. Zostawione celowo: skasowanie kolumny
+i indeksu to migracja nie do cofnięcia (wektory trzeba by przeliczyć i opłacić ponownie),
+a etap 4 potrzebuje wyszukiwania. Dopóki jednak etapu 4 nie ma, każda ingestion wydaje
+pieniądze na dane, których nic nie czyta.
 
 **Do rozstrzygnięcia przed etapem 4:** pytania na mock interview miały pochodzić z wpisów `qa`.
 Kategorii nie ma. Notatka o tym siedzi przy FR-4 w spec.
@@ -435,7 +442,8 @@ Konsekwencja niespójności scaffoldu opisanej w `CLAUDE.md` (`uv sync --no-inst
 | ~~Ekstrakcja umiejętności z CV (druga strona porównania)~~ | W-1 | zrobione 2026-08-31 |
 | Prompt ekstrakcji: `sql` obok `postgresql`, `mentoring` z CV | W-1 | otwarte — infrastruktura gotowa (1.5), brakuje datasetu |
 | ~~Baza wiedzy wyłącznie z ogłoszeń: usunięcie `source_type`~~ | decyzja produktowa | zrobione 2026-09-02 |
-| `retrieval.py` bez żadnego wołającego — zostawić pod etap 4 czy usunąć | 1.6 | otwarte |
+| ~~`retrieval.py` bez żadnego wołającego~~ | 1.6 | usunięty 2026-09-02 |
+| Embeddingi bez czytelnika: ingestion płaci za wektory, których nic nie czyta | 1.6 | otwarte — do etapu 4 |
 | Skąd pytania na mock interview po zniknięciu `qa` | 1.6, FR-4 | otwarte — przed etapem 4 |
 | ~~Prompty do Langfuse: wersje, labelki, koszt per wersja~~ | W-1 | zrobione 2026-09-02 |
 | Renderowanie promptu `/match` poza spanem writera — wersja ląduje na spanie `match` | sekcja 1.5 | otwarte |

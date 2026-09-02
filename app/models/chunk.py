@@ -1,4 +1,4 @@
-"""The chunks table: the fragments retrieval actually searches over."""
+"""The chunks table: the fragments a document is split into and embedded as."""
 
 import uuid
 from datetime import datetime
@@ -35,11 +35,15 @@ class Chunk(Base):
     (document_id, chunk_index) is what stops a repeated ingestion of the
     same document from writing every fragment twice.
 
-    embedding is NOT NULL on purpose: a chunk without a vector is invisible
-    to retrieval, so it would be silent data loss rather than a state worth
-    representing. Chunks and their embeddings are written in one
-    transaction; the Redis cache in front of the embeddings API (NFR-2a) is
-    what keeps that affordable on re-ingestion.
+    embedding is NOT NULL on purpose: a chunk without a vector could never
+    be found by a vector search, so it would be silent data loss rather than
+    a state worth representing. Chunks and their embeddings are written in
+    one transaction; the Redis cache in front of the embeddings API (NFR-2a)
+    is what keeps that affordable on re-ingestion.
+
+    Nothing reads these vectors since the retrieval service was removed
+    (2026-09-02): they are written, indexed and kept, and the first thing to
+    search them will be whatever answers the questions of FR-4.
     """
 
     __tablename__ = "chunks"

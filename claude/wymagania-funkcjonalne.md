@@ -8,7 +8,7 @@
 
 ## 1. Opis projektu
 
-JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Generation). System pobiera ogłoszenia o pracę, a następnie pomaga użytkownikowi dopasować CV do docelowej roli i przygotować się do rozmowy rekrutacyjnej. Odpowiedzi są ugruntowane w zapisanych dokumentach i w CV kandydata, a nie generowane swobodnie przez LLM — co ogranicza halucynacje i pozwala zweryfikować sugestie. Od 2026-09-02 baza wiedzy zawiera wyłącznie ogłoszenia (FR-1), więc dopasowanie CV nie korzysta już z wyszukiwania wektorowego; retrieval zostaje w kodzie pod etap 4.
+JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Generation). System pobiera ogłoszenia o pracę, a następnie pomaga użytkownikowi dopasować CV do docelowej roli i przygotować się do rozmowy rekrutacyjnej. Odpowiedzi są ugruntowane w zapisanych dokumentach i w CV kandydata, a nie generowane swobodnie przez LLM — co ogranicza halucynacje i pozwala zweryfikować sugestie. Od 2026-09-02 baza wiedzy zawiera wyłącznie ogłoszenia (FR-1), więc dopasowanie CV nie korzysta już z wyszukiwania wektorowego, a serwis retrievalu został usunięty; wyszukiwanie wróci wraz z etapem 4, jeśli pytania na mock interview mają pochodzić z bazy.
 
 **Cele:**
 - Nauka i praktyczne zastosowanie pełnego pipeline'u RAG (ingestion → chunking → embedding → retrieval → generacja)
@@ -87,7 +87,7 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 - **NFR-1 Bezpieczeństwo:** uwierzytelnianie JWT; hasła przechowywane jako hashe; użytkownik ma dostęp wyłącznie do własnych danych.
 - **NFR-2 Kontrola kosztów i observability:** każde wywołanie LLM i retrieval trace'owane w Langfuse (koszty tokenów, latencja, użyte chunki); rate limiting na endpointach LLM.
 - **NFR-2a Cache embeddingów:** przed wywołaniem API embeddingów system sprawdza Redis (klucz = hash treści chunka); trafienie w cache pomija wywołanie API — oszczędność kosztów przy re-indeksacji i duplikatach.
-- **NFR-3 Wydajność:** wyszukiwanie wektorowe poniżej 500 ms (indeks HNSW).
+- **NFR-3 Wydajność:** wyszukiwanie wektorowe poniżej 500 ms (indeks HNSW). *Od 2026-09-02 nic nie wykonuje wyszukiwania wektorowego — embeddingi i indeks HNSW są zapisywane i utrzymywane, ale czytelnik pojawi się dopiero z etapem 4. Wymaganie obowiązuje od tego momentu.*
 - **NFR-4 Wdrożenie:** cały stack uruchamiany przez `docker-compose up`; CI uruchamia lint i testy przy każdym pushu.
 - **NFR-5 Aspekty prawne:** brak scrapingu Indeed/LinkedIn (naruszenie regulaminów); dane pochodzą z ręcznego wprowadzania lub publicznych datasetów (np. zbiory ogłoszeń z Kaggle).
 
@@ -118,7 +118,6 @@ sessions N—1 resumes (opcjonalnie)
 [Web UI] → [FastAPI]
               ├── Auth (JWT)
               ├── Serwis ingestion (LangChain) → chunking → Redis cache → API embeddingów → pgvector
-              ├── Serwis retrieval → wyszukiwanie hybrydowe (filtr metadata + wektory) — gotowy, od 2026-09-02 nie wołany przez żadną trasę
               ├── Serwis generacji → API LLM (prompt = ogłoszenie + CV + prompt z Langfuse)
               └── Mock interview (LangGraph) → stanowy graf rozmowy
                         ↓                ↘
