@@ -52,7 +52,9 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
   - brakujące słowa kluczowe i umiejętności,
   - proponowane bullet pointy dopasowane do ogłoszenia.
 - Sugestie są ugruntowane w treści wybranego ogłoszenia i w CV kandydata, a nie w swobodnej generacji LLM: model nie może wymyślić pracodawcy, daty, technologii ani osiągnięcia, którego nie ma w żadnym z nich.
-- Score i brakujące słowa kluczowe liczone są w Pythonie z dwóch list, które da się obejrzeć — liczba pochodząca od modelu nie byłaby powtarzalna ani testowalna.
+- Dopasowanie umiejętności rozstrzyga model, **wymaganie po wymaganiu**, cytując słowa CV, które je udowadniają (np. PostgreSQL odpowiada na SQL, Excel na arkusze kalkulacyjne, wózek widłowy na każdej zmianie na uprawnienia). Werdykt może dopasowanie wyłącznie **dodać** — trafienia reguły deterministycznej są nienaruszalne.
+- Score i brakujące słowa kluczowe liczone są w Pythonie z listy werdyktów — liczba pochodząca od modelu nie byłaby powtarzalna, wytłumaczalna ani testowalna.
+- Każde dopasowanie jest zapisywane i użytkownik może wrócić do swojej historii; widzi wyłącznie własne (NFR-1).
 
 > **Zmiana 2026-09-02.** Wcześniej sugestie miały być oparte na top-k chunkach z ogłoszenia **i artykułów
 > z poradami**. Po usunięciu artykułów (FR-1) wskazówki „jak pisać punkt CV" są częścią promptu
@@ -101,10 +103,12 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 - `chunks` — fragmenty dokumentów z embeddingami `vector(1536)`; indeks HNSW z metryką kosinusową (Redis pełni rolę cache'a przed API embeddingów; Postgres pozostaje źródłem prawdy)
 - `sessions` — sesje przeglądu CV lub mock interview per użytkownik
 - `messages` — kolejne wypowiedzi w sesji; przechowuje `retrieved_chunk_ids` do audytu tego, co model faktycznie widział, oraz koszt tokenów
+- `matches` — historia dopasowań per użytkownik (migracja `25dc29c14b4b`): score, listy trafień i luk, sugestie, notatki, cytaty z CV oraz `retrieved_chunk_ids`. Migawka, nie widok: kopiuje też tytuł ogłoszenia, a `resume_id` i `document_id` przechodzą w NULL, gdy to, na co wskazują, zostanie usunięte
 
 **Relacje:**
 ```
 users 1—N resumes
+users 1—N matches
 users 1—N sessions 1—N messages
 documents 1—N chunks
 sessions N—1 resumes (opcjonalnie)

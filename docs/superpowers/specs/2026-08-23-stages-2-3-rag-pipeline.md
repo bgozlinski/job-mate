@@ -260,6 +260,67 @@ recall — czy to poprawa, rozstrzyga ta druga kolumna, a przypadek `nothing-in-
 to pierwszy. Etykiety są osądem, nie danymi: warto je przejrzeć, bo spór o przypadek jest
 w istocie sporem o specyfikację.
 
+### 1.8 Orzekanie per wymaganie i historia dopasowań (2026-09-02)
+
+**Orzekanie (`app/services/judging.py`, prompt `requirement-verdicts`).** Model dostaje listę
+wymagań oferty, tekst CV i odczytane z niego umiejętności, a odpowiada werdyktem na każde
+wymaganie osobno — spełnione albo nie, plus **cytat ze słów CV**, który to udowadnia. Numeru
+nie wystawia: score liczy się dalej w Pythonie z listy werdyktów.
+
+Trzy decyzje, na których to stoi:
+
+- **Suma, nie zamiana.** `settle()` pozwala modelowi wyłącznie **dodać** trafienie. Reguła
+  deterministyczna ma na datasecie precision 1.000, więc pozwolenie modelowi na odbieranie jej
+  trafień może tylko szkodzić — a kandydat nie może usłyszeć, że brakuje mu umiejętności
+  wypisanej w CV wprost, bo model miał gorszy dzień. Test pilnuje tego wprost.
+- **Werdykt na wymaganie spoza oferty jest odrzucany.** Mianownik liczy się z ogłoszenia i nie
+  może urosnąć w odpowiedzi.
+- **Awaria orzekania nie kosztuje żądania.** Brak klucza, brak wymagań albo padnięty dostawca
+  dają pustą listę werdyktów i wynik deterministyczny — gorszy i kompletny.
+
+**Zmierzone na `evals/skill_matching.json`, 26 przypadków:**
+
+| Metryka | reguła | + orzekanie |
+|---|---|---|
+| recall | 0.596 | **0.915** |
+| precision | 1.000 | 0.977 |
+| F1 | 0.747 | 0.945 |
+| średnia różnica score'u | 0.279 | **0.038** |
+| recall poza IT | 0.524 | 0.810 |
+| IT | 0.654 | **1.000 / precision 1.000** |
+
+Jedyne błędne przyznanie to `curriculum design` w przypadku warsztatowym — czyli **ta etykieta,
+którą sam oznaczyłem jako sporną**. Jeśli model ma rację, precision wynosi 1.000. Cztery
+pozostałe chybienia to `food safety` z HACCP, `pos systems` z kasy, `public speaking`
+z warsztatów i jedno z pary IT.
+
+**Cena:** `/match` robi teraz dwa wywołania LLM zamiast jednego (werdykty + sugestie).
+
+**Historia (`matches`, migracja `25dc29c14b4b`, `GET /matches`, `GET /matches/{id}`).**
+Wynik jest zapisywany przed zwróceniem i **zwracany jest wiersz z bazy** — odpowiedź i historia
+są tym samym obiektem, więc nie mogą się rozjechać.
+
+Tabela jest **migawką, nie widokiem**. Listy są kopiowane, a nie przeliczane przy odczycie,
+bo wszystko, z czego powstały, się rusza: CV bywa edytowane, ogłoszenie usunięte, prompt dostaje
+nową wersję, model za orzekaniem się zmienia. Historia, która jutro po cichu odpowiada inaczej,
+byłaby gorsza niż jej brak — sensem jest zobaczyć, co kandydatowi **faktycznie** powiedziano.
+Dlatego kopiowany jest też tytuł ogłoszenia, a `resume_id` i `document_id` przechodzą w NULL
+przy usunięciu celu: odpowiedź zostaje czytelna, tylko odnośnik przestaje dokądkolwiek prowadzić.
+`retrieved_chunk_ids` idą jako tekst, bo JSONB nie ma typu uuid, a tabela łącznikowa
+wskazywałaby na chunki kasowane razem z dokumentem — czyli dokładnie na to, co ta kolumna ma
+przetrwać.
+
+W UI doszła zakładka **History**: lista z wynikiem i liczbami trafień, a szczegóły dociągane
+dopiero po rozwinięciu wiersza (drugie żądanie), bo strona historii nie ma powodu wozić każdej
+sugestii kiedykolwiek napisanej.
+
+**Weryfikacja end-to-end na kontenerze**, oferta i CV z hotelowej kuchni: score 0.667, trafienia
+`cold starters section`, `mise en place`, `haccp` — każde z cytatem z CV — luki `allergen
+knowledge` i `food safety training` (model **nie** uznał prowadzenia dokumentacji HACCP za
+odbyte szkolenie, zgodnie z regułą „w razie wątpliwości: nie"). Historia zwróciła wiersz,
+szczegóły odczytały się w całości. Widać przy okazji stary problem W-1: ekstrakcja dała
+`haccp records` obok `haccp`, czyli jedno pojęcie policzone dwa razy.
+
 ---
 
 ## 2. Decyzje projektowe
@@ -546,7 +607,9 @@ Konsekwencja niespójności scaffoldu opisanej w `CLAUDE.md` (`uv sync --no-inst
 | ~~Ekstrakcja wymagań przez LLM, wariant (c)~~ | W-1 | zrobione 2026-08-31 |
 | ~~Ekstrakcja umiejętności z CV (druga strona porównania)~~ | W-1 | zrobione 2026-08-31 |
 | Prompt ekstrakcji: `sql` obok `postgresql`, `mentoring` z CV | W-1 | otwarte — infrastruktura (1.5) i dataset (1.7) gotowe |
-| Dopasowanie semantyczne: `postgresql` nie odpowiada na `sql`, `k8s` na `kubernetes` bez ekstrakcji | W-1, 1.7 | otwarte — baseline zmierzony |
+| ~~Dopasowanie semantyczne: `postgresql` nie odpowiada na `sql`~~ | W-1, 1.8 | zrobione 2026-09-02, recall 0.596 → 0.915 |
+| ~~Historia dopasowań per konto~~ | 1.8 | zrobione 2026-09-02 |
+| Ekstrakcja dubluje pojęcia (`haccp records` obok `haccp`) — mianownik liczony dwa razy | W-1, 1.8 | otwarte |
 | `BOILERPLATE_LIST` wycina `care`, `deliver`, `maintain`, `support` — poza IT to są zawody | 1.7 | otwarte |
 | `INVARIANT_LIST` zna wyłącznie słownictwo IT (`singular("gas")` → `"ga"`) | 1.7 | otwarte |
 | ~~Prompty ekstrakcji i sugestii znały wyłącznie słownictwo IT~~ | 1.7 | zrobione 2026-09-02 |
