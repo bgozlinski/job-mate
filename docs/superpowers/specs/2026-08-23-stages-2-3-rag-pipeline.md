@@ -155,6 +155,111 @@ w dev bazie 7 ogłoszeń, 0 osieroconych chunków, `pg_type` nie zna już `sourc
 (sześć usuniętych razem z rozróżnieniem, dwa przepisane, bo zmieniło się *dlaczego* przechodzą).
 Nowa wersja promptu w Langfuse, kontener wstaje bez ani jednego „Returning fallback prompt".
 
+### 1.7 Dataset do dopasowania umiejętności (2026-09-02)
+
+Pomysł: skoro ktoś zna PostgreSQL, to zna SQL — niech dopasowaniem umiejętności zajmie się
+model. Połowa dobra, połowa kosztowna, więc rozdzielona na dwie decyzje.
+
+**Dopasowanie semantyczne — tak.** To jest otwarty defekt z W-1, tylko widziany od strony
+porównania zamiast ekstrakcji. **Score wystawiany przez model — nie**: liczba wymyślona przez
+model nie jest powtarzalna (dziś test asertuje `score == 1/3`), nie sumuje się z
+`matched_keywords` i `missing_keywords` pokazywanymi użytkownikowi, cicho przesuwa się przy
+zmianie `llm_model` i skupia się w okolicach 70–85%. Wariant do zrobienia: **model orzeka per
+wymaganie z uzasadnieniem, Python liczy ułamek** — semantyka bez utraty audytowalności.
+
+Zanim jednak reguła się zmieni, jest czym mierzyć: `evals/skill_matching.json`, dwadzieścia
+sześć ręcznie oznaczonych przypadków, i `scripts/eval_skill_matching.py`. Dataset **z premedytacją
+nie mierzy ekstrakcji** — obie listy są w nim wpisane na sztywno, więc pomiar dotyczy wyłącznie
+`cover()` i `evidence()`, jest deterministyczny i nie wymaga żadnego klucza.
+
+Pierwsza wersja miała piętnaście przypadków, wszystkie z IT — czyli mierzyła regułę wyłącznie
+tam, gdzie autor zna słownictwo. Aplikacja ma obsłużyć mechanika, kucharza i pracownika
+biurowego tak samo jak backendowca, więc doszło jedenaście przypadków spoza IT (magazyn,
+kuchnia, warsztat, sklep, dom opieki, kurier, szkolenia, księgowość, hotel) i pole `domain`,
+po którym runner liczy osobne agregaty.
+
+**Baseline reguły deterministycznej:**
+
+| Metryka | wszystkie 26 | IT | reszta |
+|---|---|---|---|
+| precision | 1.000 | 1.000 | 1.000 |
+| recall | 0.596 | 0.654 | **0.524** |
+| F1 | 0.747 | 0.791 | 0.688 |
+| średnia różnica score'u | 0.279 | 0.250 | **0.318** |
+
+**Reguła jest mierzalnie gorsza poza IT** — połowa tego, co udowadnia rzemieślnik, wraca jako
+luka. Nic w niej nie jest z założenia branżowe; po prostu do tej pory miała na czym się mylić
+wyłącznie słownictwo IT. Dziewiętnaście chybień, każde to synonim, pisownia albo implikacja:
+`postgresql`→`sql`, Excel→`spreadsheets`, SAP→`erp systems`, kasa→`pos systems`,
+HACCP→`food safety`, godziny na wózku→`forklift licence`, warsztaty→`public speaking`,
+Go→`golang`, `Dockerfiles`→`docker`, `licence`→`license`, oraz `diagnostics`/`brakes` wobec
+`vehicle diagnostics`/`brake systems`, gdzie CV ma jedno słowo z dwuwyrazowego wymagania.
+
+**Prompty poprawione (2026-09-02, wszystkie trzy dostały nową wersję w Langfusie).** Oba
+prompty ekstrakcji mówią teraz wprost, że ogłoszenie może być z dowolnej branży, pytają o
+„skills, tools, licences and qualifications" zamiast o technologie, traktują uprawnienia jako
+pełnoprawne wymaganie (`forklift licence`, `category b licence`, `haccp`, `first aid`) i —
+najważniejsze — **normalizują pisownię tą samą regułą po obu stronach** (brytyjska: `licence`,
+`tyre`, `organise`). To ostatnie nie jest kosmetyką: obie listy powstają w dwóch osobnych
+wywołaniach i spotykają się w `cover()`, więc normalizacja wykonana tylko po jednej stronie
+jest gorsza niż żadna. Zmiękczona została też reguła o „generic traits": cecha, której CV nie
+może udowodnić, dalej wypada, ale nazwany obowiązek zostaje — `customer service` i
+`cash handling` to u sprzedawcy treść pracy, nie wypełniacz.
+
+Sprawdzone na żywym modelu, ogłoszenie i CV z warsztatu samochodowego. Zysk widać po stronie
+CV: `category b driving` (ucięte na trzech słowach) → `category b licence`. Ale pierwsza wersja
+nowego promptu **nadal gubiła prawo jazdy po stronie ogłoszenia** — w jednym przebiegu je
+wypisała, w drugim nie. Dopiero mocniejsze sformułowanie („wymaganie jak każde inne i musi
+znaleźć się na liście", plus zastrzeżenie, że certyfikat, za który płaci pracodawca, wymaganiem
+nie jest) trafiło w obu przebiegach.
+
+**Dataset ekstrakcji (2026-09-02).** Ta luka jest zamknięta: `evals/extraction.json` i
+`scripts/eval_extraction.py`, osiem par (ogłoszenie, CV) z jednej branży każda — warsztat,
+kuchnia, magazyn, dom opieki, biuro, kurier, sklep i jeden zespół software'owy. Ten runner
+**woła prawdziwy model**, więc kosztuje, wymaga klucza i odpowiada za każdym razem nieco inaczej
+— stąd `--runs`: termin, który przeżywa jeden przebieg na trzy, nie jest wyekstrahowany, tylko
+zgadnięty.
+
+Trzecia mierzona rzecz jest tą, której nic innego w repo nie widzi: **agreement** — czy obie
+strony wypisały termin w formie, którą `cover()` połączy. Ogłoszenie mówiące `postgresql` i CV
+mówiące `postgres` to dwie poprawne ekstrakcje i jedno zepsute dopasowanie.
+
+| Metryka | wszystkie 8 | IT | reszta |
+|---|---|---|---|
+| recall | 0.857 | 1.000 | 0.830 |
+| agreement | 0.783 | 1.000 | **0.737** |
+| wymyślone | 0 | 0 | 0 |
+
+**Zero wymyślonych wpisów w każdym przebiegu** — żadnego benefitu, nazwy pracodawcy ani
+wywnioskowanej umiejętności. Obie pułapki, na których najbardziej zależy, trzymają: CV opiekunki
+nie przypisuje sobie podawania leków, a CV z Dockerem nie przypisuje sobie Kubernetesa.
+
+Luka siedzi w zgodności i jest w całości pozaITowa. Kryją się w niej dwa różne rodzaje chybienia
+i rozdzielenie ich jest właśnie tym, do czego dataset służy: **prawdziwa dziura** (`stock
+counting` nie wychodzi z ogłoszenia magazynowego, `record keeping` z żadnej strony pary
+opiekuńczej, choć oba teksty opisują prowadzenie dokumentacji) kontra **etykieta do
+zakwestionowania** (para sklepowa daje po obu stronach `till operation`, `cash handling`,
+`cash reconciliation` — jeden słownik, idealnie dopasowywalny — i wypada jako chybienie tylko
+dlatego, że etykieta żąda `customer service`; prawdopodobnie to model ma rację).
+
+**Uczciwa granica:** dwa przebiegi to wciąż mały pomiar, a etykiety są moje i niesprawdzone. Widać w tych przebiegach również lukę, której żaden prompt nie
+zasypie: ogłoszenie mówi `tyre fitting`, CV `tyre changing`, i tylko orzekanie per wymaganie
+połączy te dwa.
+
+**Czego dataset nie mierzy, a co też jest branżowe.** `cover()` i `evidence()` nie dotykają
+`BOILERPLATE_LIST`, a ta lista wycina słowa, które poza IT **są zawodem**: `care`
+(opiekun), `deliver` (kurier), `maintain` (mechanik), `support`, `training`, `manage`, `hand`.
+Dotyczy to ścieżki awaryjnej — ogłoszeń, których nie przeczytał LLM. Podobnie `INVARIANT_LIST`
+chroni przed błędnym odmienianiem wyłącznie terminy IT; `singular("gas")` daje `"ga"`, co
+`MIN_KEYWORD_LENGTH` następnie wycina, więc ogłoszenie instalatora gazowego traci słowo „gas".
+Prompty też uczą modelu słownika IT (`k8s`→`kubernetes`, „nazwij technologię", metryki
+„latency, throughput, dataset"). To osobne pozycje do zrobienia, nie do zgadywania.
+
+**Liczbą do obrony jest precision 1.000.** Każdy matcher, który przyzna więcej, podniesie
+recall — czy to poprawa, rozstrzyga ta druga kolumna, a przypadek `nothing-in-common` pokaże
+to pierwszy. Etykiety są osądem, nie danymi: warto je przejrzeć, bo spór o przypadek jest
+w istocie sporem o specyfikację.
+
 ---
 
 ## 2. Decyzje projektowe
@@ -440,7 +545,14 @@ Konsekwencja niespójności scaffoldu opisanej w `CLAUDE.md` (`uv sync --no-inst
 | Rozważyć usunięcie `langchain-text-splitters` (ciągnie `langsmith`, `requests`, `orjson`) | przegląd zależności przy chunkingu | otwarte |
 | ~~Ekstrakcja wymagań przez LLM, wariant (c)~~ | W-1 | zrobione 2026-08-31 |
 | ~~Ekstrakcja umiejętności z CV (druga strona porównania)~~ | W-1 | zrobione 2026-08-31 |
-| Prompt ekstrakcji: `sql` obok `postgresql`, `mentoring` z CV | W-1 | otwarte — infrastruktura gotowa (1.5), brakuje datasetu |
+| Prompt ekstrakcji: `sql` obok `postgresql`, `mentoring` z CV | W-1 | otwarte — infrastruktura (1.5) i dataset (1.7) gotowe |
+| Dopasowanie semantyczne: `postgresql` nie odpowiada na `sql`, `k8s` na `kubernetes` bez ekstrakcji | W-1, 1.7 | otwarte — baseline zmierzony |
+| `BOILERPLATE_LIST` wycina `care`, `deliver`, `maintain`, `support` — poza IT to są zawody | 1.7 | otwarte |
+| `INVARIANT_LIST` zna wyłącznie słownictwo IT (`singular("gas")` → `"ga"`) | 1.7 | otwarte |
+| ~~Prompty ekstrakcji i sugestii znały wyłącznie słownictwo IT~~ | 1.7 | zrobione 2026-09-02 |
+| ~~Ekstrakcja nie ma datasetu — sprawdzana na oko~~ | 1.7 | zrobione 2026-09-02 |
+| Agreement 0.737 poza IT: `record keeping`, `stock counting`, `invoice processing` nie spotykają się | 1.7 | otwarte |
+| Przegląd etykiet w obu datasetach (np. `customer service` w parze sklepowej) | 1.7 | otwarte — dla Bartka |
 | ~~Baza wiedzy wyłącznie z ogłoszeń: usunięcie `source_type`~~ | decyzja produktowa | zrobione 2026-09-02 |
 | ~~`retrieval.py` bez żadnego wołającego~~ | 1.6 | usunięty 2026-09-02 |
 | Embeddingi bez czytelnika: ingestion płaci za wektory, których nic nie czyta | 1.6 | otwarte — do etapu 4 |
