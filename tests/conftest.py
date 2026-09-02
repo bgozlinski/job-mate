@@ -16,6 +16,7 @@ from app.api.deps import (
     get_embedding_model,
     get_prompt_store,
     get_requirement_extractor,
+    get_requirement_judge,
     get_resume_skill_extractor,
     get_suggestion_writer,
 )
@@ -212,9 +213,9 @@ async def client(
     a network -- and the store is built here rather than handed over as the
     class, whose __init__ FastAPI would read as request parameters.
 
-    The extractors are None by default: ingestion without one is the
-    configuration CI runs in, and a test that wants requirements read supplies
-    its own.
+    The extractors and the judge are None by default: that is the
+    configuration CI runs in, and a test that wants requirements read or
+    verdicts passed supplies its own.
     """
 
     async def override_get_db() -> AsyncIterator[AsyncSession]:
@@ -229,6 +230,7 @@ async def client(
     app.dependency_overrides[get_prompt_store] = lambda: prompt_store
     app.dependency_overrides[get_requirement_extractor] = lambda: None
     app.dependency_overrides[get_resume_skill_extractor] = lambda: None
+    app.dependency_overrides[get_requirement_judge] = lambda: None
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as test_client:

@@ -35,6 +35,9 @@ RESUME_SKILLS = "resume-skills"
 MATCH_SUGGESTIONS = "match-suggestions"
 """The prompt that turns a gap into resume bullet points (FR-3)."""
 
+REQUIREMENT_VERDICTS = "requirement-verdicts"
+"""The prompt that decides, requirement by requirement, what a resume proves."""
+
 PRODUCTION = "production"
 """The label a running application reads. A new version is written first and
 labelled afterwards, so editing a prompt is not the same act as shipping it."""
@@ -177,10 +180,56 @@ The instruction about notes has to stay whatever else changes. A schema field
 the prompt never mentions comes back empty, and the meta-comment it exists to
 catch goes back to riding along in bullet_points (W-2)."""
 
+REQUIREMENT_VERDICTS_TEMPLATE = """\
+Decide, for each requirement below, whether the resume gives evidence of it.
+
+The candidate can be from any trade -- a kitchen, a warehouse, a workshop, a \
+care home, an office, a software team.
+
+Rules:
+- Answer once for every requirement, using the requirement exactly as written. \
+Do not add requirements, do not merge two into one, do not leave one out.
+- Say met only when the resume shows it, either in those words or by \
+something that plainly contains it: PostgreSQL is SQL, Excel is a \
+spreadsheet, HACCP is food safety, running a forklift on shift is the \
+forklift licence, GitHub Actions is a CI/CD pipeline.
+- Do not read a requirement into a neighbouring skill. Docker is not \
+Kubernetes, SQL is not PostgreSQL, helping residents with meals is not \
+administering medication, and a category B licence is not a category C+E \
+licence. A credential is met only when the resume claims that credential.
+- When in doubt, answer not met. A gap the candidate can read is useful; a \
+skill wrongly credited goes into their resume and into an interview.
+- For a requirement that is met, quote the words of the resume that prove it, \
+as they are written there. For one that is not, leave the quote empty.
+
+Requirements:
+{{requirements}}
+
+Resume:
+{{resume}}
+
+Skills already read out of this resume:
+{{skills}}
+"""
+"""What the deterministic rule cannot do (W-1). It compares whole terms, so
+postgresql never answers sql and no rule about plurals will make it; a model
+reads the sentence instead.
+
+What it must still not do is score. It answers per requirement, with the words
+of the resume as its evidence, and the number is counted from those answers in
+Python -- reproducible, explainable and, because every verdict carries its
+quote, arguable by the candidate.
+
+The instruction to prefer "not met" is the important one. The failure that
+costs something is not a missed match, which the candidate sees and can
+correct: it is a credential the model awards and the candidate then carries
+into an interview."""
+
 TEMPLATES: Mapping[str, str] = {
     JOB_POST_SKILLS: JOB_POST_SKILLS_TEMPLATE,
     RESUME_SKILLS: RESUME_SKILLS_TEMPLATE,
     MATCH_SUGGESTIONS: MATCH_SUGGESTIONS_TEMPLATE,
+    REQUIREMENT_VERDICTS: REQUIREMENT_VERDICTS_TEMPLATE,
 }
 """Every prompt the application ships with, by name. The names are the ones a
 prompt server would store them under, so moving a text out of here changes

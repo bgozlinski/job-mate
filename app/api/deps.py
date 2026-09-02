@@ -19,6 +19,7 @@ from app.core.prompts import PromptStore
 from app.models.resume import Resume
 from app.models.user import User
 from app.services.embeddings import EmbeddingModel
+from app.services.judging import RequirementJudge
 from app.services.matching import SuggestionWriter
 from app.services.rate_limit import RateLimit, consume
 from app.services.requirements import SkillExtractor
@@ -207,6 +208,19 @@ async def get_resume_skill_extractor(request: Request) -> SkillExtractor | None:
     extractor: SkillExtractor | None = request.app.state.resume_skill_extractor
 
     return extractor
+
+
+async def get_requirement_judge(request: Request) -> RequirementJudge | None:
+    """Hand out the judge, or nothing when no key is configured.
+
+    None rather than a 503, like the extractors and unlike the writer: a match
+    without a judge is the deterministic score, which is worse and complete.
+    Refusing the request instead would make the semantic half a hard
+    dependency of a feature that worked without it.
+    """
+    judge: RequirementJudge | None = request.app.state.requirement_judge
+
+    return judge
 
 
 async def get_prompt_store(request: Request) -> PromptStore:

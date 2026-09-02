@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from app.api.auth import router as auth_router
 from app.api.documents import router as documents_router
 from app.api.health import router as health_router
+from app.api.matches import router as matches_router
 from app.api.matching import router as matching_router
 from app.api.resumes import router as resumes_router
 from app.core.config import get_settings
@@ -20,6 +21,7 @@ from app.core.prompts import (
 )
 from app.core.redis import create_redis
 from app.services.embeddings import OpenAIEmbeddingModel
+from app.services.judging import AnthropicRequirementJudge
 from app.services.matching import AnthropicSuggestionWriter
 from app.services.requirements import AnthropicSkillExtractor
 
@@ -74,6 +76,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if settings.anthropic_api_key
         else None
     )
+    app.state.requirement_judge = (
+        AnthropicRequirementJudge(settings, app.state.prompts)
+        if settings.anthropic_api_key
+        else None
+    )
     try:
         yield
     finally:
@@ -90,6 +97,7 @@ app.include_router(auth_router)
 app.include_router(resumes_router)
 app.include_router(documents_router)
 app.include_router(matching_router)
+app.include_router(matches_router)
 
 
 @app.get("/")

@@ -10,13 +10,23 @@ perfectly on it, and awarding everything scores perfectly on recall. What a
 matcher is for is both at once.
 
     uv run python -m scripts.eval_skill_matching
+    uv run python -m scripts.eval_skill_matching --judge
+
+With --judge the same cases go through the LLM that settles a requirement the
+word comparison could not see. That run calls a model: it costs money, needs a
+key and answers a little differently every time. Without the flag nothing
+leaves the process.
 """
 
+import asyncio
 import json
 import pathlib
 import sys
 from typing import Any
 
+from app.core.config import get_settings
+from app.core.prompts import StaticPromptStore
+from app.services.judging import AnthropicRequirementJudge, RequirementJudge, settle
 from app.services.matching import cover, evidence
 
 DATASET = pathlib.Path("evals/skill_matching.json")
@@ -27,7 +37,25 @@ def rate(hits: int, total: int) -> float:
     return 1.0 if total == 0 else hits / total
 
 
-def report(case: dict[str, Any]) -> tuple[int, int, int, float]:
+async def predict(case: dict[str, Any], judge: RequirementJudge | None) -> set[str]:
+    """Return the requirements this case is judged to meet.
+
+    The same composition the endpoint performs: the deterministic rule first,
+    and the judge only able to add to it.
+    """
+    requirements: list[str] = case["requirements"]
+    matched, _ = cover(requirements, evidence(case["resume"], case["skills"]))
+
+    if judge is None:
+        return set(matched)
+
+    verdicts = await judge.judge(requirements, case["resume"], case["skills"])
+    matched, _, _ = settle(requirements, matched, verdicts)
+
+    return set(matched)
+
+
+def report(case: dict[str, Any], predicted: set[str]) -> tuple[int, int, int, float]:
     """Print one case and return its true positives, false ones and the gap.
 
     The gap is between the score the rule computes and the score the labels
@@ -36,8 +64,6 @@ def report(case: dict[str, Any]) -> tuple[int, int, int, float]:
     """
     requirements: list[str] = case["requirements"]
     expected = set(case["expected_met"])
-    matched, _ = cover(requirements, evidence(case["resume"], case["skills"]))
-    predicted = set(matched)
 
     hit = predicted & expected
     wrong = predicted - expected
@@ -82,7 +108,7 @@ def summarise(name: str, tally: list[tuple[int, int, int, float]]) -> None:
     )
 
 
-def main() -> int:
+async def main() -> int:
     """Run every case and print the aggregate the next change is compared to."""
     if not DATASET.exists():
         print(f"No dataset at {DATASET}")
@@ -92,10 +118,21 @@ def main() -> int:
     cases: list[dict[str, Any]] = json.loads(DATASET.read_text(encoding="utf-8"))[
         "cases"
     ]
+    judge: RequirementJudge | None = None
+
+    if "--judge" in sys.argv:
+        if get_settings().anthropic_api_key is None:
+            print("ANTHROPIC_API_KEY is not configured: --judge calls a model.")
+
+            return 1
+
+        judge = AnthropicRequirementJudge(get_settings(), StaticPromptStore())
+
     tallies: dict[str, list[tuple[int, int, int, float]]] = {}
 
     for case in cases:
-        tallies.setdefault(case["domain"], []).append(report(case))
+        scored = report(case, await predict(case, judge))
+        tallies.setdefault(case["domain"], []).append(scored)
 
     print()
     summarise("all", [row for group in tallies.values() for row in group])
@@ -108,4 +145,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(asyncio.run(main()))

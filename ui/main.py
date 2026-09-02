@@ -33,6 +33,7 @@ PAGE_SIZE = 20
 MAX_PAGE_SIZE = 100
 
 SHOWN_KEY = "documents_shown"
+HISTORY_SHOWN_KEY = "history_shown"
 MATCH_KEY = "match_result"
 
 MATCH_BUDGET = 20
@@ -585,6 +586,59 @@ def render_match() -> None:
     render_stored_match(resume_id, document_id)
 
 
+def render_history_entry(row: Any) -> None:
+    """Show one row of the history, and its detail only when asked for.
+
+    The detail is a second request, made when the expander opens rather than
+    for every row on the page: a listing carries counts, and pulling every
+    suggestion ever written to draw a list nobody expanded is the reason the
+    API returns two shapes.
+    """
+    created = datetime.fromisoformat(row["created_at"]).astimezone()
+    title = row["document_title"] or "untitled posting"
+    score = float(row["score"])
+
+    with st.container(border=True):
+        st.markdown(f"**{title}** - {score:.1%}")
+        st.caption(
+            f"{created:%Y-%m-%d %H:%M} | {row['matched_count']} matched,"
+            f" {row['missing_count']} missing"
+        )
+
+        if row["document_id"] is None:
+            st.caption("The posting has since been removed from the knowledge base.")
+
+        with st.expander("Open this match"):
+            response = authorized("GET", f"/matches/{row['id']}")
+            if response is None or not succeeded(response, httpx.codes.OK):
+                return
+
+            render_match_result(response.json())
+
+
+def render_history() -> None:
+    """List what this account has already been told, newest first."""
+    shown = int(st.session_state.get(HISTORY_SHOWN_KEY, PAGE_SIZE))
+    response = authorized("GET", "/matches", params={"limit": shown, "offset": 0})
+    if response is None or not succeeded(response, httpx.codes.OK):
+        return
+
+    rows = list(response.json())
+    if not rows:
+        st.info("No matches yet. Run one in the Match tab.")
+        return
+
+    for row in rows:
+        render_history_entry(row)
+
+    # Same paging as the knowledge base: ask for every row shown so far from
+    # the top, because a new match rewrites the list from above and a stale
+    # offset over a shifted list is what shows a row twice.
+    if len(rows) == shown and st.button("Show more", key="history-more"):
+        st.session_state[HISTORY_SHOWN_KEY] = shown + PAGE_SIZE
+        st.rerun()
+
+
 def render_account(user: Any) -> None:
     """Show the account behind the stored token, with a way out."""
     st.success(f"Logged in as {user['email']}")
@@ -611,8 +665,8 @@ def main() -> None:
         render_login()
         return
 
-    resumes_tab, documents_tab, match_tab, account_tab = st.tabs(
-        ["Resumes", "Documents", "Match", "Account"]
+    resumes_tab, documents_tab, match_tab, history_tab, account_tab = st.tabs(
+        ["Resumes", "Documents", "Match", "History", "Account"]
     )
     with resumes_tab:
         render_resumes()
@@ -620,6 +674,8 @@ def main() -> None:
         render_documents()
     with match_tab:
         render_match()
+    with history_tab:
+        render_history()
     with account_tab:
         render_account(account.json())
 

@@ -18,6 +18,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from anthropic import APIError as AnthropicError
 from anthropic import AsyncAnthropic
 from langfuse import get_client, observe
 from pydantic import BaseModel, Field
@@ -28,6 +29,7 @@ from app.core.config import Settings
 from app.core.prompts import MATCH_SUGGESTIONS, PromptStore
 from app.models.chunk import Chunk
 from app.models.document import Document
+from app.services.judging import RequirementJudge, Verdict, settle
 
 MAX_KEYWORDS = 40
 """How many terms of the posting the score is measured against. Not everything
@@ -211,6 +213,13 @@ class MatchResult:
     suggestions: list[str]
     notes: list[str] = field(default_factory=list)
     retrieved_chunk_ids: list[uuid.UUID] = field(default_factory=list)
+    matched_evidence: dict[str, str] = field(default_factory=dict)
+    """For a requirement an LLM judged met, the words of the resume it quoted.
+
+    Empty for a match the deterministic rule made -- the requirement is then
+    literally in the text -- and empty for every match when no judge is
+    configured. It exists so a candidate can disagree with a match, which is
+    the point of not letting a model produce the number."""
 
 
 def singular(token: str) -> str:
@@ -374,13 +383,37 @@ async def _job_post_chunks(session: AsyncSession, job_post: Document) -> list[Ch
     return list(chunks)
 
 
-async def match_resume(  # noqa: PLR0913, PLR0917 -- four are collaborators
+async def _verdicts(
+    judge: RequirementJudge | None,
+    requirements: list[str],
+    resume: str,
+    skills: list[str] | None,
+) -> list[Verdict]:
+    """Ask the judge what the resume proves, or answer with nothing.
+
+    Nothing is what every way of not getting an answer looks like: no judge
+    configured, no requirements to judge, a provider that is down. The match
+    then falls back to the deterministic comparison, which is a worse score
+    and a complete one -- losing the whole request because the semantic half
+    failed would trade a real answer for none.
+    """
+    if judge is None or not requirements:
+        return []
+
+    try:
+        return await judge.judge(requirements, resume, skills)
+    except AnthropicError:
+        return []
+
+
+async def match_resume(  # noqa: PLR0913, PLR0917 -- five are collaborators
     session: AsyncSession,
     resume: str,
     job_post: Document,
     writer: SuggestionWriter,
     prompts: PromptStore,
     skills: list[str] | None = None,
+    judge: RequirementJudge | None = None,
 ) -> MatchResult:
     """Score a resume against a posting and suggest how to close the gaps.
 
@@ -399,12 +432,20 @@ async def match_resume(  # noqa: PLR0913, PLR0917 -- four are collaborators
     What the score is computed over comes from requirements_of: the list an
     LLM read out of the posting at ingestion, or the frequency heuristic for
     a posting that has none. What it is compared against comes from evidence:
-    the words of the resume, widened by the skills read out of it. Either way
-    the number is computed here, in Python, from two lists that can be
-    inspected (W-1 variant c).
+    the words of the resume, widened by the skills read out of it.
+
+    A judge, when one is configured, then reads the same two lists and settles
+    what the word comparison could not see -- that PostgreSQL answers SQL and
+    a forklift on every shift answers the licence. It can only add matches
+    (settle), and it never produces the number: the score is counted here, in
+    Python, from lists that can be inspected and quotes that can be argued
+    with (W-1).
     """
     keywords = requirements_of(job_post)
-    matched, missing = cover(keywords, evidence(resume, skills))
+    matched, _ = cover(keywords, evidence(resume, skills))
+    matched, missing, proof = settle(
+        keywords, matched, await _verdicts(judge, keywords, resume, skills)
+    )
     score = round(len(matched) / len(keywords), 3) if keywords else 0.0
 
     chunks = await _job_post_chunks(session, job_post)
@@ -417,4 +458,5 @@ async def match_resume(  # noqa: PLR0913, PLR0917 -- four are collaborators
         suggestions=list(answer.bullet_points),
         notes=list(answer.notes),
         retrieved_chunk_ids=[chunk.id for chunk in chunks],
+        matched_evidence=proof,
     )
