@@ -1,0 +1,494 @@
+{
+  "about": "Hand-labelled cases for the skill-matching rule (W-1). Each case fixes the requirements of a posting and the evidence of a resume, and states which requirements a careful human reader would call met. Extraction is deliberately not measured here: the lists are given, so the only thing under test is how a requirement is compared with what a resume evidences. The cases cover several trades on purpose -- the application is for a cook and a mechanic as much as for a backend engineer, and a rule tuned on one vocabulary fails quietly on the others.",
+  "labelled_by": "Claude, 2026-09-02 -- review before trusting any number computed from this",
+  "cases": [
+    {
+      "id": "postgresql-answers-sql",
+      "domain": "software",
+      "resume": "Backend engineer. Built REST APIs in Python with FastAPI. Modelled and tuned schemas in PostgreSQL and wrote the reporting queries by hand.",
+      "skills": [
+        "python",
+        "fastapi",
+        "rest apis",
+        "postgresql"
+      ],
+      "requirements": [
+        "python",
+        "sql",
+        "rest apis",
+        "docker"
+      ],
+      "expected_met": [
+        "python",
+        "sql",
+        "rest apis"
+      ],
+      "notes": "Nobody tunes PostgreSQL schemas and writes reporting queries without SQL. The word itself never appears in the resume, which is the whole point of the case."
+    },
+    {
+      "id": "sql-does-not-answer-postgresql",
+      "domain": "software",
+      "resume": "Analyst. Wrote complex SQL reports against a MySQL warehouse.",
+      "skills": [
+        "sql",
+        "mysql"
+      ],
+      "requirements": [
+        "sql",
+        "postgresql"
+      ],
+      "expected_met": [
+        "sql"
+      ],
+      "notes": "The asymmetry that makes this hard: PostgreSQL implies SQL, SQL implies no particular database. A rule that reads implication in both directions is worse than the one we have."
+    },
+    {
+      "id": "postgresql-is-not-mysql",
+      "domain": "software",
+      "resume": "Ran PostgreSQL in production for four years, including replication and backups.",
+      "skills": [
+        "postgresql"
+      ],
+      "requirements": [
+        "mysql",
+        "postgresql"
+      ],
+      "expected_met": [
+        "postgresql"
+      ],
+      "notes": "A trap for similarity by embedding: these two terms sit close together in vector space and are not the same skill."
+    },
+    {
+      "id": "java-is-not-javascript",
+      "domain": "software",
+      "resume": "Frontend developer working in JavaScript and TypeScript with React.",
+      "skills": [
+        "javascript",
+        "typescript",
+        "react"
+      ],
+      "requirements": [
+        "java",
+        "react",
+        "typescript"
+      ],
+      "expected_met": [
+        "react",
+        "typescript"
+      ],
+      "notes": "Guards over-matching. A substring rule fails here, and so does a model asked to be helpful."
+    },
+    {
+      "id": "k8s-with-an-extracted-list",
+      "domain": "software",
+      "resume": "Ran services on k8s in production and wrote the Dockerfiles for them.",
+      "skills": [
+        "kubernetes",
+        "docker"
+      ],
+      "requirements": [
+        "kubernetes",
+        "docker",
+        "terraform"
+      ],
+      "expected_met": [
+        "kubernetes",
+        "docker"
+      ],
+      "notes": "The abbreviation was already expanded when the resume was stored, so this case should pass today. It is here to catch a change that breaks what works."
+    },
+    {
+      "id": "k8s-without-an-extracted-list",
+      "domain": "software",
+      "resume": "Ran services on k8s in production and wrote the Dockerfiles for them.",
+      "skills": null,
+      "requirements": [
+        "kubernetes",
+        "docker"
+      ],
+      "expected_met": [
+        "kubernetes",
+        "docker"
+      ],
+      "notes": "The same resume with no LLM reading of it -- the configuration CI and a keyless machine run in. k8s is kubernetes to any human reader."
+    },
+    {
+      "id": "unit-tests-answer-automated-testing",
+      "domain": "software",
+      "resume": "Wrote unit and integration tests for every service; the suite runs on each push.",
+      "skills": [
+        "unit testing",
+        "integration testing"
+      ],
+      "requirements": [
+        "automated testing",
+        "python"
+      ],
+      "expected_met": [
+        "automated testing"
+      ],
+      "notes": "The case W-1 recorded on real data. Python is genuinely absent and must stay missing."
+    },
+    {
+      "id": "github-actions-answer-ci-cd",
+      "domain": "software",
+      "resume": "Set up GitHub Actions to build, test and deploy the service on every merge to main.",
+      "skills": [
+        "github actions",
+        "deployment automation"
+      ],
+      "requirements": [
+        "ci/cd pipelines",
+        "github actions",
+        "kubernetes"
+      ],
+      "expected_met": [
+        "ci/cd pipelines",
+        "github actions"
+      ],
+      "notes": "A pipeline that builds, tests and deploys on merge is CI/CD, whatever the posting calls it."
+    },
+    {
+      "id": "aws-answers-cloud",
+      "domain": "software",
+      "resume": "Deployed services to AWS (ECS, RDS) and managed the infrastructure with Terraform.",
+      "skills": [
+        "aws",
+        "ecs",
+        "terraform"
+      ],
+      "requirements": [
+        "cloud platforms",
+        "terraform",
+        "kubernetes"
+      ],
+      "expected_met": [
+        "cloud platforms",
+        "terraform"
+      ],
+      "notes": "AWS is a cloud platform. ECS is not Kubernetes, which is the half of this case that keeps the label honest."
+    },
+    {
+      "id": "docker-answers-containerisation",
+      "domain": "software",
+      "resume": "Packaged every service as a Docker image and shipped it to a private registry.",
+      "skills": [
+        "docker"
+      ],
+      "requirements": [
+        "containerisation",
+        "docker"
+      ],
+      "expected_met": [
+        "containerisation",
+        "docker"
+      ],
+      "notes": "The example the extraction prompt itself uses, seen from the matching side."
+    },
+    {
+      "id": "go-answers-golang",
+      "domain": "software",
+      "resume": "Backend services in Go, plus a command-line tool in Rust.",
+      "skills": [
+        "go",
+        "rust"
+      ],
+      "requirements": [
+        "golang",
+        "rust",
+        "python"
+      ],
+      "expected_met": [
+        "golang",
+        "rust"
+      ],
+      "notes": "Two names for one language. Python is absent and stays absent."
+    },
+    {
+      "id": "python-3-is-python3",
+      "domain": "software",
+      "resume": "Ten years of Python 3, mostly Django and Celery.",
+      "skills": [
+        "python",
+        "django",
+        "celery"
+      ],
+      "requirements": [
+        "python3",
+        "django"
+      ],
+      "expected_met": [
+        "python3",
+        "django"
+      ],
+      "notes": "The limit the code documents in cover(): python and python3 are different terms to a deterministic rule and the same skill to a reader."
+    },
+    {
+      "id": "message-queue-phrase",
+      "domain": "software",
+      "resume": "Maintained the message queue consumers and the RabbitMQ cluster behind them.",
+      "skills": [
+        "rabbitmq",
+        "message queues"
+      ],
+      "requirements": [
+        "message queues",
+        "rabbitmq",
+        "kafka"
+      ],
+      "expected_met": [
+        "message queues",
+        "rabbitmq"
+      ],
+      "notes": "A multi-word requirement the current rule already handles. Kafka is a different broker and is missing."
+    },
+    {
+      "id": "mentoring-and-leadership",
+      "domain": "software",
+      "resume": "Led a team of four and mentored two juniors through their first year.",
+      "skills": [
+        "team leadership",
+        "mentoring"
+      ],
+      "requirements": [
+        "mentoring",
+        "team leadership",
+        "public speaking"
+      ],
+      "expected_met": [
+        "mentoring",
+        "team leadership"
+      ],
+      "notes": "Public speaking is nowhere in this resume. A model looking for something to award tends to find it here."
+    },
+    {
+      "id": "nothing-in-common",
+      "domain": "software",
+      "resume": "Data scientist. Trained forecasting models in R and presented the results to the finance team.",
+      "skills": [
+        "r",
+        "forecasting",
+        "statistics"
+      ],
+      "requirements": [
+        "java",
+        "spring boot",
+        "kubernetes",
+        "kafka"
+      ],
+      "expected_met": [],
+      "notes": "The floor. A score of 0.0 has to stay reachable: a matcher that awards partial credit to everyone stops ranking anything."
+    },
+    {
+      "id": "excel-answers-spreadsheets",
+      "domain": "other",
+      "resume": "Office administrator. Kept the department budget in Excel, built the monthly reports and the pivot tables the board reads.",
+      "skills": [
+        "excel",
+        "reporting",
+        "pivot tables"
+      ],
+      "requirements": [
+        "spreadsheets",
+        "reporting",
+        "sap"
+      ],
+      "expected_met": [
+        "spreadsheets",
+        "reporting"
+      ],
+      "notes": "Excel is a spreadsheet. The same shape as postgresql answering sql, in an office rather than a server room."
+    },
+    {
+      "id": "forklift-hours-imply-the-licence",
+      "domain": "other",
+      "resume": "Warehouse operative. Operated a forklift on every shift for three years and ran the quarterly stock counts.",
+      "skills": [
+        "forklift",
+        "stock counting"
+      ],
+      "requirements": [
+        "forklift licence",
+        "stock control",
+        "haccp"
+      ],
+      "expected_met": [
+        "forklift licence",
+        "stock control"
+      ],
+      "notes": "Arguable and worth arguing about: nobody drives a forklift on shift for three years without the licence, but this label reads a credential out of experience. If you disagree, this is the case to change."
+    },
+    {
+      "id": "haccp-answers-food-safety",
+      "domain": "other",
+      "resume": "Line cook in a hotel kitchen. Ran the cold starters section, kept the HACCP records and the fridge temperature logs.",
+      "skills": [
+        "haccp",
+        "cold kitchen"
+      ],
+      "requirements": [
+        "food safety",
+        "haccp",
+        "sous vide"
+      ],
+      "expected_met": [
+        "food safety",
+        "haccp"
+      ],
+      "notes": "HACCP is a food safety system; keeping its records is the evidence. Sous vide is a technique this kitchen never mentions."
+    },
+    {
+      "id": "mechanic-phrasing",
+      "domain": "other",
+      "resume": "Car mechanic, six years in an independent garage. Replaced brakes and clutches, read fault codes with the diagnostic computer, seasonal tyre changes.",
+      "skills": [
+        "brake replacement",
+        "engine diagnostics",
+        "tyre service"
+      ],
+      "requirements": [
+        "vehicle diagnostics",
+        "brake systems",
+        "air conditioning service"
+      ],
+      "expected_met": [
+        "vehicle diagnostics",
+        "brake systems"
+      ],
+      "notes": "The multi-word rule needs every word present: the resume has diagnostics but not vehicle, brakes but not systems. Trade postings name the same work with a different noun on the end."
+    },
+    {
+      "id": "a-till-is-a-pos",
+      "domain": "other",
+      "resume": "Shop assistant. Served customers at the till, took cash and card payments and did the daily cash-up.",
+      "skills": [
+        "customer service",
+        "cash handling"
+      ],
+      "requirements": [
+        "pos systems",
+        "cash handling",
+        "stock replenishment"
+      ],
+      "expected_met": [
+        "pos systems",
+        "cash handling"
+      ],
+      "notes": "A till is a point-of-sale system; the posting uses the retail-chain word and the resume the shop-floor one. Nothing in this resume touches replenishment."
+    },
+    {
+      "id": "care-is-not-medication",
+      "domain": "other",
+      "resume": "Care assistant in a residential home. Helped residents with washing, dressing and meals, and kept the daily care notes.",
+      "skills": [
+        "personal care",
+        "record keeping"
+      ],
+      "requirements": [
+        "personal care",
+        "medication administration",
+        "record keeping"
+      ],
+      "expected_met": [
+        "personal care",
+        "record keeping"
+      ],
+      "notes": "The trap in this trade: helping with meals is not giving medication, which is a regulated task with its own training. A model looking for something to award will award it."
+    },
+    {
+      "id": "category-b-is-not-category-c",
+      "domain": "other",
+      "resume": "Delivery driver, three years of city courier work on a category B licence.",
+      "skills": [
+        "category b licence",
+        "route planning"
+      ],
+      "requirements": [
+        "category c+e licence",
+        "route planning"
+      ],
+      "expected_met": [
+        "route planning"
+      ],
+      "notes": "Credentials are pass or fail and one-directional, like sql and postgresql: C+E implies B, B implies nothing about C+E."
+    },
+    {
+      "id": "workshops-answer-public-speaking",
+      "domain": "other",
+      "resume": "Ran the onboarding workshops for every new hire and wrote the materials they were taught from.",
+      "skills": [
+        "training delivery",
+        "workshop facilitation"
+      ],
+      "requirements": [
+        "training delivery",
+        "public speaking",
+        "curriculum design"
+      ],
+      "expected_met": [
+        "training delivery",
+        "public speaking"
+      ],
+      "notes": "Deliberately in tension with mentoring-and-leadership, where public speaking is not met: running workshops is speaking to a room, mentoring two juniors is not. Curriculum design is left unmet -- writing materials is close to it and not the same job."
+    },
+    {
+      "id": "sap-is-an-erp",
+      "domain": "other",
+      "resume": "Accounts assistant. Booked purchase invoices in SAP, reconciled the bank statements and prepared the VAT return.",
+      "skills": [
+        "invoice processing",
+        "sap",
+        "bank reconciliation",
+        "vat"
+      ],
+      "requirements": [
+        "erp systems",
+        "bank reconciliation",
+        "payroll"
+      ],
+      "expected_met": [
+        "erp systems",
+        "bank reconciliation"
+      ],
+      "notes": "SAP is an ERP. Payroll is a different desk in the same office and this resume never sat at it."
+    },
+    {
+      "id": "licence-spelling",
+      "domain": "other",
+      "resume": "Security guard with a valid first aid certificate and a clean driving licence.",
+      "skills": [
+        "first aid",
+        "driving licence"
+      ],
+      "requirements": [
+        "driving license",
+        "first aid"
+      ],
+      "expected_met": [
+        "driving license",
+        "first aid"
+      ],
+      "notes": "One word, two spellings, two continents. Non-IT postings are full of them -- licence/license, tyre/tire, organise/organize -- and a token comparison sees two different words."
+    },
+    {
+      "id": "waiter-languages",
+      "domain": "other",
+      "resume": "Waiter in a seaside hotel through four seasons; served German and British guests in their own languages.",
+      "skills": [
+        "german",
+        "english",
+        "customer service"
+      ],
+      "requirements": [
+        "english",
+        "german",
+        "barista skills"
+      ],
+      "expected_met": [
+        "english",
+        "german"
+      ],
+      "notes": "Should pass today: the extracted list carries both languages. Here so the non-IT half of the dataset is not only failures."
+    }
+  ]
+}
