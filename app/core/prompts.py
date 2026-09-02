@@ -57,48 +57,76 @@ PLACEHOLDER = re.compile(r"\{\{\s*(\w+)\s*\}\}")
 because the Langfuse editor puts it there."""
 
 JOB_POST_SKILLS_TEMPLATE = """\
-Read the job posting below and list the concrete skills, technologies and \
+Read the job posting below and list the concrete skills, tools, licences and \
 qualifications a candidate has to evidence for it.
+
+The posting can be for any trade -- a kitchen, a warehouse, a workshop, a \
+care home, an office, a software team. Answer in the words of that trade.
 
 Rules:
 - One skill per entry, lower case.
-- Name the technology, not the sentence around it: a posting asking for \
-"experience with containerisation" gives "docker" only if it names Docker, \
-otherwise "containerisation".
+- Name the thing itself, not the sentence around it: "experience with \
+containerisation" gives "docker" only if the posting names Docker, otherwise \
+"containerisation"; "able to operate a forklift" gives "forklift".
+- A licence, certificate or legal requirement the posting asks for is a \
+requirement like any other and must appear in the list: "forklift licence", \
+"category b licence", "haccp", "first aid". A certificate the employer offers \
+to pay for is not.
+- Where a word has two spellings, use the British one, so that a posting and \
+a resume come back written the same way: "licence", "tyre", "organise".
 - At most three words per entry.
 - Include what the posting states as a requirement or a strong preference. \
 Leave out benefits, company description, the contract type and anything the \
 employer offers rather than asks for.
-- Leave out generic traits with no evidence in a resume: "team player", \
-"good communication", "attention to detail".
+- Leave out traits no resume could evidence: "team player", "good \
+communication", "attention to detail". A named duty is not a trait: \
+"customer service", "cash handling" and "night shifts" stay.
 - No duplicates, and no entry that is a restatement of another.
 
 Job posting:
 {{content}}
 """
+"""One side of the comparison, and the reason the spelling rule exists twice:
+what a posting demands and what a resume evidences are read by two separate
+calls, so a normalisation that only one of them performs is worse than none.
+British spelling is picked for being one choice, not for being right."""
 
 RESUME_SKILLS_TEMPLATE = """\
-Read the resume below and list the skills, technologies and qualifications \
+Read the resume below and list the skills, tools, licences and qualifications \
 it gives evidence of.
+
+The resume can come from any trade -- a kitchen, a warehouse, a workshop, a \
+care home, an office, a software team. Answer in the words of that trade.
 
 Rules:
 - One skill per entry, lower case.
 - Only what the resume actually evidences. Do not infer a skill from a \
-neighbouring one: a resume naming Docker does not thereby know Kubernetes.
-- Use the ordinary full name of a technology, so that the same skill written \
-in two ways comes back once: "k8s" as "kubernetes", "postgres" as \
-"postgresql", "js" as "javascript".
+neighbouring one: a resume naming Docker does not thereby know Kubernetes, \
+and a cook who ran the cold starters section is not thereby a pastry chef.
+- Use the ordinary full name, so that the same skill written in two ways \
+comes back once: "k8s" as "kubernetes", "postgres" as "postgresql", "js" as \
+"javascript", "ms excel" as "excel", "cat c+e" as "category c+e licence".
+- Where a word has two spellings, use the British one: "licence", "tyre", \
+"organise".
+- Keep licences, certificates and tickets the resume claims: "forklift \
+licence", "first aid", "haccp", "food hygiene certificate". Leave out the \
+school or body that issued them.
 - At most three words per entry.
-- Leave out job titles, employer names, dates and schools. Leave out generic \
-traits: "team player", "hard working".
+- Leave out job titles, employer names and dates. Leave out traits: "team \
+player", "hard working".
 - No duplicates, and no entry that is a restatement of another.
 
 Resume:
 {{content}}
 """
 """The other half of the comparison. The instruction to expand an abbreviation
-is what this whole call is for: the resume says k8s, the posting says
-kubernetes, and no rule about plurals will ever bring those together."""
+is what this whole call is for: the resume says k8s and the posting says
+kubernetes, the resume says cat c+e and the posting says category c+e licence,
+and no rule about plurals will ever bring those together.
+
+Its rules mirror the posting prompt's on purpose. Two lists normalised by two
+different instructions meet in cover() as two different vocabularies, and the
+score is then measuring the prompts against each other."""
 
 MATCH_SUGGESTIONS_TEMPLATE = """\
 You are helping a candidate adapt their resume to one job posting.
@@ -109,12 +137,15 @@ appear in neither.
 
 Write them the way a strong resume is written:
 - Open with what the candidate did, not with a duty they were responsible for.
-- Name the technology the posting names, in the posting's own words: write \
-"Kubernetes" where the posting says Kubernetes, not "container \
-orchestration".
-- Keep the number the resume already gives you -- latency, throughput, \
-dataset or team size -- and never invent one it does not.
+- Name the tool, skill or licence the posting names, in the posting's own \
+words: write "Kubernetes" where the posting says Kubernetes and "HACCP" where \
+it says HACCP, not a paraphrase of either.
+- Keep the number the resume already gives you -- covers served, deliveries a \
+day, vehicles serviced, invoices booked, latency, team size -- and never \
+invent one it does not.
 - One line per entry, past tense, no adjectives about the candidate.
+- Write in the vocabulary of the trade the posting is from. A kitchen, a \
+warehouse and a software team describe good work in different words.
 
 A gap the resume gives you nothing to work with is not a bullet point: put it \
 in notes, one sentence, addressed to the candidate. bullet_points is copied \
