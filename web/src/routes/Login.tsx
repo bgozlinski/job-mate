@@ -1,0 +1,99 @@
+import { useState } from 'react'
+import type { ReactElement, SyntheticEvent } from 'react'
+import { Navigate, useLocation } from 'react-router'
+
+import { useLogin, useRegister, useSession } from '../auth/session'
+
+interface FromState {
+  from?: string
+}
+
+/**
+ * Log in, or create an account and log straight into it.
+ *
+ * One form for both, because the fields are the same and a separate
+ * registration page would double the markup to change one verb.
+ */
+export function Login(): ReactElement {
+  const session = useSession()
+  const location = useLocation()
+  const login = useLogin()
+  const register = useRegister()
+
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+
+  // Somebody who is already logged in has no business here -- most often
+  // arriving by pressing Back after signing in.
+  if (session.data) {
+    const state = location.state as FromState | null
+
+    return <Navigate to={state?.from ?? '/'} replace />
+  }
+
+  const pending = login.isPending || register.isPending
+  const failure = login.error ?? register.error
+
+  // SyntheticEvent rather than FormEvent, which React 19's types deprecate
+  // as a name for an event that does not exist. Naming SubmitEvent as the
+  // native event is also what makes `submitter` readable below.
+  function onSubmit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>): void {
+    event.preventDefault()
+
+    // Which of the two buttons was pressed. Both submit the same form, so the
+    // fields are validated by the browser either way -- two separate forms
+    // would duplicate the markup to change one verb.
+    const action = event.nativeEvent.submitter?.getAttribute('value')
+    const mutation = action === 'register' ? register : login
+
+    // mutate rather than mutateAsync: the result is read from the hook's own
+    // state below, and an awaited call here would need its rejection caught
+    // twice to avoid an unhandled rejection.
+    mutation.mutate({ email, password })
+  }
+
+  return (
+    <main>
+      <h1>JobMate</h1>
+
+      <form onSubmit={onSubmit}>
+        <label htmlFor="email">Email</label>
+        <input
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          required
+          value={email}
+          onChange={(event) => {
+            setEmail(event.target.value)
+          }}
+        />
+
+        <label htmlFor="password">Password</label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          required
+          value={password}
+          onChange={(event) => {
+            setPassword(event.target.value)
+          }}
+        />
+
+        <button type="submit" name="action" value="login" disabled={pending}>
+          Log in
+        </button>
+        <button type="submit" name="action" value="register" disabled={pending}>
+          Create an account
+        </button>
+      </form>
+
+      {/* role="alert" so a screen reader announces a failed login, which is
+          otherwise a silent change to a page the user is still looking at. */}
+      {failure ? <p role="alert">{failure.message}</p> : null}
+    </main>
+  )
+}

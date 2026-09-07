@@ -16,6 +16,17 @@ npm run gen        # regenerate openapi.json and src/api/schema.d.ts
 `npm run dev` expects the API to be up (`docker compose up`). It reads
 `JOBMATE_API_URL` for where to find it, defaulting to `http://localhost:8000`.
 
+`docker compose up` also runs this client, at the same address. That container
+keeps its own `node_modules` in a named volume, because the host's tree is
+built for the host's platform and `esbuild` and `rollup` ship native binaries:
+mounting a Windows tree into Alpine produces `cannot execute binary file`
+rather than a missing package. Docker seeds such a volume from the image only
+while it is empty, so after adding a dependency `--build` alone changes
+nothing and Vite reports `Failed to resolve import` for a package that is
+plainly installed on the host. The container therefore runs `npm install`
+before `npm run dev`; it costs a second when the tree already agrees and
+removes the whole class of problem.
+
 ## Everything goes through /api on this origin
 
 The dev server proxies `/api/*` to the API and strips the prefix; in

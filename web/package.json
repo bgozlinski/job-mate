@@ -14,8 +14,11 @@
     "gen": "npm run gen:spec && npm run gen:api"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.102.8",
+    "openapi-fetch": "^0.17.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "react-router": "^8.3.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -31,6 +34,7 @@
     "globals": "^17.12.0",
     "jiti": "^2.7.0",
     "jsdom": "^30.0.1",
+    "msw": "^2.15.0",
     "openapi-typescript": "^7.13.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.69.0",

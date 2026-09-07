@@ -103,6 +103,13 @@ services:
       # odpytywania hot reload nie reaguje na zapis pliku. Kosztuje troche CPU
       # i dlatego nie jest wlaczone na stale w vite.config.ts.
       CHOKIDAR_USEPOLLING: "true"
+    # Instalacja przy starcie, a nie tylko w obrazie. node_modules ponizej jest
+    # nazwanym wolumenem, a Docker zasiewa taki wolumen zawartoscia obrazu
+    # WYLACZNIE gdy jest pusty -- po dodaniu zaleznosci `--build` nic nie
+    # zmienia, bo wolumen juz istnieje. Objaw: "Failed to resolve import" na
+    # pakiet, ktory na hoscie jest zainstalowany. `npm install` jest tanie, gdy
+    # drzewo juz sie zgadza, i naprawia to samo.
+    command: sh -c "npm install --no-audit --no-fund && npm run dev"
     ports:
       - "5173:5173"
     depends_on:

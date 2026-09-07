@@ -1,7 +1,9 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router'
 
 import { App } from './App'
+import { Providers, createQueryClient } from './providers'
 
 const container = document.getElementById('root')
 
@@ -14,6 +16,10 @@ if (!container) {
 
 createRoot(container).render(
   <StrictMode>
-    <App />
+    <Providers client={createQueryClient()}>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </Providers>
   </StrictMode>,
 )
