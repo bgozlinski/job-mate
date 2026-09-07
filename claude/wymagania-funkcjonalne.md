@@ -97,7 +97,38 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 
 ## 4. Wymagania niefunkcjonalne
 
-- **NFR-1 Bezpieczeństwo:** uwierzytelnianie JWT; hasła przechowywane jako hashe; użytkownik ma dostęp wyłącznie do własnych danych.
+- **NFR-1 Bezpieczeństwo:** uwierzytelnianie JWT; hasła przechowywane jako hashe; użytkownik ma dostęp wyłącznie do własnych danych. Token dociera do API na dwa sposoby: nagłówkiem `Authorization: Bearer` albo ciasteczkiem `httpOnly` — szczegóły niżej.
+
+> **Zmiana 2026-09-07.** Przygotowanie pod klienta w przeglądarce. Do tej pory jedynym klientem był
+> Streamlit, który trzyma token po stronie serwera — w przeglądarce token nie lądował nigdy. Aplikacja
+> działająca w przeglądarce nie ma takiego schowka: `localStorage` i każda zmienna dostępna z JavaScriptu
+> są czytelne dla dowolnego skryptu, który trafi na stronę, więc jeden błąd XSS oddaje konto.
+>
+> **Co się zmieniło.** `/auth/login` poza tokenem w body ustawia dwa ciasteczka `httpOnly`: krótki `access`
+> (`COOKIE_ACCESS_EXPIRE_MINUTES`) i `refresh` (`REFRESH_TOKEN_EXPIRE_DAYS`). `/auth/refresh` odnawia
+> pierwsze z drugiego, `/auth/logout` kasuje oba. Uwierzytelnianie przyjmuje nagłówek **albo** ciasteczko,
+> z pierwszeństwem nagłówka — Streamlit działa bez zmian.
+>
+> **Dwa czasy życia dla jednego rodzaju tokenu** wynikają z tego, co klient potrafi: przeglądarka odnawia
+> sesję po cichu, klient na Bearerze nie potrafi i przestałby działać. Różnica jest w kliencie, nie w tokenie.
+>
+> **CSRF** — ciasteczkowa sesja musi na to odpowiedzieć, a odpowiedzią jest `SameSite=Lax`: przeglądarka
+> nie dołącza tych ciasteczek do żądania POST zainicjowanego przez obcą stronę, a wszystko, co zmienia stan,
+> jest tu POST-em, PATCH-em albo DELETE. **To działa, dopóki strona i API są pod jednym originem** (patrz
+> topologia frontendu). Rozdzielenie ich wymaga innej odpowiedzi na CSRF, a nie luźniejszego `SameSite`.
+>
+> **Refresh token nie jest rotowany.** Rotacja ma sens, gdy serwer pamięta, co wydał — wtedy token użyty
+> dwa razy zdradza kopię. Tu nic nie pamięta, więc rotacja kosztowałaby zapis przy każdym odnowieniu i nie
+> wykrywałaby niczego, a przy okazji przesuwałaby siedmiodniowy limit w nieskończoność.
+>
+> **Czego to nie robi, świadomie.** Nie ma listy unieważnionych tokenów, więc: wylogowanie kończy sesję
+> **na tym urządzeniu**, a token wydany wcześniej gdzie indziej działa do swojego wygaśnięcia; skradziony
+> refresh token jest ważny do końca swoich siedmiu dni. Jedyne, co kończy sesję wcześniej, to usunięcie
+> konta — `/auth/refresh` czyta użytkownika z bazy przy każdym odnowieniu właśnie po to. Prawdziwe
+> unieważnianie wymaga stanu (Redis albo tabela) i jest osobną decyzją, nie oczywistym brakiem.
+>
+> Ciasteczka są `Secure` sterowane przez `COOKIE_SECURE`: wymuszone na produkcji, wyłączone lokalnie —
+> `Secure` po `http://` powoduje, że przeglądarka po cichu odrzuca ciasteczko, co wygląda jak zepsute logowanie.
 - **NFR-2 Kontrola kosztów i observability:** każde wywołanie LLM i retrieval trace'owane w Langfuse (koszty tokenów, latencja, użyte chunki); rate limiting na endpointach LLM.
 - **NFR-2a Cache embeddingów:** przed wywołaniem API embeddingów system sprawdza Redis (klucz = hash treści chunka); trafienie w cache pomija wywołanie API — oszczędność kosztów przy re-indeksacji i duplikatach.
 - **NFR-3 Wydajność:** wyszukiwanie wektorowe poniżej 500 ms (indeks HNSW). *Od 2026-09-02 nic nie wykonuje wyszukiwania wektorowego — embeddingi i indeks HNSW są zapisywane i utrzymywane, ale czytelnik pojawi się dopiero z etapem 4. Wymaganie obowiązuje od tego momentu.*
