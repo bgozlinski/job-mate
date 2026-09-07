@@ -35,12 +35,31 @@ REFRESH_COOKIE = "refresh_token"  # noqa: S105
 ACCESS_COOKIE_PATH = "/"
 """Every route needs it, so it rides along with every request."""
 
-REFRESH_COOKIE_PATH = "/auth"
-"""Nothing outside /auth has any use for the refresh token, so the browser is
-told not to send it anywhere else. A credential that is transmitted on every
-request to every route is exposed on every one of them; this one is only
-exposed where it is spent. /auth rather than /auth/refresh so that logout can
-clear it, which requires a matching path."""
+AUTH_PATH = "/auth"
+"""Nothing outside the auth routes has any use for the refresh token, so the
+browser is told not to send it anywhere else. A credential transmitted on
+every request to every route is exposed on every one of them; this one is
+only exposed where it is spent. The whole of /auth rather than
+/auth/refresh, so that logout can clear it -- deleting a cookie requires a
+matching path."""
+
+
+def refresh_cookie_path(settings: Settings) -> str:
+    """Where the browser should send the refresh cookie back to.
+
+    Not a constant, because the answer depends on how this API is reached.
+    A cookie's Path is matched against the URL in the address bar, and behind
+    the proxy that serves the web client the auth routes are /api/auth/...
+    there while this process only ever sees /auth/... A hard-coded /auth is
+    then written into a cookie the browser never sends, and nothing reports
+    it: every renewal simply answers 401, exactly as an expired session
+    would.
+
+    See Settings.cookie_path_prefix; empty by default, so a Bearer client and
+    the tests are unaffected.
+    """
+    return f"{settings.cookie_path_prefix}{AUTH_PATH}"
+
 
 SAMESITE: Literal["lax"] = "lax"
 """See the module docstring: this is what stands in for a CSRF token.
@@ -84,7 +103,7 @@ def set_session_cookies(response: Response, subject: str, settings: Settings) ->
         REFRESH_COOKIE,
         create_refresh_token(claims),
         max_age=settings.refresh_token_expire_days * SECONDS_PER_DAY,
-        path=REFRESH_COOKIE_PATH,
+        path=refresh_cookie_path(settings),
         httponly=True,
         secure=settings.cookie_secure,
         samesite=SAMESITE,
@@ -132,7 +151,7 @@ def clear_session_cookies(response: Response, settings: Settings) -> None:
     """
     for name, path in (
         (ACCESS_COOKIE, ACCESS_COOKIE_PATH),
-        (REFRESH_COOKIE, REFRESH_COOKIE_PATH),
+        (REFRESH_COOKIE, refresh_cookie_path(settings)),
     ):
         response.delete_cookie(
             name,

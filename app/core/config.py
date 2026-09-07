@@ -125,6 +125,24 @@ class Settings(BaseSettings):
     deleting an account and the deletion taking effect, and little else. It
     is not what makes the cookie safe -- httpOnly and one origin are.
     """
+    cookie_path_prefix: str = ""
+    """The path prefix the browser reaches this API under, if any.
+
+    Empty when the API is called at its own root, as the Streamlit client and
+    the tests do. "/api" when a proxy serves the page and the API from one
+    origin and routes /api/* here -- which is how the web client is deployed,
+    because one origin is what makes the cookie session work at all.
+
+    It exists because a cookie's Path is matched against the URL the browser
+    used, not the one the application saw. The refresh cookie is scoped to
+    the auth routes, and behind a proxy those are /api/auth/... to the
+    browser while this process only ever sees /auth/... A cookie written with
+    Path=/auth is then never sent back, and the failure is silent: every
+    renewal answers 401 as though the session had expired.
+
+    Must match the prefix the proxy strips (see web/vite.config.ts and
+    web/nginx.conf). Nothing can check that from in here.
+    """
     cookie_secure: bool = False
     """Whether auth cookies carry the Secure flag. Must be true in
     production and false in development, and there is no value that is

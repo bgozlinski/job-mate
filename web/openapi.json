@@ -1,0 +1,1537 @@
+{
+  "components": {
+    "schemas": {
+      "Body_upload_document_documents_upload_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_document_documents_upload_post",
+        "type": "object"
+      },
+      "Body_upload_resume_resumes_upload_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "target_role": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Role"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_resume_resumes_upload_post",
+        "type": "object"
+      },
+      "DocumentCreate": {
+        "description": "Payload for ingesting one job posting.\n\nmetadata is left as an open object on purpose: it is what hybrid\nretrieval filters on (role, seniority), and the knowledge base has to be\nable to carry keys the API does not know about yet.",
+        "properties": {
+          "content": {
+            "maxLength": 200000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "format": "uri",
+                "maxLength": 2083,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "DocumentCreate",
+        "type": "object"
+      },
+      "DocumentFromUrl": {
+        "description": "Payload for ingesting the posting published at an address (FR-1).\n\nNo content and no title: both are read off the page. Which addresses are\nread at all is a question of policy, answered by the allowlist in\nSettings rather than by this schema -- HttpUrl only proves the string is\na URL, and http://169.254.169.254/ is a perfectly good one (NFR-1).\n\nmetadata is here for the same reason the other two routes have it: to\nlabel a posting with the role or seniority a listing is filtered by. What\nthe caller supplies wins over what was scraped, because a caller who\nbothers to send a key means to correct what the page said.",
+        "properties": {
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "url": {
+            "format": "uri",
+            "maxLength": 2083,
+            "minLength": 1,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "DocumentFromUrl",
+        "type": "object"
+      },
+      "DocumentRead": {
+        "description": "Public view of a stored posting.\n\nThe content itself is left out: the caller has just sent it, and a\nlisting of the knowledge base should not ship every posting in full.",
+        "properties": {
+          "chunk_count": {
+            "title": "Chunk Count",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "source_url",
+          "metadata",
+          "chunk_count",
+          "created_at"
+        ],
+        "title": "DocumentRead",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LoginRequest": {
+        "description": "Credentials presented at login.\n\nThe password is only bounded, never checked for length: rejecting a\nshort password here would answer a question about the stored account.",
+        "properties": {
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 128,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginRequest",
+        "type": "object"
+      },
+      "MatchCreate": {
+        "description": "Which posting the resume should be measured against.",
+        "properties": {
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id"
+        ],
+        "title": "MatchCreate",
+        "type": "object"
+      },
+      "MatchRead": {
+        "description": "The result of one match.\n\nretrieved_chunk_ids is part of the response, not an internal detail: the\ncaller is told which fragments the suggestions were built from, so an\nanswer can be checked against what the model actually saw.\n\nsuggestions is text for the resume; notes is what the model has to say\nabout the resume. Two fields, because a client that renders one list\nwould otherwise render a remark about a missing skill as a line of the\ndocument itself.\n\nmatched_evidence carries, for a requirement an LLM judged met, the words\nof the resume it quoted. Empty for a match the deterministic rule made --\nthe term is then literally in the text -- and empty everywhere when no\njudge is configured. It is what lets a candidate disagree with a match.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "document_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Title"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "matched_evidence": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Matched Evidence",
+            "type": "object"
+          },
+          "matched_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched Keywords",
+            "type": "array"
+          },
+          "missing_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Keywords",
+            "type": "array"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "resume_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Id"
+          },
+          "retrieved_chunk_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Retrieved Chunk Ids",
+            "type": "array"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "suggestions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "document_id",
+          "created_at",
+          "score",
+          "matched_keywords",
+          "missing_keywords",
+          "suggestions",
+          "notes",
+          "retrieved_chunk_ids"
+        ],
+        "title": "MatchRead",
+        "type": "object"
+      },
+      "MatchSummary": {
+        "description": "One row of the history: enough to choose which match to open.\n\nThe lists are left out and counted instead. A history is read to find\nsomething, and a page of it should not carry every suggestion ever\nwritten for every posting.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "document_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Title"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "matched_count": {
+            "title": "Matched Count",
+            "type": "integer"
+          },
+          "missing_count": {
+            "title": "Missing Count",
+            "type": "integer"
+          },
+          "resume_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Id"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "document_id",
+          "document_title",
+          "resume_id",
+          "score",
+          "matched_count",
+          "missing_count",
+          "created_at"
+        ],
+        "title": "MatchSummary",
+        "type": "object"
+      },
+      "ResumeCreate": {
+        "description": "Payload for storing a new resume.",
+        "properties": {
+          "content": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "target_role": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Role"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "ResumeCreate",
+        "type": "object"
+      },
+      "ResumeRead": {
+        "description": "Public view of a resume.\n\nuser_id is left out on purpose: a caller only ever sees their own\nresumes, so the column carries no information for them.\n\noriginal_filename is shown back because it is how the owner recognises\nwhich upload this row is. file_hash stays out: it identifies the file\nthe text came from and is of no use to the caller.",
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "original_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Filename"
+          },
+          "target_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Role"
+          }
+        },
+        "required": [
+          "id",
+          "content",
+          "target_role",
+          "created_at"
+        ],
+        "title": "ResumeRead",
+        "type": "object"
+      },
+      "ResumeUpdate": {
+        "description": "Payload for a partial update: what the caller omits stays as it is.\n\nOmitting target_role and sending it as null are different requests,\nwhich is why the handler applies model_dump(exclude_unset=True) rather\nthan the whole model.",
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "maxLength": 100000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "target_role": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Role"
+          }
+        },
+        "title": "ResumeUpdate",
+        "type": "object"
+      },
+      "TokenResponse": {
+        "description": "A signed access token and the scheme it is used with.\n\ntoken_type carries the scheme name required by RFC 6750, not a secret;\nthe noqa silences the linter rule that flags the literal.",
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "token_type": {
+            "default": "bearer",
+            "title": "Token Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token"
+        ],
+        "title": "TokenResponse",
+        "type": "object"
+      },
+      "UserCreate": {
+        "description": "Registration payload.\n\nThe upper bound on the password is not about strength: argon2 has no\nlength limit of its own, and hashing time grows with the input, so an\nunbounded field is a cheap way to tie up the server.",
+        "properties": {
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "UserCreate",
+        "type": "object"
+      },
+      "UserRead": {
+        "description": "Public view of a user, deliberately without password_hash.\n\nThis schema is the last thing between the ORM object and the response\nbody, which makes it the barrier that keeps the hash from leaving the\napplication.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_admin": {
+            "title": "Is Admin",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "created_at",
+          "is_admin"
+        ],
+        "title": "UserRead",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "title": "FastAPI",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/": {
+      "get": {
+        "description": "Answer at the root so a bare request confirms the app is serving.",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Root  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Root"
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "description": "Exchange credentials for a session, in both shapes at once.\n\nThe body carries a long-lived token for a client that sends an\nAuthorization header and cannot renew what it holds. The same response\nsets httpOnly cookies for a browser, which can renew silently and so\ngets a short access cookie backed by a refresh token. Both are issued\nevery time: which one a client uses is the client's business, and a\nlogin that had to be told in advance would need a flag nobody wants to\nexplain.\n\nA browser is handed a token in the body it will not use. That is the\nprice of one login route for two clients, and it is not a leak: the\nresponse goes to a caller who just proved they own the account, over the\nsame connection as the cookies.\n\nAn unknown address and a wrong password produce the same response and,\nthanks to the discarded verification, take the same time. Either one\nwould otherwise reveal which addresses have accounts (NFR-1).",
+        "operationId": "login_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "description": "End the browser's session by removing both cookies.\n\nNo authentication required, on purpose. A session whose access cookie\nhas already expired is exactly the one a user wants to end, and a logout\nthat answered 401 would refuse at the moment it is most needed. Nothing\nis destroyed that the caller does not already hold, so there is nothing\nto protect here.\n\nAnswering the same way whether or not there was a session keeps this\nfrom reporting whether the caller was logged in.",
+        "operationId": "logout_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Logout",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "description": "Return the account behind the token.",
+        "operationId": "read_current_user_auth_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read Current User",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "description": "Renew the short access cookie from the refresh cookie.\n\nCookie only: the refresh token is never handed out any other way, so\nthere is no header to read it from, and accepting one would widen the\nsurface for nothing. The Bearer client does not come here at all -- it\nholds a long-lived token and has no refresh cookie to present.\n\nThe account is loaded rather than trusted from the claims, so a deleted\naccount cannot renew its way through the rest of the week. That database\nread is the only thing standing between a deleted user and a working\nsession, since nothing revokes the tokens themselves.\n\nEvery failure is the same 401 as anywhere else: no cookie, a bad\nsignature, an expired token, an access token presented as a refresh one,\nan account that is gone. The cookies are deliberately left in place on\nfailure -- clearing them would mean building the error response by hand,\nand a dead refresh cookie is inert anyway. A 401 here means the caller\nhas to log in again, not retry.",
+        "operationId": "refresh_auth_refresh_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Refresh",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "description": "Create an account, or answer 409 if the address is taken.\n\nThe duplicate is caught from the unique index rather than prevented by a\nprior SELECT: checking first leaves a window in which a concurrent\nrequest can insert the same address between the check and the write.",
+        "operationId": "register_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/documents": {
+      "get": {
+        "description": "List the knowledge base, newest first.\n\nFR-3 has the user pick the posting to be matched against, and until this\nroute existed the only way to learn a document_id was to send the same\ntext again and read it off the deduplicated answer. Formally the listing\nbelongs to administration (FR-6); practically FR-3 is unusable without\nit, so it is here and open to any authenticated account, exactly like\ningestion. Deleting is what stays with an admin.\n\nThe content is not in the response -- DocumentRead leaves it out -- so a\npage stays small no matter how long the postings are.\n\nOrdering is by created_at and then by id, because two sources ingested in\nthe same moment would otherwise have no defined order and offset paging\ncould show one of them twice. Ids are uuid7, so the tiebreaker runs the\nsame way as time.\n\nThe caller pages until a short page comes back; no total is returned,\nwhich would cost a second count query on every request to tell them\nsomething the next call tells them for free.",
+        "operationId": "list_documents_documents_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DocumentRead"
+                  },
+                  "title": "Response List Documents Documents Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Documents",
+        "tags": [
+          "documents"
+        ]
+      },
+      "post": {
+        "description": "Ingest a source, or return the one it duplicates.\n\nAny authenticated account may add to the knowledge base: FR-1 describes\na user pasting the posting they want to be matched against, and FR-3\nthen has them pick it. Administration -- browsing and deleting sources\n(FR-6) -- is what stays with an admin.\n\nA duplicate answers 200 with the document that was already there rather\nthan 409: the caller's intent, having this text in the knowledge base,\nis satisfied, and the body tells them which document it is.\n\nThe route is rate limited (NFR-2): it spends money at a third-party API.",
+        "operationId": "create_document_documents_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/documents/from-url": {
+      "post": {
+        "description": "Ingest the posting published at an address (FR-1).\n\nThe third way into the same knowledge base, after a paste and a file, and\nit answers exactly like them: 201 for a new posting, 200 with the\nexisting one for a duplicate, the same DocumentRead either way. Nothing\nbelow _store knows the text arrived over the network.\n\nWhich addresses are read is settled by the allowlist rather than here --\nsee NFR-5 for why the list is closed, and app.services.scraping for the\nrequest forgery it also prevents (NFR-1).\n\nParsing runs on the event loop rather than in a worker thread, which is\nthe opposite of what the upload route does with a PDF. The measurement is\nthe reason: a megabyte of markup takes about ten milliseconds here,\nbecause HTMLParser skips script bodies wholesale, while a PDF of the same\nsize takes hundreds. Below a certain cost the hand-off is the expensive\npart.\n\nThe fetch happens inside the trace, not before it, so a board that took\neight seconds to answer is visible as what made the ingestion slow\n(NFR-2). It costs no money, which is why the rate limit it shares with\nthe other two routes is still about embeddings.",
+        "operationId": "ingest_from_url_documents_from_url_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentFromUrl"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ingest From Url",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/documents/upload": {
+      "post": {
+        "description": "Ingest a source from an uploaded PDF, DOCX or text file (FR-1).\n\nThe same knowledge base as the JSON route, reached with a file instead\nof a paste, and answering the same way: 201 for a new source, 200 with\nthe existing one for a duplicate.\n\nNo file hash is stored, and that is the point. A document is identified\nby the hash of its normalised text, so the same posting sent once as a\nPDF and once as a DOCX is correctly one document -- two different files,\none source. Hashing the bytes here would break that, which is the\nopposite of what it does for resumes, where the hash is what makes a\nre-upload recognisable.\n\nThe fields are declared one by one rather than as a single Form model:\nFastAPI flattens such a model only when every field is scalar, and\nmetadata is an object, so the whole thing arrives as one missing field.\nThey are validated together anyway, by handing them to DocumentUpload --\na real URL and metadata that parses -- so the two routes reject the same\ninput for the same reasons.\n\nThe length limit the JSON route gets from its schema is applied by hand:\na 5 MB file of prose parses to far more text than MAX_CONTENT_LENGTH\nallows, and nothing would otherwise stop it.\n\nThe title falls back to the filename, which is the only name an upload\ncomes with and better than nothing in a listing.",
+        "operationId": "upload_document_documents_upload_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_document_documents_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Upload Document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "Report that the process is up, without touching any dependency.\n\nAn orchestrator restarts a container that fails this, so it must not go\nred because the database is briefly unreachable.",
+        "operationId": "liveness_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Liveness Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Liveness",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "description": "Report whether the dependencies are reachable, 503 if any is not.\n\nBoth checks run concurrently and their exceptions are collected rather\nthan raised, so one dead dependency still leaves the other one reported.",
+        "operationId": "readiness_health_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Readiness Health Ready Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Readiness",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/matches": {
+      "get": {
+        "description": "List the caller's own matches, newest first.\n\nFiltered by owner in the statement rather than checked afterwards: a\nhistory is a record of what somebody was told about their own CV, and\nNFR-1 makes that theirs alone.\n\nOrdered by created_at and then by id, because two matches run in the same\nmoment would otherwise have no defined order and offset paging could show\none of them twice. Ids are uuid7, so the tiebreaker runs the same way as\ntime.",
+        "operationId": "list_matches_matches_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MatchSummary"
+                  },
+                  "title": "Response List Matches Matches Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Matches",
+        "tags": [
+          "matching"
+        ]
+      }
+    },
+    "/matches/{match_id}": {
+      "get": {
+        "description": "Return one stored match in full, or 404 if it is not the caller's.\n\nSomebody else's match is a 404 rather than a 403, exactly as an unknown\nresume is: a different answer would confirm the row exists.",
+        "operationId": "read_match_matches__match_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Match Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read Match",
+        "tags": [
+          "matching"
+        ]
+      }
+    },
+    "/resumes": {
+      "get": {
+        "description": "List the caller's resumes, newest first.",
+        "operationId": "list_resumes_resumes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ResumeRead"
+                  },
+                  "title": "Response List Resumes Resumes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Resumes",
+        "tags": [
+          "resumes"
+        ]
+      },
+      "post": {
+        "description": "Store a new resume for the caller, reading its skills on the way in.",
+        "operationId": "create_resume_resumes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumeRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Resume",
+        "tags": [
+          "resumes"
+        ]
+      }
+    },
+    "/resumes/upload": {
+      "post": {
+        "description": "Store a resume from an uploaded PDF, DOCX or text file (FR-1).\n\nWhat is kept is the extracted text; the file itself is not stored. The\nthree columns beside it record where that text came from, so a later\nupload of the same document is recognisable as such.\n\nThe four ways this fails are told apart on purpose, because the useful\nanswer differs: too large, not a format we read, a scan with no text in\nit, or a file already uploaded.",
+        "operationId": "upload_resume_resumes_upload_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_resume_resumes_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumeRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Upload Resume",
+        "tags": [
+          "resumes"
+        ]
+      }
+    },
+    "/resumes/{resume_id}": {
+      "delete": {
+        "description": "Delete one of the caller's resumes.",
+        "operationId": "delete_resume_resumes__resume_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "resume_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Resume Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Resume",
+        "tags": [
+          "resumes"
+        ]
+      },
+      "get": {
+        "description": "Return one of the caller's resumes.",
+        "operationId": "read_resume_resumes__resume_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "resume_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Resume Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumeRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read Resume",
+        "tags": [
+          "resumes"
+        ]
+      },
+      "patch": {
+        "description": "Update the fields the request actually carries.\n\nexclude_unset is what separates an omitted field from one sent as null:\nthe first is left alone, the second clears the column. Dumping the whole\nmodel would silently blank everything the caller did not mention.",
+        "operationId": "update_resume_resumes__resume_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "resume_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Resume Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumeRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Resume",
+        "tags": [
+          "resumes"
+        ]
+      }
+    },
+    "/resumes/{resume_id}/match": {
+      "post": {
+        "description": "Score one of the caller's resumes against a posting and suggest edits.\n\nThe answer is stored before it is returned, and the stored row is what\ncomes back: the response and the history are then the same object, and a\nreader comparing the two later cannot find them disagreeing.\n\nThe resume comes from a dependency that filters by owner, so a resume\nbelonging to somebody else is a 404 here exactly as a missing one is: a\ndifferent answer would confirm it exists (NFR-1).\n\nThis is the most expensive route in the application -- it calls an LLM --\nwhich is why it carries the tighter of the two rate limits (NFR-2).",
+        "operationId": "match_resumes__resume_id__match_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "resume_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Resume Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Match",
+        "tags": [
+          "matching"
+        ]
+      }
+    }
+  }
+}

@@ -28,6 +28,8 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 | Embeddingi | model text-embedding (1536 wymiarów) | Standardowy, tani |
 | Konteneryzacja | Docker + docker-compose | Powtarzalne środowisko deweloperskie |
 | CI/CD | GitHub Actions | Lint, testy, build |
+| Frontend | React + TypeScript (Vite) | Klient w przeglądarce; typy generowane z OpenAPI, więc zmiana schematu w Pythonie psuje build, a nie ekran |
+| Klient deweloperski | Streamlit | Narzędzie do ręcznego dziurawienia API; nie jest częścią produktu |
 
 ## 3. Wymagania funkcjonalne
 
@@ -132,7 +134,19 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 - **NFR-2 Kontrola kosztów i observability:** każde wywołanie LLM i retrieval trace'owane w Langfuse (koszty tokenów, latencja, użyte chunki); rate limiting na endpointach LLM.
 - **NFR-2a Cache embeddingów:** przed wywołaniem API embeddingów system sprawdza Redis (klucz = hash treści chunka); trafienie w cache pomija wywołanie API — oszczędność kosztów przy re-indeksacji i duplikatach.
 - **NFR-3 Wydajność:** wyszukiwanie wektorowe poniżej 500 ms (indeks HNSW). *Od 2026-09-02 nic nie wykonuje wyszukiwania wektorowego — embeddingi i indeks HNSW są zapisywane i utrzymywane, ale czytelnik pojawi się dopiero z etapem 4. Wymaganie obowiązuje od tego momentu.*
-- **NFR-4 Wdrożenie:** cały stack uruchamiany przez `docker-compose up`; CI uruchamia lint i testy przy każdym pushu.
+- **NFR-4 Wdrożenie:** cały stack uruchamiany przez `docker-compose up` — z klientem w przeglądarce włącznie; CI uruchamia lint i testy przy każdym pushu, w dwóch jobach (Python i Node).
+
+> **Zmiana 2026-09-07.** Doszedł serwis `web`. W trybie deweloperskim jest to serwer Vite proxujący `/api`
+> na kontener `api`; wariant produkcyjny (nginx z gotowym buildem) stoi za profilem `prod`, bo `docker
+> compose up` ma podnosić środowisko deweloperskie. **Jeden origin dla przeglądarki nie jest wygodą
+> deploymentu, tylko decyzją bezpieczeństwa** — od niego zależy, czy sesja w ciasteczkach działa bez CORS-a
+> i bez `SameSite=None` (patrz NFR-1). Rozdzielenie strony i API na dwa originy wymaga innej odpowiedzi na
+> CSRF, a nie luźniejszej konfiguracji ciasteczek.
+>
+> CI ma dwa joby, bo dwa toolchainy. Między nimi jest sprawdzenie, którego żaden nie zrobiłby sam:
+> job Pythona regeneruje `web/openapi.json` z aplikacji i porównuje z zacommitowanym, job Node'a robi to
+> samo dla `web/src/api/schema.d.ts` względem tego dokumentu. Razem **nie da się zmienić modelu Pydantic
+> i zostawić frontendu z nieaktualnymi typami** — rozjazd psuje build, zamiast psuć ekran u użytkownika.
 - **NFR-5 Aspekty prawne:** brak scrapingu Indeed/LinkedIn (naruszenie regulaminów); dane pochodzą z ręcznego wprowadzania, z publicznych datasetów (np. zbiory ogłoszeń z Kaggle) albo z odczytu pojedynczej strony ogłoszenia w serwisie z allowlisty — na warunkach opisanych niżej.
 
 > **Zmiana 2026-09-07.** Wymaganie mówiło „brak scrapingu" i pod tym hasłem mieściły się dwie różne rzeczy:
@@ -191,13 +205,24 @@ sessions N—1 resumes (opcjonalnie)
 ## 6. Architektura wysokopoziomowa
 
 ```
-[Web UI] → [FastAPI]
-              ├── Auth (JWT)
-              ├── Serwis ingestion (LangChain) → chunking → Redis cache → API embeddingów → pgvector
-              ├── Serwis generacji → API LLM (prompt = ogłoszenie + CV + prompt z Langfuse)
-              └── Mock interview (LangGraph) → stanowy graf rozmowy
-                        ↓                ↘
-                  [PostgreSQL + pgvector]  [Langfuse — trace'y, koszty, ewaluacja]
+Przeglądarka                              Klient deweloperski
+     │                                          │
+     ▼                                          │
+[nginx / Vite]                                  │
+  /     → statyki React                         │
+  /api  → ↓  (jeden origin: ciasteczka          │
+             httpOnly bez CORS-a)               │
+             │                                  │
+             └──────────→ [FastAPI] ←───────────┘
+                              │        Streamlit, nagłówek Bearer
+                              │
+     ├── Auth (JWT: ciasteczko httpOnly albo nagłówek Bearer)
+     ├── Serwis ingestion (LangChain) → chunking → Redis cache → API embeddingów → pgvector
+     │      źródła: wklejony tekst | plik PDF/DOCX/TXT | URL ogłoszenia (allowlista, NFR-5)
+     ├── Serwis generacji → API LLM (prompt = ogłoszenie + CV + prompt z Langfuse)
+     └── Mock interview (LangGraph) → stanowy graf rozmowy   [etap 4, jeszcze nie istnieje]
+                    ↓                ↘
+              [PostgreSQL + pgvector]  [Langfuse — trace'y, koszty, ewaluacja]
 ```
 
 ## 7. Roadmapa
@@ -210,3 +235,24 @@ sessions N—1 resumes (opcjonalnie)
 | 4 | Tryb mock interview na LangGraph (FR-4) | Sesje konwersacyjne (graf stanowy) |
 | 5 | Eksport + panel admina (FR-5, FR-6) | Gotowe MVP |
 | 6 (bonus) | Rozmowy głosowe (speech-to-text), trendy wynagrodzeń | Cele dodatkowe |
+
+> **Zmiana 2026-09-07. Etap 4 został świadomie przeskoczony.** Po zamknięciu etapu 3 powstał klient
+> w przeglądarce (React), którego nie było ani w roadmapie, ani w tabeli stacku — architektura wysokopoziomowa
+> wspominała tylko `[Web UI]`, a `ui/` jest w swoim docstringu opisany jako narzędzie deweloperskie, nie
+> produkt.
+>
+> **Powód.** API pod FR-1, FR-2 i FR-3 jest skończone i stabilne, więc frontend ma na czym stanąć już teraz.
+> FR-4 zmienia natomiast kształt interfejsu na tyle mocno — rozmowa ze stanem, pętla pytanie/odpowiedź,
+> strumieniowanie — że zbudowanie ekranów przed nim oznaczałoby zbudowanie ich dwa razy. Odwrotna kolejność,
+> czyli mock interview przed jakimkolwiek interfejsem, dałaby funkcję, której nie da się użyć bez curla.
+>
+> **Cena, spisana świadomie.** Klient pokrywa FR-1, FR-2, FR-3 i przeglądanie bazy z FR-6. **Nie ma w nim
+> miejsca na FR-4** i nie było próby jego przewidzenia — dorobienie mock interview będzie wymagało nowego
+> ekranu i najpewniej innego kształtu warstwy HTTP (strumieniowanie zamiast żądanie-odpowiedź). To jest dług
+> zaciągnięty z otwartymi oczami, nie przeoczenie.
+>
+> **Co dalej.** Wracamy do etapu 4, potem 5. Kolejność w tabeli obowiązuje nadal; ten wpis jest jednorazowym
+> wyjątkiem, a nie zniesieniem zasady.
+>
+> Klient w przeglądarce nie zastępuje `ui/`. Streamlit zostaje jako narzędzie do ręcznego sprawdzania API —
+> nic nie kosztuje, a daje działający punkt odniesienia, gdy React jest w remoncie.
