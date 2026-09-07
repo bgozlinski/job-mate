@@ -1,0 +1,11 @@
+node_modules/
+dist/
+
+# `tsc -b` writes one of these per project. The two named in tsconfig.app.json
+# and tsconfig.node.json land under node_modules; the solution file's own
+# lands here.
+*.tsbuildinfo
+
+# Vitest and Vite caches.
+.vite/
+coverage/
