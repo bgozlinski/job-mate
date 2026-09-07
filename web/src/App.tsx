@@ -5,6 +5,7 @@ import { RequireAuth } from './auth/RequireAuth'
 import { Documents } from './routes/Documents'
 import { Layout } from './routes/Layout'
 import { Login } from './routes/Login'
+import { Resumes } from './routes/Resumes'
 
 /**
  * The route table. Deliberately without a router of its own: the browser gets
@@ -23,6 +24,7 @@ export function App(): ReactElement {
               here. */}
           <Route index element={<Navigate to="/documents" replace />} />
           <Route path="/documents" element={<Documents />} />
+          <Route path="/resumes" element={<Resumes />} />
         </Route>
       </Route>
     </Routes>

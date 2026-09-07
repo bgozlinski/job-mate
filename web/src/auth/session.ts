@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
 
 import { api } from '../api/client'
+import { detailOf } from '../api/errors'
 import type { components } from '../api/schema'
 
 export type User = components['schemas']['UserRead']
@@ -63,20 +64,10 @@ async function submit(
     // account, deliberately and identically, so that nobody can use this form
     // to find out which addresses are registered. Passing its message through
     // rather than inventing one keeps that property.
-    throw new Error(messageOf(error, response.status))
+    throw new Error(
+      detailOf(error) ?? `Request failed (${String(response.status)})`,
+    )
   }
-}
-
-function messageOf(error: unknown, status: number): string {
-  if (typeof error === 'object' && error !== null && 'detail' in error) {
-    const { detail } = error
-
-    if (typeof detail === 'string') {
-      return detail
-    }
-  }
-
-  return `Request failed (${String(status)})`
 }
 
 /**

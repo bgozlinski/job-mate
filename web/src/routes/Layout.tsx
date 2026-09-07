@@ -19,6 +19,7 @@ export function Layout(): ReactElement {
 
         <nav aria-label="Main">
           <NavLink to="/documents">Job postings</NavLink>
+          <NavLink to="/resumes">Resumes</NavLink>
         </nav>
 
         <p>

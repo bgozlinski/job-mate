@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
 
 import { api } from './client'
+import { detailOf } from './errors'
 import type { components } from './schema'
 
 export type Document = components['schemas']['DocumentRead']
@@ -46,32 +47,6 @@ export function useDocuments(shown: number): UseQueryResult<Document[]> {
       return data
     },
   })
-}
-
-function detailOf(error: unknown): string | null {
-  if (typeof error === 'object' && error !== null && 'detail' in error) {
-    const { detail } = error
-
-    if (typeof detail === 'string') {
-      return detail
-    }
-
-    // FastAPI's validation errors are a list of objects; the first one's
-    // message is the useful half, and the rest names the field internally.
-    if (Array.isArray(detail)) {
-      const first: unknown = detail[0]
-
-      if (typeof first === 'object' && first !== null && 'msg' in first) {
-        const { msg } = first
-
-        if (typeof msg === 'string') {
-          return msg
-        }
-      }
-    }
-  }
-
-  return null
 }
 
 /**
