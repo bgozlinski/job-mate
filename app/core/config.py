@@ -75,7 +75,37 @@ class Settings(BaseSettings):
     jwt_secret_key: SecretStr
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 1440
+    """How long the token handed back in the login response stays valid.
+
+    Long, because the client that reads it -- the Streamlit dev client --
+    keeps it in session state and has no way to renew it. Shortening this
+    would not make that client safer, only log it out more often.
+    """
     refresh_token_expire_days: int = 7
+    """How long a browser session survives without the password being typed
+    again. This is what the refresh token actually buys: the access cookie
+    below is renewed silently for a week, and after that the user logs in."""
+
+    cookie_access_expire_minutes: int = 15
+    """The same credential as access_token_expire_minutes, over a channel
+    that can renew itself, so it is short instead of long.
+
+    Two lifetimes for one kind of token is worth justifying. A browser gets
+    the token in an httpOnly cookie and can call /auth/refresh without the
+    user noticing; a Bearer client cannot, and would simply stop working.
+    The difference is in what the client can do, not in what the token is.
+
+    The honest measure of what this buys: with no revocation list anywhere
+    in the application, a short access token narrows the window between
+    deleting an account and the deletion taking effect, and little else. It
+    is not what makes the cookie safe -- httpOnly and one origin are.
+    """
+    cookie_secure: bool = False
+    """Whether auth cookies carry the Secure flag. Must be true in
+    production and false in development, and there is no value that is
+    right in both: Secure over plain http means the browser silently
+    discards the cookie, and no Secure over https means it travels in the
+    clear."""
 
     @property
     def database_url(self) -> URL:

@@ -58,6 +58,31 @@ def test_complete_env_file_parses(tmp_path: Path) -> None:
     assert settings.openai_api_key is None
 
 
+def test_the_cookie_settings_have_development_defaults(tmp_path: Path) -> None:
+    """A .env that says nothing about cookies must still start locally.
+
+    Secure defaults to false because the alternative is a browser dropping
+    the login cookie over http with no error anywhere -- and the deployment
+    that needs it true is the one that has somebody configuring it.
+    """
+    settings = Settings(_env_file=write_env(tmp_path))
+
+    assert settings.cookie_secure is False
+    assert settings.cookie_access_expire_minutes < settings.access_token_expire_minutes
+
+
+def test_the_cookie_settings_are_read_from_the_file(tmp_path: Path) -> None:
+    minutes = 5
+    env_file = write_env(
+        tmp_path, f"COOKIE_SECURE=true\nCOOKIE_ACCESS_EXPIRE_MINUTES={minutes}\n"
+    )
+
+    settings = Settings(_env_file=env_file)
+
+    assert settings.cookie_secure is True
+    assert settings.cookie_access_expire_minutes == minutes
+
+
 def test_misspelt_key_in_env_file_fails_at_startup(tmp_path: Path) -> None:
     """A typo has to name itself instead of surfacing as a 503 later.
 

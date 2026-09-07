@@ -216,6 +216,13 @@ async def client(
     The extractors and the judge are None by default: that is the
     configuration CI runs in, and a test that wants requirements read or
     verdicts passed supplies its own.
+
+    One thing to know about this client: it keeps a cookie jar, and logging
+    in sets session cookies. A request that leaves out the Authorization
+    header is therefore still authenticated if anything logged in earlier in
+    the same test -- which is what a browser does, and what the cookie
+    session is for. A test that means "anonymous" has to empty the jar with
+    client.cookies.clear(); leaving out the header is no longer enough.
     """
 
     async def override_get_db() -> AsyncIterator[AsyncSession]:

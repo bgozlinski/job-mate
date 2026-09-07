@@ -120,6 +120,11 @@ async def test_an_unknown_document_is_not_found(client, owner):
 async def test_matching_requires_a_token(client, owner):
     resume_id = await create_resume(client, owner)
     document_id = await create_document(client, owner)
+    # The owner fixture logged in, and logging in now also sets session
+    # cookies, which httpx keeps in its jar exactly as a browser would. So
+    # omitting the Authorization header no longer makes a request
+    # anonymous -- emptying the jar is what does.
+    client.cookies.clear()
 
     response = await client.post(
         f"/resumes/{resume_id}/match", json={"document_id": document_id}

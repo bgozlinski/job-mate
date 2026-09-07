@@ -13,6 +13,7 @@ from redis.exceptions import RedisError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.auth.cookies import ACCESS_COOKIE
 from app.auth.security import decode_access_token
 from app.core.config import Settings, get_settings
 from app.core.prompts import PromptStore
@@ -24,7 +25,15 @@ from app.services.matching import SuggestionWriter
 from app.services.rate_limit import RateLimit, consume
 from app.services.requirements import SkillExtractor
 
-bearer_scheme = HTTPBearer()
+bearer_scheme = HTTPBearer(auto_error=False)
+"""auto_error=False because the header is no longer the only way in.
+
+With the default, a request carrying a valid session cookie and no
+Authorization header is rejected by the scheme before any of the code below
+runs. Turning it off moves the decision here, where both places a token can
+arrive are known -- and the 401 it used to raise is raised below instead,
+with the same status and the same WWW-Authenticate header.
+"""
 
 
 async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
@@ -44,15 +53,27 @@ async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
 
 
 async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     session: Annotated[AsyncSession, Depends(get_db)],
 ) -> User:
-    """Resolve the bearer token to the account that owns it.
+    """Resolve the presented access token to the account that owns it.
 
-    Every way of failing answers with the same 401: a bad signature, an
-    expired or malformed token, a subject that is not a uuid, and a token
-    whose account has since been deleted. Telling them apart would report to
-    an attacker how far they got.
+    Two clients, two places the token can be. A Bearer client sends a header;
+    a browser sends an httpOnly cookie it cannot read (see app.auth.cookies).
+    The header wins when both are present, because a caller who took the
+    trouble to set one means to use it, and because that is the order every
+    existing test and the Streamlit client already rely on.
+
+    Only an access token is accepted. A refresh token is signed by the same
+    key and names the same subject, and without the type claim checked in
+    decode_access_token it would authenticate requests for a week -- which
+    would make the short life of the access cookie decorative.
+
+    Every way of failing answers with the same 401: no token at all, a bad
+    signature, an expired or malformed token, a token of the wrong type, a
+    subject that is not a uuid, and a token whose account has since been
+    deleted. Telling them apart would report to an attacker how far they got.
 
     The account is loaded on every request rather than trusted from the
     claims, so a deleted user cannot keep working until their token expires.
@@ -62,9 +83,17 @@ async def get_current_user(
         detail="Invalid or expired token",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    presented = (
+        credentials.credentials
+        if credentials is not None
+        else request.cookies.get(ACCESS_COOKIE)
+    )
+
+    if presented is None:
+        raise invalid_token
 
     try:
-        claims = decode_access_token(credentials.credentials)
+        claims = decode_access_token(presented)
         user_id = uuid.UUID(claims["sub"])
     except (jwt.InvalidTokenError, ValueError) as exc:
         raise invalid_token from exc
