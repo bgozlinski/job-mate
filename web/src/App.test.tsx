@@ -28,8 +28,15 @@ function signedOut(): void {
   )
 }
 
+/** The knowledge base, empty. Signing in lands on it, so every test that
+ *  gets past the login screen needs it answered. */
+function emptyKnowledgeBase(): void {
+  server.use(http.get('/api/documents', () => HttpResponse.json([])))
+}
+
 function signedIn(): void {
   server.use(http.get('/api/auth/me', () => HttpResponse.json(USER)))
+  emptyKnowledgeBase()
 }
 
 test('a visitor with no session is sent to the login screen', async () => {
@@ -67,6 +74,7 @@ test('logging in replaces the form with the application', async () => {
       return HttpResponse.json({ access_token: 'x', token_type: 'bearer' })
     }),
   )
+  emptyKnowledgeBase()
 
   show('/')
   await userEvent.type(await screen.findByLabelText('Email'), USER.email)
@@ -111,6 +119,7 @@ test('logging out returns to the login screen', async () => {
       return new HttpResponse(null, { status: 204 })
     }),
   )
+  emptyKnowledgeBase()
 
   show('/')
   await userEvent.click(await screen.findByRole('button', { name: 'Log out' }))

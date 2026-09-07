@@ -1,8 +1,9 @@
 import type { ReactElement } from 'react'
-import { Route, Routes } from 'react-router'
+import { Navigate, Route, Routes } from 'react-router'
 
 import { RequireAuth } from './auth/RequireAuth'
-import { Home } from './routes/Home'
+import { Documents } from './routes/Documents'
+import { Layout } from './routes/Layout'
 import { Login } from './routes/Login'
 
 /**
@@ -16,7 +17,13 @@ export function App(): ReactElement {
       <Route path="/login" element={<Login />} />
 
       <Route element={<RequireAuth />}>
-        <Route path="/" element={<Home />} />
+        <Route element={<Layout />}>
+          {/* The knowledge base is where the application starts: FR-3 has the
+              user pick a posting, and there is nothing to pick until one is
+              here. */}
+          <Route index element={<Navigate to="/documents" replace />} />
+          <Route path="/documents" element={<Documents />} />
+        </Route>
       </Route>
     </Routes>
   )
