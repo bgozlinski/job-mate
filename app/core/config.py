@@ -67,6 +67,31 @@ class Settings(BaseSettings):
     knowledge base lock a user out of the feature they came for.
     """
 
+    scraper_allowed_hosts: list[str] = ["justjoin.it"]
+    """The only hosts a posting may be read from (NFR-5, NFR-1).
+
+    An allowlist rather than a blocklist of private addresses, because it
+    answers both questions at once. Legally it is the record of which sites
+    were checked against their robots.txt, so adding one stays a decision a
+    person makes. Technically it is the only airtight defence against SSRF:
+    the application runs beside Postgres, Redis and Langfuse on a Docker
+    network, and a caller who can name the address the server fetches can
+    otherwise reach all three -- or the cloud metadata endpoint.
+
+    Matched against the whole host, never as a suffix: justjoin.it.example.com
+    ends with "justjoin.it" and must not pass. Subdomains are listed by name.
+
+    A list, so pydantic-settings expects JSON in .env and not a comma
+    separated string: SCRAPER_ALLOWED_HOSTS=["justjoin.it","pracuj.pl"].
+    """
+    scraper_timeout_seconds: float = 10.0
+    scraper_max_bytes: int = 2 * 1024 * 1024
+    scraper_max_redirects: int = 3
+    """What one fetch may cost. The pages seen so far weigh about a megabyte,
+    so the cap is a factor of two rather than of a hundred -- it exists to
+    bound what a hostile or broken response can spend, and a limit far above
+    anything real does not do that."""
+
     langfuse_public_key: str | None = None
     langfuse_secret_key: SecretStr | None = None
     langfuse_host: str = "http://langfuse-web:3000"

@@ -63,6 +63,24 @@ class DocumentUpload(BaseModel):
         return json.loads(value)
 
 
+class DocumentFromUrl(BaseModel):
+    """Payload for ingesting the posting published at an address (FR-1).
+
+    No content and no title: both are read off the page. Which addresses are
+    read at all is a question of policy, answered by the allowlist in
+    Settings rather than by this schema -- HttpUrl only proves the string is
+    a URL, and http://169.254.169.254/ is a perfectly good one (NFR-1).
+
+    metadata is here for the same reason the other two routes have it: to
+    label a posting with the role or seniority a listing is filtered by. What
+    the caller supplies wins over what was scraped, because a caller who
+    bothers to send a key means to correct what the page said.
+    """
+
+    url: HttpUrl
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class DocumentRead(BaseModel):
     """Public view of a stored posting.
 
