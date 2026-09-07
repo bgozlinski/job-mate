@@ -20,6 +20,8 @@ export function Layout(): ReactElement {
         <nav aria-label="Main">
           <NavLink to="/documents">Job postings</NavLink>
           <NavLink to="/resumes">Resumes</NavLink>
+          <NavLink to="/match">Match</NavLink>
+          <NavLink to="/matches">History</NavLink>
         </nav>
 
         <p>

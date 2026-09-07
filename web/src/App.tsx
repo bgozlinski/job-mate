@@ -3,6 +3,8 @@ import { Navigate, Route, Routes } from 'react-router'
 
 import { RequireAuth } from './auth/RequireAuth'
 import { Documents } from './routes/Documents'
+import { History, MatchDetail } from './routes/History'
+import { Match } from './routes/Match'
 import { Layout } from './routes/Layout'
 import { Login } from './routes/Login'
 import { Resumes } from './routes/Resumes'
@@ -25,6 +27,9 @@ export function App(): ReactElement {
           <Route index element={<Navigate to="/documents" replace />} />
           <Route path="/documents" element={<Documents />} />
           <Route path="/resumes" element={<Resumes />} />
+          <Route path="/match" element={<Match />} />
+          <Route path="/matches" element={<History />} />
+          <Route path="/matches/:matchId" element={<MatchDetail />} />
         </Route>
       </Route>
     </Routes>
