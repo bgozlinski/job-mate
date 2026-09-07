@@ -3,6 +3,7 @@ import type { ReactElement, SyntheticEvent } from 'react'
 import { Navigate, useLocation } from 'react-router'
 
 import { useLogin, useRegister, useSession } from '../auth/session'
+import { Alert, Button, Field } from '../ui'
 
 interface FromState {
   from?: string
@@ -53,47 +54,68 @@ export function Login(): ReactElement {
   }
 
   return (
-    <main>
-      <h1>JobMate</h1>
+    <main className="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center gap-8 p-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">
+          Job<span className="text-accent">Mate</span>
+        </h1>
+        <p className="mt-1 text-sm text-ink-faint">
+          Measure a resume against the job you want.
+        </p>
+      </div>
 
-      <form onSubmit={onSubmit}>
-        <label htmlFor="email">Email</label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          required
-          value={email}
-          onChange={(event) => {
-            setEmail(event.target.value)
-          }}
-        />
+      <form onSubmit={onSubmit} className="flex flex-col gap-4">
+        <Field id="email" label="Email">
+          {(className, id) => (
+            <input
+              id={id}
+              name="email"
+              type="email"
+              autoComplete="email"
+              required
+              className={className}
+              value={email}
+              onChange={(event) => {
+                setEmail(event.target.value)
+              }}
+            />
+          )}
+        </Field>
 
-        <label htmlFor="password">Password</label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(event) => {
-            setPassword(event.target.value)
-          }}
-        />
+        <Field id="password" label="Password">
+          {(className, id) => (
+            <input
+              id={id}
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              className={className}
+              value={password}
+              onChange={(event) => {
+                setPassword(event.target.value)
+              }}
+            />
+          )}
+        </Field>
 
-        <button type="submit" name="action" value="login" disabled={pending}>
-          Log in
-        </button>
-        <button type="submit" name="action" value="register" disabled={pending}>
-          Create an account
-        </button>
+        <div className="mt-2 flex flex-col gap-2">
+          <Button type="submit" name="action" value="login" disabled={pending}>
+            Log in
+          </Button>
+          <Button
+            type="submit"
+            name="action"
+            value="register"
+            variant="secondary"
+            disabled={pending}
+          >
+            Create an account
+          </Button>
+        </div>
       </form>
 
-      {/* role="alert" so a screen reader announces a failed login, which is
-          otherwise a silent change to a page the user is still looking at. */}
-      {failure ? <p role="alert">{failure.message}</p> : null}
+      {failure ? <Alert>{failure.message}</Alert> : null}
     </main>
   )
 }

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
 
 import { App } from './App'
+import './styles.css'
 import { Providers, createQueryClient } from './providers'
 
 const container = document.getElementById('root')

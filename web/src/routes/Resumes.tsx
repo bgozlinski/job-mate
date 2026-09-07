@@ -10,8 +10,12 @@ import {
   useResumes,
   useUploadResume,
 } from '../api/resumes'
+import { Alert, Button, Card, Field, Muted, PageTitle } from '../ui'
 
 const UPLOAD_TYPES = '.pdf,.docx,.txt,.md'
+
+const SUMMARY =
+  'cursor-pointer text-sm font-medium text-ink-soft hover:text-accent'
 
 function TargetRole({
   id,
@@ -23,17 +27,21 @@ function TargetRole({
   onChange: (next: string) => void
 }): ReactElement {
   return (
-    <>
-      <label htmlFor={id}>Target role (optional)</label>
-      <input
-        id={id}
-        type="text"
-        maxLength={MAX_TARGET_ROLE_LENGTH}
-        placeholder="Backend developer"
-        value={value}
-        onChange={(event) => { onChange(event.target.value) }}
-      />
-    </>
+    <Field id={id} label="Target role (optional)">
+      {(className, fieldId) => (
+        <input
+          id={fieldId}
+          type="text"
+          maxLength={MAX_TARGET_ROLE_LENGTH}
+          placeholder="Backend developer"
+          className={className}
+          value={value}
+          onChange={(event) => {
+            onChange(event.target.value)
+          }}
+        />
+      )}
+    </Field>
   )
 }
 
@@ -66,23 +74,34 @@ function AddByFile(): ReactElement {
 
   return (
     // Named so the two forms on this page are distinguishable: both carry a
-    // "Target role" field, and an unnamed form is not a landmark, so a
-    // screen reader would announce the same label twice with nothing to
-    // tell them apart.
-    <form aria-label="Upload a resume" onSubmit={onSubmit}>
-      <label htmlFor={`resume-file-${String(generation)}`}>
-        Resume file (PDF, DOCX or text)
-      </label>
-      <input
+    // "Target role" field, and an unnamed form is not a landmark, so a screen
+    // reader would announce the same label twice with nothing to tell them
+    // apart.
+    <form
+      aria-label="Upload a resume"
+      onSubmit={onSubmit}
+      className="flex flex-col gap-3"
+    >
+      <Field
         id={`resume-file-${String(generation)}`}
-        key={generation}
-        type="file"
-        accept={UPLOAD_TYPES}
-        // Deliberately not `required`: the button below is disabled without a
-        // file, and jsdom's constraint validation does not see files set by a
-        // test, so the attribute would make this path untestable.
-        onChange={(event) => { setFile(event.target.files?.[0] ?? null) }}
-      />
+        label="Resume file (PDF, DOCX or text)"
+      >
+        {(className, id) => (
+          <input
+            id={id}
+            key={generation}
+            type="file"
+            accept={UPLOAD_TYPES}
+            // Deliberately not `required`: the button below is disabled without
+            // a file, and jsdom's constraint validation does not see files set
+            // by a test, so the attribute would make this path untestable.
+            className={`${className} file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-sm file:text-accent-strong`}
+            onChange={(event) => {
+              setFile(event.target.files?.[0] ?? null)
+            }}
+          />
+        )}
+      </Field>
 
       <TargetRole
         id={`resume-file-role-${String(generation)}`}
@@ -90,11 +109,13 @@ function AddByFile(): ReactElement {
         onChange={setTargetRole}
       />
 
-      <button type="submit" disabled={upload.isPending || !file}>
-        {upload.isPending ? 'Reading the resume…' : 'Upload'}
-      </button>
+      <div className="flex">
+        <Button type="submit" disabled={upload.isPending || !file}>
+          {upload.isPending ? 'Reading the resume…' : 'Upload'}
+        </Button>
+      </div>
 
-      {upload.error ? <p role="alert">{upload.error.message}</p> : null}
+      {upload.error ? <Alert>{upload.error.message}</Alert> : null}
     </form>
   )
 }
@@ -124,29 +145,42 @@ function AddByText(): ReactElement {
   }
 
   return (
-    <form aria-label="Paste a resume" onSubmit={onSubmit}>
-      <label htmlFor="resume-text">Resume text</label>
-      <textarea
-        id="resume-text"
-        rows={10}
-        required
-        value={content}
-        onChange={(event) => { setContent(event.target.value) }}
-      />
+    <form
+      aria-label="Paste a resume"
+      onSubmit={onSubmit}
+      className="flex flex-col gap-3 pt-3"
+    >
+      <Field id="resume-text" label="Resume text">
+        {(className, id) => (
+          <textarea
+            id={id}
+            rows={10}
+            required
+            className={`${className} font-mono text-xs`}
+            value={content}
+            onChange={(event) => {
+              setContent(event.target.value)
+            }}
+          />
+        )}
+      </Field>
 
       <TargetRole id="resume-text-role" value={targetRole} onChange={setTargetRole} />
 
       {tooLong ? (
-        <p role="alert">
-          The text is longer than {MAX_RESUME_LENGTH.toLocaleString('en')} characters.
-        </p>
+        <Alert>
+          The text is longer than {MAX_RESUME_LENGTH.toLocaleString('en')}{' '}
+          characters.
+        </Alert>
       ) : null}
 
-      <button type="submit" disabled={create.isPending || tooLong}>
-        {create.isPending ? 'Storing…' : 'Save'}
-      </button>
+      <div className="flex">
+        <Button type="submit" disabled={create.isPending || tooLong}>
+          {create.isPending ? 'Storing…' : 'Save'}
+        </Button>
+      </div>
 
-      {create.error ? <p role="alert">{create.error.message}</p> : null}
+      {create.error ? <Alert>{create.error.message}</Alert> : null}
     </form>
   )
 }
@@ -159,47 +193,67 @@ function Stored({ resume }: { resume: Resume }): ReactElement {
 
   return (
     <li>
-      <h3>{name}</h3>
-      <p>
-        <time dateTime={resume.created_at}>{created.toLocaleString()}</time>
-        {' · '}
-        <span>{resume.target_role ?? 'no target role'}</span>
-        {' · '}
-        <span>{resume.content.length.toLocaleString('en')} characters</span>
-      </p>
+      <Card className="flex flex-col gap-2">
+        <h3 className="font-medium">{name}</h3>
+        <p className="text-sm text-ink-faint">
+          <time dateTime={resume.created_at}>{created.toLocaleString()}</time>
+          {' · '}
+          <span>{resume.target_role ?? 'no target role'}</span>
+          {' · '}
+          <span>{resume.content.length.toLocaleString('en')} characters</span>
+        </p>
 
-      {/* Behind a click on purpose: a resume can be a hundred thousand
-          characters, and drawing every one of them for every row makes the
-          page crawl by the third one. */}
-      <details>
-        <summary>Show text</summary>
-        <pre>{resume.content}</pre>
-      </details>
+        {/* Behind a click on purpose: a resume can be a hundred thousand
+            characters, and drawing every one of them for every row makes the
+            page crawl by the third one. */}
+        <details>
+          <summary className={SUMMARY}>Show text</summary>
+          <pre className="mt-2 max-h-72 overflow-auto rounded-lg bg-surface p-3 font-mono text-xs whitespace-pre-wrap text-ink-soft">
+            {resume.content}
+          </pre>
+        </details>
 
-      {/* Two presses rather than a native confirm(): deleting is the one
-          irreversible thing on this page, and window.confirm is a dialog
-          jsdom does not implement, so a guard built on it could not be
-          covered by a test. */}
-      {confirming ? (
-        <>
-          <button
-            type="button"
-            disabled={remove.isPending}
-            onClick={() => { remove.mutate(resume.id) }}
-          >
-            {remove.isPending ? 'Deleting…' : `Really delete ${name}`}
-          </button>
-          <button type="button" onClick={() => { setConfirming(false) }}>
-            Cancel
-          </button>
-        </>
-      ) : (
-        <button type="button" onClick={() => { setConfirming(true) }}>
-          Delete {name}
-        </button>
-      )}
+        {/* Two presses rather than a native confirm(): deleting is the one
+            irreversible thing on this page, and window.confirm is a dialog
+            jsdom does not implement, so a guard built on it could not be
+            covered by a test. */}
+        <div className="flex gap-2">
+          {confirming ? (
+            <>
+              <Button
+                type="button"
+                disabled={remove.isPending}
+                onClick={() => {
+                  remove.mutate(resume.id)
+                }}
+              >
+                {remove.isPending ? 'Deleting…' : `Really delete ${name}`}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setConfirming(false)
+                }}
+              >
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <Button
+              type="button"
+              variant="quiet"
+              onClick={() => {
+                setConfirming(true)
+              }}
+            >
+              Delete {name}
+            </Button>
+          )}
+        </div>
 
-      {remove.error ? <p role="alert">{remove.error.message}</p> : null}
+        {remove.error ? <Alert>{remove.error.message}</Alert> : null}
+      </Card>
     </li>
   )
 }
@@ -210,27 +264,37 @@ export function Resumes(): ReactElement {
 
   return (
     <>
-      <section aria-labelledby="add-resume">
-        <h2 id="add-resume">Add a resume</h2>
+      <section aria-labelledby="add-resume" className="flex flex-col gap-4">
+        <PageTitle>
+          <span id="add-resume">Add a resume</span>
+        </PageTitle>
 
-        <AddByFile />
+        <Card className="flex max-w-2xl flex-col gap-2">
+          <AddByFile />
 
-        <details>
-          <summary>…or paste the text</summary>
-          <AddByText />
-        </details>
+          <details className="border-t border-line pt-3">
+            <summary className={SUMMARY}>…or paste the text</summary>
+            <AddByText />
+          </details>
+        </Card>
       </section>
 
-      <section aria-labelledby="your-resumes">
-        <h2 id="your-resumes">Your resumes</h2>
-        <p>Only yours: nobody else can read or delete them.</p>
+      <section aria-labelledby="your-resumes" className="flex flex-col gap-4">
+        <div>
+          <PageTitle>
+            <span id="your-resumes">Your resumes</span>
+          </PageTitle>
+          <Muted>Only yours: nobody else can read or delete them.</Muted>
+        </div>
 
-        {resumes.isPending ? <p>Loading…</p> : null}
-        {resumes.error ? <p role="alert">{resumes.error.message}</p> : null}
+        {resumes.isPending ? <Muted>Loading…</Muted> : null}
+        {resumes.error ? <Alert>{resumes.error.message}</Alert> : null}
 
-        {resumes.data?.length === 0 ? <p>No resumes stored yet.</p> : null}
+        {resumes.data?.length === 0 ? (
+          <Muted>No resumes stored yet.</Muted>
+        ) : null}
 
-        <ul>
+        <ul className="flex flex-col gap-3">
           {resumes.data?.map((resume) => (
             <Stored key={resume.id} resume={resume} />
           ))}

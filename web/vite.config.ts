@@ -1,4 +1,5 @@
 /// <reference types="vitest/config" />
+import tailwind from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
@@ -17,7 +18,7 @@ const API = process.env.JOBMATE_API_URL ?? 'http://localhost:8000'
 // serves /auth, /documents, /resumes at the root. The prefix exists to tell
 // this server which requests are not its own.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwind()],
   server: {
     host: true,
     port: 5173,
