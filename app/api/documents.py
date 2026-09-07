@@ -27,6 +27,7 @@ from app.api.deps import (
     get_current_user,
     get_db,
     get_embedding_model,
+    get_posting_source,
     get_requirement_extractor,
     rate_limited,
 )
@@ -38,12 +39,19 @@ from app.schemas.document import (
     MAX_CONTENT_LENGTH,
     MAX_TITLE_LENGTH,
     DocumentCreate,
+    DocumentFromUrl,
     DocumentRead,
     DocumentUpload,
 )
 from app.services.embeddings import EmbeddingModel
 from app.services.ingestion import EmptyDocumentError, SourceDocument, ingest_document
+from app.services.jobposting import (
+    NoJobPostingError,
+    ScrapedPosting,
+    parse_job_posting,
+)
 from app.services.requirements import SkillExtractor
+from app.services.scraping import PostingSource, ScrapeError, SourceUnavailableError
 
 router = APIRouter(
     prefix="/documents",
@@ -58,10 +66,13 @@ Session = Annotated[AsyncSession, Depends(get_db)]
 Cache = Annotated[Redis, Depends(get_cache)]
 Embeddings = Annotated[EmbeddingModel, Depends(get_embedding_model)]
 Extractor = Annotated[SkillExtractor | None, Depends(get_requirement_extractor)]
+Posting = Annotated[PostingSource, Depends(get_posting_source)]
 
 Ingesting = Depends(rate_limited("ingest", lambda s: s.ingest_rate_limit))
-"""Both ingestion routes share one budget: they cost the same embeddings
-calls, and which shape the source arrived in does not change the bill."""
+"""All three ingestion routes share one budget: they cost the same embeddings
+calls, and which shape the source arrived in -- a paste, a file, an address --
+does not change the bill. The fetch the third one performs is free, and
+counting it separately would only let a user spend the same money twice."""
 
 DEFAULT_PAGE_SIZE = 20
 MAX_PAGE_SIZE = 100
@@ -251,6 +262,93 @@ async def upload_document(  # noqa: PLR0913, PLR0917 -- six are dependencies
         extractor,
         response,
     )
+
+
+@router.post("/from-url", dependencies=[Ingesting])
+async def ingest_from_url(  # noqa: PLR0913, PLR0917 -- six are dependencies
+    payload: DocumentFromUrl,
+    user: CurrentUser,
+    session: Session,
+    cache: Cache,
+    model: Embeddings,
+    extractor: Extractor,
+    source: Posting,
+    response: Response,
+) -> DocumentRead:
+    """Ingest the posting published at an address (FR-1).
+
+    The third way into the same knowledge base, after a paste and a file, and
+    it answers exactly like them: 201 for a new posting, 200 with the
+    existing one for a duplicate, the same DocumentRead either way. Nothing
+    below _store knows the text arrived over the network.
+
+    Which addresses are read is settled by the allowlist rather than here --
+    see NFR-5 for why the list is closed, and app.services.scraping for the
+    request forgery it also prevents (NFR-1).
+
+    Parsing runs on the event loop rather than in a worker thread, which is
+    the opposite of what the upload route does with a PDF. The measurement is
+    the reason: a megabyte of markup takes about ten milliseconds here,
+    because HTMLParser skips script bodies wholesale, while a PDF of the same
+    size takes hundreds. Below a certain cost the hand-off is the expensive
+    part.
+
+    The fetch happens inside the trace, not before it, so a board that took
+    eight seconds to answer is visible as what made the ingestion slow
+    (NFR-2). It costs no money, which is why the rate limit it shares with
+    the other two routes is still about embeddings.
+    """
+    with traced("ingest", user.id, url=str(payload.url)):
+        scraped = await _scrape(source, str(payload.url))
+
+        return await _store(
+            SourceDocument(
+                content=scraped.content,
+                title=scraped.title,
+                source_url=str(payload.url),
+                metadata=scraped.metadata | payload.metadata,
+            ),
+            session,
+            cache,
+            model,
+            extractor,
+            response,
+        )
+
+
+async def _scrape(source: PostingSource, url: str) -> ScrapedPosting:
+    """Read the posting at an address, turning every failure into a status.
+
+    The three that mean "your address is wrong" -- policy refused it, the
+    page could not be read, the page is not a posting -- answer 422 with the
+    message they carry, because each tells the caller something different to
+    do. Only a site that could not be reached is a 502: nothing is wrong with
+    what the caller asked for, and telling them otherwise sends them looking
+    for a mistake they did not make.
+
+    The length limit the JSON route gets from its schema is applied by hand
+    for the same reason the upload route does it: a page can publish a
+    description longer than MAX_CONTENT_LENGTH and nothing else would stop it.
+    """
+    try:
+        page = await source.fetch(url)
+        scraped = parse_job_posting(page)
+    except SourceUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+        ) from exc
+    except (ScrapeError, NoJobPostingError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+
+    if len(scraped.content) > MAX_CONTENT_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"The posting is longer than {MAX_CONTENT_LENGTH} characters",
+        )
+
+    return scraped
 
 
 async def _ingest(  # noqa: PLR0913, PLR0917 -- five are dependencies

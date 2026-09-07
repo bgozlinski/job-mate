@@ -32,9 +32,20 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 ## 3. Wymagania funkcjonalne
 
 ### FR-1. Ingestion dokumentów
-- System przyjmuje **wyłącznie ogłoszenia o pracę** (wklejony tekst albo plik PDF / DOCX / TXT).
+- System przyjmuje **wyłącznie ogłoszenia o pracę**, na trzy sposoby: wklejony tekst, plik PDF / DOCX / TXT
+  albo **adres URL ogłoszenia** w serwisie z allowlisty (warunki w NFR-5).
 - Dokumenty są dzielone na chunki (500–1000 tokenów z overlapem), embedowane i zapisywane w bazie.
 - Duplikaty są odrzucane na podstawie hasha treści.
+
+> **Zmiana 2026-09-07.** Doszedł trzeci sposób wprowadzenia ogłoszenia: użytkownik podaje URL, a system
+> odczytuje z tej strony treść oferty. Nie jest to nowa ścieżka ingestii — odczytana treść trafia do tego
+> samego `SourceDocument` co wklejony tekst, więc chunking, embedding i deduplikacja po `content_hash`
+> działają bez zmian. Warunki, na jakich wolno sięgnąć po stronę, opisuje NFR-5; to tam, a nie tutaj, jest
+> granica tej funkcji.
+>
+> Deduplikacja ma tu znaną dziurę: ta sama oferta raz wklejona ręcznie, a raz pobrana z URL-a, ma inne
+> białe znaki, więc inny hash i powstaje drugi dokument. Świadomie nie naprawiamy tego normalizacją
+> agresywniejszą niż `normalize_content` — ta zmiana unieważniłaby hashe wszystkiego, co już jest w bazie.
 
 > **Zmiana 2026-09-02.** Wcześniej baza wiedzy przyjmowała też artykuły z poradami kariery i wpisy Q&A
 > (`documents.source_type`). Program ma porównywać CV z ofertą i nic poza tym, więc kolumna rozróżniała
@@ -122,7 +133,37 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 - **NFR-2a Cache embeddingów:** przed wywołaniem API embeddingów system sprawdza Redis (klucz = hash treści chunka); trafienie w cache pomija wywołanie API — oszczędność kosztów przy re-indeksacji i duplikatach.
 - **NFR-3 Wydajność:** wyszukiwanie wektorowe poniżej 500 ms (indeks HNSW). *Od 2026-09-02 nic nie wykonuje wyszukiwania wektorowego — embeddingi i indeks HNSW są zapisywane i utrzymywane, ale czytelnik pojawi się dopiero z etapem 4. Wymaganie obowiązuje od tego momentu.*
 - **NFR-4 Wdrożenie:** cały stack uruchamiany przez `docker-compose up`; CI uruchamia lint i testy przy każdym pushu.
-- **NFR-5 Aspekty prawne:** brak scrapingu Indeed/LinkedIn (naruszenie regulaminów); dane pochodzą z ręcznego wprowadzania lub publicznych datasetów (np. zbiory ogłoszeń z Kaggle).
+- **NFR-5 Aspekty prawne:** brak scrapingu Indeed/LinkedIn (naruszenie regulaminów); dane pochodzą z ręcznego wprowadzania, z publicznych datasetów (np. zbiory ogłoszeń z Kaggle) albo z odczytu pojedynczej strony ogłoszenia w serwisie z allowlisty — na warunkach opisanych niżej.
+
+> **Zmiana 2026-09-07.** Wymaganie mówiło „brak scrapingu" i pod tym hasłem mieściły się dwie różne rzeczy:
+> przeczesywanie serwisu robotem i odczytanie jednej strony, którą użytkownik ma właśnie otwartą. Pierwsze
+> nadal jest wykluczone. Drugie dopuszczamy, pod warunkami spisanymi poniżej — bo to jest ta sama czynność
+> co „ręczne wprowadzanie", tylko bez przepisywania tekstu ręcznie.
+>
+> **Co robimy.** Jedno żądanie HTTP na jedną świadomą akcję użytkownika, pod adres, który sam podał.
+> Odczytujemy wyłącznie blok `application/ld+json` typu `JobPosting` — dane strukturalne, które serwis
+> publikuje celowo, żeby czytały je maszyny (Google Jobs). Nie zdejmujemy treści z HTML-a i nie interesuje
+> nas nic poza tą jedną ofertą.
+>
+> **Czego nie robimy.** Nie crawlujemy: nie ma kolejki adresów, nie chodzimy po linkach, nie czytamy
+> sitemap, nie pobieramy nic w tle ani według harmonogramu. Nie sięgamy po wewnętrzne API serwisu.
+> Nie omijamy zabezpieczeń i nie podszywamy się pod przeglądarkę — wysyłamy własny User-Agent `JobMate/…`.
+>
+> **Na czym opieramy zgodę dla justjoin.it** (stan na 2026-09-07): `robots.txt` nie blokuje `/job-offer/`,
+> a serwis sam publikuje `sitemaps/active-jobs.xml` i `sitemaps/expired-jobs.xml`, czyli wprost zaprasza
+> roboty do indeksowania stron ofert. Blokuje za to `/api/` — dlatego czytamy publiczną stronę, a nie
+> `api.justjoin.it`, mimo że API byłoby wygodniejsze.
+>
+> **Granica.** Lista dozwolonych hostów jest zamknięta i trzymana w konfiguracji (`SCRAPER_ALLOWED_HOSTS`).
+> Dopisanie serwisu **nie jest zmianą kodu, tylko decyzją** i wymaga sprawdzenia jego `robots.txt` oraz
+> regulaminu; sam fakt, że parser `ld+json` zadziała na dowolnym serwisie z danymi dla Google Jobs, nie jest
+> podstawą, żeby po niego sięgać. Ta zgoda przestaje obowiązywać w chwili, gdy: serwis zablokuje ścieżkę
+> ogłoszeń w `robots.txt`, jego regulamin zabroni automatycznego odczytu, pobieranie przestanie być
+> wywoływane akcją użytkownika, albo zaczniemy obchodzić cokolwiek, co serwis postawił nam na drodze.
+> **Indeed i LinkedIn pozostają wykluczone** i nie trafiają na allowlistę.
+>
+> Limity techniczne odczytu (timeout, rozmiar odpowiedzi, obsługa przekierowań) należą do NFR-1 i są opisane
+> w `app/services/scraping.py`; tutaj chodzi o to, czy wolno, a nie jak.
 
 ## 5. Model danych (PostgreSQL + pgvector)
 

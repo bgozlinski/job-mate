@@ -14,6 +14,7 @@ from app.api.deps import (
     get_cache,
     get_db,
     get_embedding_model,
+    get_posting_source,
     get_prompt_store,
     get_requirement_extractor,
     get_requirement_judge,
@@ -27,6 +28,7 @@ from app.main import app
 from app.models import User  # noqa: F401  -- registers the table on Base.metadata
 from app.models.chunk import EMBEDDING_DIMENSIONS
 from app.services.matching import Suggestions
+from app.services.scraping import SourceUnavailableError
 
 
 def pytest_asyncio_loop_factories(
@@ -103,6 +105,34 @@ class FakeSuggestionWriter:
         self.prompts.append(prompt)
 
         return Suggestions(bullet_points=list(self.suggestions), notes=list(self.notes))
+
+
+class FakePostingSource:
+    """A page source that answers from a dictionary instead of the network.
+
+    Every test that reaches /documents/from-url goes through one of these,
+    and the client fixture installs it whether the test asked for it or not.
+    That is the point: a suite that can reach justjoin.it would be slow, at
+    the mercy of an offer expiring, and impolite to a site this project has
+    promised not to hammer (NFR-5).
+
+    An address with no page registered raises the same error the real source
+    raises for an unreachable host, so "nothing there" is a case tests can
+    exercise without arranging a network failure.
+    """
+
+    def __init__(self, pages: dict[str, str] | None = None) -> None:
+        self.pages = dict(pages or {})
+        self.fetched: list[str] = []
+
+    async def fetch(self, url: str) -> str:
+        self.fetched.append(url)
+        page = self.pages.get(url)
+
+        if page is None:
+            raise SourceUnavailableError("The site could not be reached")
+
+        return page
 
 
 TEST_REDIS_DB = 15
@@ -188,6 +218,12 @@ def suggestion_writer() -> FakeSuggestionWriter:
 
 
 @pytest.fixture
+def posting_source() -> FakePostingSource:
+    """The page source the API uses in tests. Empty unless a test fills it."""
+    return FakePostingSource()
+
+
+@pytest.fixture
 def embedding_model() -> FakeEmbeddingModel:
     """The embeddings provider the API uses in tests.
 
@@ -203,6 +239,7 @@ async def client(
     cache: Redis,
     embedding_model: FakeEmbeddingModel,
     suggestion_writer: FakeSuggestionWriter,
+    posting_source: FakePostingSource,
 ) -> AsyncIterator[AsyncClient]:
     """Client wired to the test database, bypassing lifespan.
 
@@ -217,12 +254,10 @@ async def client(
     configuration CI runs in, and a test that wants requirements read or
     verdicts passed supplies its own.
 
-    One thing to know about this client: it keeps a cookie jar, and logging
-    in sets session cookies. A request that leaves out the Authorization
-    header is therefore still authenticated if anything logged in earlier in
-    the same test -- which is what a browser does, and what the cookie
-    session is for. A test that means "anonymous" has to empty the jar with
-    client.cookies.clear(); leaving out the header is no longer enough.
+    The page source is overridden for a fourth reason on top of those: it is
+    the only dependency that would otherwise reach a site belonging to
+    somebody else, and a suite that quietly fetched job boards is exactly
+    what NFR-5 says this application does not do.
     """
 
     async def override_get_db() -> AsyncIterator[AsyncSession]:
@@ -233,6 +268,7 @@ async def client(
     app.dependency_overrides[get_cache] = lambda: cache
     app.dependency_overrides[get_embedding_model] = lambda: embedding_model
     app.dependency_overrides[get_suggestion_writer] = lambda: suggestion_writer
+    app.dependency_overrides[get_posting_source] = lambda: posting_source
     prompt_store = StaticPromptStore()
     app.dependency_overrides[get_prompt_store] = lambda: prompt_store
     app.dependency_overrides[get_requirement_extractor] = lambda: None

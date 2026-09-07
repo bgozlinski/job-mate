@@ -24,6 +24,7 @@ from app.services.judging import RequirementJudge
 from app.services.matching import SuggestionWriter
 from app.services.rate_limit import RateLimit, consume
 from app.services.requirements import SkillExtractor
+from app.services.scraping import PostingSource
 
 bearer_scheme = HTTPBearer(auto_error=False)
 """auto_error=False because the header is no longer the only way in.
@@ -250,6 +251,22 @@ async def get_requirement_judge(request: Request) -> RequirementJudge | None:
     judge: RequirementJudge | None = request.app.state.requirement_judge
 
     return judge
+
+
+async def get_posting_source(request: Request) -> PostingSource:
+    """Hand out the shared client that reads a posting's page.
+
+    Never None, unlike the providers: reading a page needs no API key, so
+    there is no configuration under which the route has to refuse. What it
+    can refuse is an address, and that happens inside the source.
+
+    One client per application, opened in the lifespan, for the reason Redis
+    is: it owns a connection pool, and building one per request would mean a
+    new TLS handshake with the board on every ingestion.
+    """
+    source: PostingSource = request.app.state.posting_source
+
+    return source
 
 
 async def get_prompt_store(request: Request) -> PromptStore:

@@ -354,6 +354,41 @@ def render_document_paste() -> None:
     report_ingest(response)
 
 
+def render_document_url() -> None:
+    """Ingest a posting by giving the address it is published at."""
+    with st.form("document-url", clear_on_submit=True):
+        url = st.text_input(
+            "Job posting URL",
+            placeholder="https://justjoin.it/job-offer/...",
+            key="document-url-address",
+        )
+        metadata = st.text_area(
+            "Metadata, a JSON object (optional)",
+            placeholder='{"role": "backend", "seniority": "mid"}',
+            help="Overrides what was read from the page.",
+            key="document-url-metadata",
+        )
+        submitted = st.form_submit_button("Read the posting")
+
+    if not submitted:
+        return
+
+    if not url.strip():
+        st.warning("Paste the address of a job posting first.")
+        return
+
+    parsed = parse_metadata(metadata)
+    if parsed is None:
+        return
+
+    with st.spinner("Reading the posting..."):
+        response = authorized(
+            "POST", "/documents/from-url", json={"url": url.strip(), "metadata": parsed}
+        )
+
+    report_ingest(response)
+
+
 def render_document(document: Any) -> None:
     """Show one source in the knowledge base."""
     created = datetime.fromisoformat(document["created_at"]).astimezone()
@@ -420,7 +455,13 @@ def render_document_list() -> None:
 def render_documents() -> None:
     """Draw the documents tab: the knowledge base and the ways to add to it."""
     st.subheader("Add a source")
-    render_document_upload()
+    # The address first: it is the only one of the three that asks nothing of
+    # the user but a link they already have open. The other two stay, because
+    # a posting on a site off the allowlist still has to get in somehow.
+    render_document_url()
+
+    with st.expander("...or upload a file"):
+        render_document_upload()
 
     with st.expander("...or paste the text"):
         render_document_paste()

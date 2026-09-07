@@ -24,6 +24,7 @@ from app.services.embeddings import OpenAIEmbeddingModel
 from app.services.judging import AnthropicRequirementJudge
 from app.services.matching import AnthropicSuggestionWriter
 from app.services.requirements import AnthropicSkillExtractor
+from app.services.scraping import HttpPostingSource
 
 
 @asynccontextmanager
@@ -57,6 +58,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.engine = create_engine(settings)
     app.state.session_factory = create_session_factory(app.state.engine)
     app.state.redis = create_redis(settings)
+    app.state.posting_source = HttpPostingSource(settings)
     app.state.embedding_model = (
         OpenAIEmbeddingModel(settings) if settings.openai_api_key else None
     )
@@ -88,6 +90,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             app.state.tracer.shutdown()
         await app.state.engine.dispose()
         await app.state.redis.aclose()
+        await app.state.posting_source.aclose()
 
 
 app = FastAPI(lifespan=lifespan)
