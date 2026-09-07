@@ -86,6 +86,16 @@ jobs:
       - name: Lint, format, type-check and security scan
         run: uv run pre-commit run --all-files --show-diff-on-failure
 
+      # The web client's types are generated from this document, so a schema
+      # that changed without it being regenerated would leave the frontend
+      # compiling against a shape the API no longer has. Checked here rather
+      # than in the web job because this is the job that has uv; the web job
+      # checks the file generated from this one.
+      - name: Check the OpenAPI document matches the application
+        run: |
+          uv run python -m scripts.export_openapi web/openapi.json
+          git diff --exit-code -- web/openapi.json
+
       - name: Apply migrations
         run: uv run alembic upgrade head
 
@@ -94,3 +104,47 @@ jobs:
 
       - name: Test
         run: uv run pytest
+
+  web:
+    runs-on: ubuntu-latest
+
+    # Node only. The document the types come from is committed, so this job
+    # needs neither Python, nor a database, nor the API running.
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The other half of the check in the quality job: that one proves
+      # openapi.json matches the application, this one proves schema.d.ts
+      # matches openapi.json. Together they make it impossible to change a
+      # Pydantic model and leave the frontend's types behind.
+      - name: Check the generated types match the OpenAPI document
+        run: |
+          npm run gen:api
+          git diff --exit-code -- src/api/schema.d.ts
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build

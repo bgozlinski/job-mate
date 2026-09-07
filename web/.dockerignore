@@ -1,0 +1,11 @@
+# The build context is ./web, so this is what does not get sent to the daemon.
+# node_modules above all: it is the largest directory here by two orders of
+# magnitude, and the image installs its own from the lockfile anyway -- one
+# built for the image's platform rather than for the host's.
+node_modules/
+dist/
+*.tsbuildinfo
+
+.git/
+.vite/
+coverage/

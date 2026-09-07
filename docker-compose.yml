@@ -39,6 +39,14 @@ services:
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
       REDIS_URL: redis://redis:6379/0
+      # Prefiks, pod ktorym przegladarka widzi to API -- zdejmowany przez proxy
+      # w serwisie `web` (dev) i w nginxie (prod). Sciezka ciasteczka refresh
+      # jest dopasowywana do adresu w pasku przegladarki, a nie do tego, co
+      # widzi ten proces, wiec bez tego ciasteczko dostaje Path=/auth i nigdy
+      # nie wraca na /api/auth/refresh. Objaw: kazde odswiezenie sesji konczy
+      # sie 401, nie do odroznienia od wygasniecia. Musi zgadzac sie z
+      # prefiksem z web/vite.config.ts i web/nginx.conf.
+      COOKIE_PATH_PREFIX: /api
     command:
       - uvicorn
       - app.main:app
@@ -74,6 +82,59 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  # --- Klient w przegladarce --------------------------------------------------
+  # Serwer deweloperski Vite. Proxuje /api na kontener `api`, wiec przegladarka
+  # widzi jeden origin -- bez tego ciasteczka sesji wymagalyby CORS-a z
+  # credentials i SameSite=None (patrz app/auth/cookies.py i web/README.md).
+
+  web:
+    container_name: web-service
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      target: dev
+    restart: unless-stopped
+    environment:
+      # Adres, pod ktory Vite przekazuje /api. Nazwa serwisu, nie localhost:
+      # z wnetrza kontenera localhost to on sam.
+      JOBMATE_API_URL: http://api:8000
+      # Bind mount z Windowsa nie propaguje zdarzen inotify, wiec bez
+      # odpytywania hot reload nie reaguje na zapis pliku. Kosztuje troche CPU
+      # i dlatego nie jest wlaczone na stale w vite.config.ts.
+      CHOKIDAR_USEPOLLING: "true"
+    ports:
+      - "5173:5173"
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - ./web:/web
+      # Nazwany wolumen, a nie bind mount. node_modules na hoscie jest zbudowane
+      # dla Windowsa, a esbuild i rollup maja natywne binaria -- wpuszczone do
+      # Alpine daja "cannot execute binary file", nie brakujacy pakiet. Docker
+      # zasiewa pusty wolumen zawartoscia obrazu, wiec kontener dostaje wlasne,
+      # linuksowe drzewo.
+      - web_node_modules:/web/node_modules
+
+  # Produkcyjny wariant: zbudowane pliki za nginxem, ktory przejmuje role proxy
+  # od serwera deweloperskiego. Za profilem, bo `docker compose up` ma podnosic
+  # srodowisko deweloperskie -- ten obraz uruchamia sie swiadomie:
+  #
+  #     docker compose --profile prod up --build web-prod
+  web-prod:
+    container_name: web-prod-service
+    profiles: [prod]
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      target: prod
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
 
   # --- Langfuse (NFR-2: trace'y wywolan LLM i retrievalu) --------------------
   # Self-hosted v3 to szesc kontenerow. Konfiguracja siedzi w .env.langfuse, a
@@ -217,6 +278,8 @@ services:
 
 volumes:
   postgres_data:
+  web_node_modules:
+    driver: local
   langfuse_postgres_data:
     driver: local
   langfuse_clickhouse_data:

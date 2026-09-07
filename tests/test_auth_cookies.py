@@ -7,6 +7,7 @@ exactly as a browser would.
 
 import uuid
 
+import pytest
 from fastapi import status
 from httpx import AsyncClient, Response
 
@@ -14,7 +15,7 @@ from app.auth.cookies import (
     ACCESS_COOKIE,
     ACCESS_COOKIE_PATH,
     REFRESH_COOKIE,
-    REFRESH_COOKIE_PATH,
+    refresh_cookie_path,
 )
 from app.auth.security import create_access_token, create_refresh_token
 from app.core.config import get_settings
@@ -105,8 +106,30 @@ async def test_the_refresh_cookie_is_not_sent_to_the_rest_of_the_api(
         "/auth/login", json={"email": EMAIL, "password": PASSWORD}
     )
 
-    assert cookie_attributes(response, REFRESH_COOKIE)["path"] == REFRESH_COOKIE_PATH
+    assert cookie_attributes(response, REFRESH_COOKIE)["path"] == refresh_cookie_path(
+        get_settings()
+    )
     assert cookie_attributes(response, ACCESS_COOKIE)["path"] == ACCESS_COOKIE_PATH
+
+
+@pytest.mark.parametrize(
+    ("prefix", "expected"),
+    [("", "/auth"), ("/api", "/api/auth")],
+)
+def test_the_refresh_path_follows_the_prefix_the_browser_sees(
+    prefix: str, expected: str
+) -> None:
+    """A Path is matched against the address bar, not against what we serve.
+
+    Behind the proxy that gives the web client one origin, the auth routes
+    are /api/auth/... to the browser while this process only ever sees
+    /auth/... A cookie written with the second is never sent back, and the
+    only symptom is that every renewal answers 401 -- indistinguishable from
+    a session that really did expire.
+    """
+    settings = get_settings().model_copy(update={"cookie_path_prefix": prefix})
+
+    assert refresh_cookie_path(settings) == expected
 
 
 async def test_each_cookie_lives_exactly_as_long_as_it_is_configured_to(
