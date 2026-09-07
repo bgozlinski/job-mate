@@ -251,8 +251,20 @@ Przeglądarka                              Klient deweloperski
 > ekranu i najpewniej innego kształtu warstwy HTTP (strumieniowanie zamiast żądanie-odpowiedź). To jest dług
 > zaciągnięty z otwartymi oczami, nie przeoczenie.
 >
-> **Co dalej.** Wracamy do etapu 4, potem 5. Kolejność w tabeli obowiązuje nadal; ten wpis jest jednorazowym
-> wyjątkiem, a nie zniesieniem zasady.
+> **Co dalej.** Kolejność w tabeli obowiązuje nadal; ten wpis jest jednorazowym wyjątkiem, a nie zniesieniem
+> zasady. Następny jest etap 5 — patrz zmiana poniżej.
+
+> **Zmiana 2026-09-07 (wieczorem). Etap 4 odłożony na dłużej.** Mock interview nie jest potrzebny do tego,
+> żeby produkt działał — dopasowanie CV do oferty stoi samo. To przyjemny dodatek i wraca, gdy reszta
+> będzie gotowa.
+>
+> **Odłożony, nie usunięty.** FR-4 zostaje w wymaganiach, LangGraph zostaje w tabeli stacku, a
+> nierozstrzygnięta kwestia zapisana przy FR-4 czeka bez zmian: pytania miały pochodzić z wpisów `qa`,
+> a tej kategorii nie ma od 2026-09-02. Do wyboru nadal trzy drogi, i **to jest decyzja do podjęcia przed
+> pierwszą linijką kodu**, nie w trakcie.
+>
+> Kolejnym etapem jest więc **etap 5** (eksport i administracja, FR-5 i FR-6). Z klienta w przeglądarce
+> brakuje do niego strony administracyjnej, a `DELETE /documents/{id}` nie istnieje w ogóle.
 >
 > Klient w przeglądarce nie zastępuje `ui/`. Streamlit zostaje jako narzędzie do ręcznego sprawdzania API —
 > nic nie kosztuje, a daje działający punkt odniesienia, gdy React jest w remoncie.

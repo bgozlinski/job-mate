@@ -1,0 +1,73 @@
+@import 'tailwindcss';
+
+/* Tailwind 4 is configured in CSS, not in JavaScript: there is no
+   tailwind.config.js and no PostCSS step. What @theme declares becomes both a
+   custom property and a utility, so --color-accent below is usable as
+   bg-accent, text-accent and border-accent without anything being registered
+   twice. */
+@theme {
+  --color-surface: #fcfcfb;
+  --color-raised: #ffffff;
+  --color-line: #e4e3df;
+  --color-ink: #1a1a19;
+  --color-ink-soft: #55544f;
+  /* 4.5:1 against both surfaces, measured. The obvious lighter grey for
+     captions came out at 3.65:1 -- legible to whoever picks it and not to
+     someone reading a laptop screen outdoors. */
+  --color-ink-faint: #6f6d65;
+
+  /* The accent is the same blue as the meter's fill on the match screen.
+     Deliberately one colour doing both jobs: the brand and the magnitude
+     encoding then cannot clash, and a reader never has to work out whether a
+     blue thing is decoration or data. Taken from a ramp that passes the
+     contrast and colour-vision checks against this surface. */
+  --color-accent: #256abf;
+  --color-accent-strong: #184f95;
+  --color-accent-soft: #cde2fb;
+  /* What goes on top of --color-accent. A token rather than a literal white,
+     because the accent is light in dark mode: white on it measures 2.5:1,
+     which is a button whose label you cannot read. */
+  --color-on-accent: #ffffff;
+
+  --radius-card: 0.75rem;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Dark steps are chosen against the dark surface rather than flipped from the
+   light ones. An automatic inversion produces an accent that is either
+   invisible or glaring, because lightness and chroma do not mirror. */
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-surface: #1a1a19;
+    --color-raised: #232322;
+    --color-line: #383835;
+    --color-ink: #f2f1ee;
+    --color-ink-soft: #b5b3ab;
+    --color-ink-faint: #9a978e;
+
+    --color-accent: #6da7ec;
+    --color-accent-strong: #9ec5f4;
+    --color-accent-soft: #184f95;
+    /* Dark ink on the light accent: 6.96:1, against 2.50:1 for white. */
+    --color-on-accent: #1a1a19;
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: light dark;
+  }
+
+  body {
+    @apply bg-surface text-ink font-sans antialiased;
+  }
+
+  /* Every interactive element gets the same visible focus ring. Left to the
+     browser it differs per engine and disappears entirely on anything with a
+     background colour, which is how a keyboard user loses their place. */
+  :focus-visible {
+    @apply outline-accent outline-2 outline-offset-2;
+  }
+}

@@ -8,6 +8,7 @@ import {
   useMatchDetail,
   useMatches,
 } from '../api/matching'
+import { Alert, Button, Card, Muted, PageTitle } from '../ui'
 import { MatchResult, percentage } from './MatchResult'
 
 /** The caller's own past matches, newest first (FR-2). */
@@ -17,29 +18,37 @@ export function History(): ReactElement {
 
   return (
     <>
-      <h2>Match history</h2>
-      <p>Only yours: nobody else can read your matches.</p>
+      <div>
+        <PageTitle>Match history</PageTitle>
+        <Muted>Only yours: nobody else can read your matches.</Muted>
+      </div>
 
-      {matches.isPending ? <p>Loading…</p> : null}
-      {matches.error ? <p role="alert">{matches.error.message}</p> : null}
-      {matches.data?.length === 0 ? <p>No matches yet.</p> : null}
+      {matches.isPending ? <Muted>Loading…</Muted> : null}
+      {matches.error ? <Alert>{matches.error.message}</Alert> : null}
+      {matches.data?.length === 0 ? <Muted>No matches yet.</Muted> : null}
 
-      <ul>
+      <ul className="flex flex-col gap-3">
         {matches.data?.map((match) => (
           <li key={match.id}>
-            <Link to={`/matches/${match.id}`}>
-              {percentage(match.score)} · {match.document_title ?? 'Untitled posting'}
-            </Link>
-            <p>
-              <time dateTime={match.created_at}>
-                {new Date(match.created_at).toLocaleString()}
-              </time>
-              {' · '}
-              <span>
-                {String(match.matched_count)} covered,{' '}
-                {String(match.missing_count)} missing
-              </span>
-            </p>
+            <Card className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <Link
+                to={`/matches/${match.id}`}
+                className="text-base font-medium text-accent hover:underline"
+              >
+                {percentage(match.score)} ·{' '}
+                {match.document_title ?? 'Untitled posting'}
+              </Link>
+              <p className="text-sm text-ink-faint">
+                <time dateTime={match.created_at}>
+                  {new Date(match.created_at).toLocaleString()}
+                </time>
+                {' · '}
+                <span>
+                  {String(match.matched_count)} covered,{' '}
+                  {String(match.missing_count)} missing
+                </span>
+              </p>
+            </Card>
           </li>
         ))}
       </ul>
@@ -47,18 +56,23 @@ export function History(): ReactElement {
       {/* A short page is the end of the listing: the route returns no total. */}
       {matches.data && matches.data.length >= shown ? (
         shown >= MAX_HISTORY_PAGE_SIZE ? (
-          <p>The history returns at most {MAX_HISTORY_PAGE_SIZE} matches.</p>
+          <Muted>
+            The history returns at most {MAX_HISTORY_PAGE_SIZE} matches.
+          </Muted>
         ) : (
-          <button
-            type="button"
-            onClick={() => {
-              setShown((current) =>
-                Math.min(current + HISTORY_PAGE_SIZE, MAX_HISTORY_PAGE_SIZE),
-              )
-            }}
-          >
-            Load more
-          </button>
+          <div className="flex">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setShown((current) =>
+                  Math.min(current + HISTORY_PAGE_SIZE, MAX_HISTORY_PAGE_SIZE),
+                )
+              }}
+            >
+              Load more
+            </Button>
+          </div>
         )
       ) : null}
     </>
@@ -73,11 +87,16 @@ export function MatchDetail(): ReactElement {
   return (
     <>
       <p>
-        <Link to="/matches">Back to the history</Link>
+        <Link
+          to="/matches"
+          className="text-sm text-ink-soft hover:text-accent"
+        >
+          ← Back to the history
+        </Link>
       </p>
 
-      {match.isPending ? <p>Loading…</p> : null}
-      {match.error ? <p role="alert">{match.error.message}</p> : null}
+      {match.isPending ? <Muted>Loading…</Muted> : null}
+      {match.error ? <Alert>{match.error.message}</Alert> : null}
       {match.data ? <MatchResult match={match.data} /> : null}
     </>
   )
