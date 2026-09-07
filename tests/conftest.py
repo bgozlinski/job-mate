@@ -258,6 +258,13 @@ async def client(
     the only dependency that would otherwise reach a site belonging to
     somebody else, and a suite that quietly fetched job boards is exactly
     what NFR-5 says this application does not do.
+
+    One thing to know about this client: it keeps a cookie jar, and logging
+    in sets session cookies. A request that leaves out the Authorization
+    header is therefore still authenticated if anything logged in earlier in
+    the same test -- which is what a browser does, and what the cookie
+    session is for. A test that means "anonymous" has to empty the jar with
+    client.cookies.clear(); leaving out the header is no longer enough.
     """
 
     async def override_get_db() -> AsyncIterator[AsyncSession]:
