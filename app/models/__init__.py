@@ -4,6 +4,7 @@ from app.models.chunk import Chunk
 from app.models.document import Document
 from app.models.match import Match
 from app.models.resume import Resume
+from app.models.source import Source, SourceKind
 from app.models.user import User
 
-__all__ = ["Chunk", "Document", "Match", "Resume", "User"]
+__all__ = ["Chunk", "Document", "Match", "Resume", "Source", "SourceKind", "User"]

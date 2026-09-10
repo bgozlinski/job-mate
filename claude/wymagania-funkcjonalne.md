@@ -280,12 +280,19 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 - `messages` — kolejne wypowiedzi w sesji; przechowuje `retrieved_chunk_ids` do audytu tego, co model faktycznie widział, oraz koszt tokenów
 - `matches` — historia dopasowań per użytkownik (migracja `25dc29c14b4b`): score, listy trafień i luk, sugestie, notatki, cytaty z CV oraz `retrieved_chunk_ids`. Migawka, nie widok: kopiuje też tytuł ogłoszenia, a `resume_id` i `document_id` przechodzą w NULL, gdy to, na co wskazują, zostanie usunięte
 
-**Encje dochodzące z FR-7** (jeszcze nie istnieją):
+**Encje z FR-7:**
 
-- `sources` — źródło automatu: host, forma (API / feed / crawl), harmonogram, watermark ostatniego przebiegu, stan (aktywne / wyłączone po awariach). Wyłączenie źródła jest stanem w bazie, nie zmianą kodu — tego wymaga „granica" z NFR-5
-- `saved_searches` — zapisane wyszukiwanie: `user_id`, `resume_id`, kryteria, próg score, aktywność
-- `documents` — dochodzi `(source_id, external_id)` z ograniczeniem unikalności **na parę razem z `content_hash`**: sam `content_hash` rozpoznaje identyczną treść, ale edytowana oferta ma inny hash, a ten sam `external_id`. Zgodnie z FR-7 powstaje wtedy nowy dokument, więc para `(source_id, external_id)` nie może być unikalna sama z siebie
-- `matches` — dochodzi znacznik pochodzenia (na żądanie / automat) oraz `saved_search_id`, żeby ranking dało się odtworzyć i żeby historia z FR-3 nie zlała się z wynikami automatu
+- `sources` — źródło automatu (migracja `d3ef2a2a7af4`): `host`, `kind` (`api` / `feed` / `crawl` — natywny enum `source_kind`), `endpoint`, `poll_interval_seconds`, `watermark`, `last_run_at`, `last_error`, `is_active`. Wyłączenie źródła jest stanem w bazie, nie zmianą kodu — tego wymaga „granica" z NFR-5. Harmonogram jest interwałem, a nie wyrażeniem cron, bo interwał jest tym, co konsumuje pętla workera, i nic w stacku nie parsuje crona
+- `documents` — doszły `source_id` (FK → `sources`, `ON DELETE SET NULL`, NULL dla ręcznego wprowadzenia) i `external_id`, plus **nieunikalny** indeks `ix_documents_source_external` (ta sama migracja)
+- `saved_searches` — zapisane wyszukiwanie: `user_id`, `resume_id`, kryteria, próg score, aktywność *(jeszcze nie istnieje)*
+- `matches` — dochodzi znacznik pochodzenia (na żądanie / automat) oraz `saved_search_id`, żeby ranking dało się odtworzyć i żeby historia z FR-3 nie zlała się z wynikami automatu *(jeszcze nie istnieje)*
+
+> **Sprostowanie do zapisu z 2026-09-10.** Wcześniej stało tu, że para `(source_id, external_id)` ma mieć
+> ograniczenie unikalności „razem z `content_hash`". To było niepotrzebne: `content_hash` jest już unikalny
+> w całej tabeli, więc taka trójkolumnowa unikalność nic by nie dodała. Obowiązuje sama intencja tamtego
+> zapisu — **para `(source_id, external_id)` nie może być unikalna**, bo edytowana oferta to zgodnie z FR-7
+> nowy wiersz z tym samym `external_id`. Indeks nad tą parą służy do *znajdowania* wersji, nie do
+> ograniczania ich do jednej; niezmienioną ofertę pobraną dwa razy zatrzymuje `content_hash`.
 
 **Relacje:**
 ```

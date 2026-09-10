@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import DateTime, Index, String, Text, func, text
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -52,11 +52,36 @@ class Document(Base):
             postgresql_using="gin",
             postgresql_ops={"metadata": "jsonb_path_ops"},
         ),
+        Index("ix_documents_source_external", "source_id", "external_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
     title: Mapped[str | None] = mapped_column(Text())
     source_url: Mapped[str | None] = mapped_column(Text())
+    source_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("sources.id", ondelete="SET NULL")
+    )
+    """Which harvester source brought this in, or NULL for manual ingestion.
+
+    SET NULL rather than CASCADE: FR-6 lets an administrator remove a source,
+    and the postings collected from it are part of the knowledge base, not
+    part of the source. Removing where they came from must not remove them.
+    """
+    external_id: Mapped[str | None] = mapped_column(Text())
+    """The posting's id at the source, or NULL when it has none.
+
+    Deliberately NOT unique, on its own or paired with source_id. FR-7 says
+    an edited posting becomes a new document, so the same external_id
+    legitimately appears on several rows -- one per version we saw. A unique
+    constraint here would turn every edit into a conflict and, handled the
+    obvious way, into a silently dropped update.
+
+    Uniqueness is already covered where it belongs: content_hash is unique
+    across the table, so an unchanged posting fetched twice cannot land
+    twice, and a changed one is a different row by definition. The index over
+    (source_id, external_id) is for finding the versions, not for limiting
+    them to one.
+    """
     content: Mapped[str] = mapped_column(Text())
     content_hash: Mapped[str] = mapped_column(
         String(CONTENT_HASH_LENGTH), unique=True, index=True
