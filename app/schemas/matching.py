@@ -13,22 +13,7 @@ class MatchCreate(BaseModel):
 
 
 class MatchRead(BaseModel):
-    """The result of one match.
-
-    retrieved_chunk_ids is part of the response, not an internal detail: the
-    caller is told which fragments the suggestions were built from, so an
-    answer can be checked against what the model actually saw.
-
-    suggestions is text for the resume; notes is what the model has to say
-    about the resume. Two fields, because a client that renders one list
-    would otherwise render a remark about a missing skill as a line of the
-    document itself.
-
-    matched_evidence carries, for a requirement an LLM judged met, the words
-    of the resume it quoted. Empty for a match the deterministic rule made --
-    the term is then literally in the text -- and empty everywhere when no
-    judge is configured. It is what lets a candidate disagree with a match.
-    """
+    """The result of one match."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -47,12 +32,7 @@ class MatchRead(BaseModel):
 
 
 class MatchSummary(BaseModel):
-    """One row of the history: enough to choose which match to open.
-
-    The lists are left out and counted instead. A history is read to find
-    something, and a page of it should not carry every suggestion ever
-    written for every posting.
-    """
+    """One row of the history: enough to choose which match to open."""
 
     model_config = ConfigDict(from_attributes=True)
 

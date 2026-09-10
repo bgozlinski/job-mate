@@ -1,9 +1,4 @@
-"""Logging in with cookies: what login sets, and what authenticates with it.
-
-The client fixture is an httpx AsyncClient, which keeps a cookie jar of its
-own -- so a request sent after a login already carries whatever login set,
-exactly as a browser would.
-"""
+"""Logging in with cookies: what login sets, and what authenticates with it."""
 
 import uuid
 
@@ -35,11 +30,7 @@ async def register_and_log_in(client: AsyncClient) -> str:
 
 
 def cookie_attributes(response: Response, name: str) -> dict[str, str]:
-    """Read one Set-Cookie header back as its attributes, lower-cased.
-
-    Read from the header rather than from the jar: httpx keeps the value and
-    throws the flags away, and the flags are the entire point of this file.
-    """
+    """Read one Set-Cookie header back as its attributes, lower-cased."""
     for header in response.headers.get_list("set-cookie"):
         if not header.startswith(f"{name}="):
             continue
@@ -119,14 +110,7 @@ async def test_the_refresh_cookie_is_not_sent_to_the_rest_of_the_api(
 def test_the_refresh_path_follows_the_prefix_the_browser_sees(
     prefix: str, expected: str
 ) -> None:
-    """A Path is matched against the address bar, not against what we serve.
-
-    Behind the proxy that gives the web client one origin, the auth routes
-    are /api/auth/... to the browser while this process only ever sees
-    /auth/... A cookie written with the second is never sent back, and the
-    only symptom is that every renewal answers 401 -- indistinguishable from
-    a session that really did expire.
-    """
+    """A Path is matched against the address bar, not against what we serve."""
     settings = get_settings().model_copy(update={"cookie_path_prefix": prefix})
 
     assert refresh_cookie_path(settings) == expected

@@ -1,22 +1,4 @@
-"""Put the prompt texts this repository ships with into Langfuse.
-
-Run once after bringing a Langfuse up, and again whenever a text here
-changes. Without it the application still works -- every fetch carries the
-shipped text as its fallback -- which is exactly why the seeding has to be
-deliberate: nothing breaks to remind you, the prompts simply never appear on
-the server and nobody can edit or version them.
-
-Each text is written as a new version labelled production, and only when it
-differs from what production already serves. Re-running is therefore free,
-and the version history stays a record of changes rather than of runs.
-
-    uv run python -m scripts.seed_prompts
-
-LANGFUSE_HOST in .env names the container, which only resolves inside the
-compose network. From the host, override it:
-
-    LANGFUSE_HOST=http://localhost:3000 uv run python -m scripts.seed_prompts
-"""
+"""Put the prompt texts this repository ships with into Langfuse."""
 
 import sys
 
@@ -28,11 +10,7 @@ from app.core.prompts import PRODUCTION, TEMPLATES
 
 
 def seed() -> int:
-    """Write every shipped prompt that production does not already serve.
-
-    The comparison reads straight past the cache: what matters is what the
-    server holds now, not what this process was told a few minutes ago.
-    """
+    """Write every shipped prompt that production does not already serve."""
     client = create_tracer(get_settings())
 
     if client is None:

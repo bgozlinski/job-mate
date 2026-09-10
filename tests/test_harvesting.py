@@ -1,17 +1,4 @@
-"""What one pass of the automat does with the sources it finds.
-
-The launcher is substituted almost everywhere, because the thing worth
-pinning here is the bookkeeping around a crawl and not Scrapy: which sources
-are due, what a failure writes down, and whether one bad source stops the
-rest. A fake launcher makes all three observable and none of them slow.
-
-One test does spawn a real `scrapy crawl`, and it still touches no network:
-it points a source at a host that is not on the allowlist, which the spider
-refuses before it makes a request. That exercises the parts a fake cannot --
-the process really starts, the arguments really arrive, and a refusal really
-comes back as a non-zero exit -- while remaining the test of a component
-whose job is to not fetch things.
-"""
+"""What one pass of the automat does with the sources it finds."""
 
 import uuid
 from datetime import UTC, datetime, timedelta

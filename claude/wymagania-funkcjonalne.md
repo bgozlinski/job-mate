@@ -385,3 +385,57 @@ Przeglądarka                              Klient deweloperski
 >
 > Klient w przeglądarce nie zastępuje `ui/`. Streamlit zostaje jako narzędzie do ręcznego sprawdzania API —
 > nic nie kosztuje, a daje działający punkt odniesienia, gdy React jest w remoncie.
+
+## 8. Pułapki, których nie widać z kodu
+
+Zapis z 2026-09-10, przy czyszczeniu komentarzy z kodu. Każdy punkt niżej był wcześniej komentarzem albo
+akapitem docstringa. Kod bez nich nadal jest poprawny — ale każdy z nich opisuje uproszczenie, które
+wygląda na oczywiste i jest błędem. To jest jedyne miejsce, gdzie ta wiedza teraz istnieje.
+
+**Bezpieczeństwo i sieć**
+
+- `HttpPostingSource` chodzi po przekierowaniach **ręcznie** (`follow_redirects=False`) i waliduje host
+  przy **każdym skoku**. httpx sprawdza adres, który dostał, a nie te, na które go potem wysłano —
+  dozwolony host odpowiadający `302` na `http://169.254.169.254/` przeszedłby przez allowlistę.
+- Ciało odpowiedzi czytane jest porcjami i porzucane po przekroczeniu limitu, **po dekompresji**. Odczyt
+  najpierw, a pomiar potem, czyni limit sugestią.
+- Host dopasowywany jest **dokładnie**, nigdy sufiksem: `justjoin.it.example.com` kończy się dozwolonym
+  hostem i należy do kogoś innego. Dotyczy `HttpPostingSource` i `FeedSpider.check_endpoint`.
+- Żądania startowe Scrapy idą z `dont_filter=True`, więc `OffsiteMiddleware` **ich nie filtruje** —
+  `allowed_domains` nie chroni endpointu, od którego pająk startuje. Stąd jawna kontrola w `from_crawler`.
+
+**Scrapy i NFR-5**
+
+- `ROBOTSTXT_OBEY` **nie stosuje `Crawl-delay`** — Scrapy dyrektywę parsuje, ale nic jej nie czyta.
+  Robi to `PolitenessMiddleware`, trzymając podłogę na `slot.delay`.
+- Podłoga musi być **potwierdzana przy każdym żądaniu**: AutoThrottle po każdej odpowiedzi przelicza
+  `slot.delay` i ściąga go do `DOWNLOAD_DELAY`, więc ustawiona raz wyparowałaby po kilku odpowiedziach.
+- `AUTOTHROTTLE_TARGET_CONCURRENCY = 1.0` jest konieczne: bez tego AutoThrottle celuje we własną
+  domyślną współbieżność i rozpędza się ponad `CONCURRENT_REQUESTS_PER_DOMAIN`.
+- Domyślne `RETRY_HTTP_CODES` zawiera **429**, a `RetryMiddleware` ponawia bez czytania `Retry-After` —
+  czyli odpowiada ruchem na prośbę o zwolnienie. Kod jest z tej listy usunięty celowo.
+- `DOWNLOAD_DELAY_JITTER = 0.0`, bo domyślne ±50% zamienia podłogę w średnią.
+- DSN **nie może** trafić do ustawień Scrapy: Scrapy loguje nadpisane ustawienia przy starcie, a DSN
+  niesie hasło (NFR-1).
+
+**Baza i migracje**
+
+- Natywny enum PostgreSQL nie znika z `drop_table`. Migracja musi go usunąć jawnie, inaczej `downgrade`
+  zostawia typ, a kolejny `upgrade` pada na „type already exists". Dotyczy `source_kind` i `staging_state`.
+- `op.create_foreign_key(None, …)` przechodzi (Postgres sam nazwie), ale `op.drop_constraint(None, …)`
+  nie ma czego usunąć. FK dodawany do istniejącej tabeli musi mieć nazwę.
+- `documents.(source_id, external_id)` jest **nieunikalne** i musi takie zostać — patrz sprostowanie w §5.
+- `created_at` ma `server_default=now()`, czyli znacznik **startu transakcji**. Wiersze wstawione razem
+  mają identyczny czas i `ORDER BY created_at` ich nie rozróżnia.
+
+**Runtime**
+
+- `ingest_document` commituje sam, więc drenaż nie dzieli transakcji z zapisem dokumentu. Bezpieczne, bo
+  ponowienie jest bezkosztowne: duplikat rozpoznawany po `content_hash` **przed** wydaniem na embeddingi.
+- Item pipeline Scrapy działa pod Twistedem i **nie wolno** w nim dotknąć async SQLAlchemy. Stąd psycopg
+  i tabela stagingu jako styk.
+- `asyncio.create_subprocess_exec` nie działa na `SelectorEventLoop`, a async psycopg wymaga Selectora na
+  Windowsie. Worker używa `subprocess.run` w wątku, żeby nie dyktować wyboru pętli.
+- W `to_text` kolejność jest nośna: dekodowanie encji → zamiana końców bloków na nowe linie → usunięcie
+  tagów. Odwrotnie eskejpowany HTML z Atoma zostawia dosłowne `<b>` w treści oferty.
+- PyJWT z zainstalowanym `cryptography` zawęża typ `key`; dla `alg="none"` przekazuje się `""`, nie `None`.

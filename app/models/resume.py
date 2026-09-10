@@ -15,41 +15,16 @@ if TYPE_CHECKING:
     from app.models.user import User
 
 MAX_FILENAME_LENGTH = 255
-"""What a filesystem will carry, which is the only bound the name really has.
-It is stored to be shown back to the owner, never to open anything with."""
+"""
+What a filesystem will carry, which is the only bound the name really has. It is stored
+to be shown back to the owner, never to open anything with.
+"""
 
 MAX_MIME_LENGTH = 100
 
 
 class Resume(Base):
-    """One version of a user's CV: the text, and where that text came from.
-
-    ondelete lives in the database so that removing an account takes its
-    resumes with it even when the deletion never passes through the ORM.
-    user_id is indexed because every query for resumes filters on it.
-
-    content is the extracted text, so everything downstream -- chunking,
-    embedding, matching -- works on one type whatever was uploaded.
-
-    The three file columns are nullable because they describe a provenance
-    that not every row has: resumes stored before uploads existed carry
-    none, and neither would one pasted as text. They are a record of where
-    the text came from, not a second copy of it -- the file itself is not
-    kept (NFR-1: the less of someone's CV is stored, the less can leak).
-
-    file_hash is over the uploaded bytes rather than the extracted text.
-    Hashing the text would tie identity to the parser: a better parser, or
-    a model transcribing a scan, returns something slightly different for
-    the same file and the same upload would arrive as a new resume.
-
-    The unique constraint is per owner, not global -- two people may hold
-    the same document, and telling one that the other has it already would
-    leak the fact (NFR-1). It is a constraint rather than a check in the
-    handler for the reason documents.content_hash has one: two requests can
-    pass a SELECT concurrently and only the database can settle it.
-    Postgres treats NULLs as distinct, so rows without a file do not
-    collide with each other.
-    """
+    """One version of a user's CV: the text, and where that text came from."""
 
     __tablename__ = "resumes"
     __table_args__ = (
@@ -64,17 +39,7 @@ class Resume(Base):
     content: Mapped[str] = mapped_column(Text())
     target_role: Mapped[str | None] = mapped_column(Text())
     skills: Mapped[list[str] | None] = mapped_column(JSONB)
-    """What an LLM read out of the CV, or NULL when nobody has.
-
-    The other half of documents.requirements, read with the same vocabulary so
-    that a requirement and the skill answering it come back spelled the same
-    way -- which is the entire point of asking a model rather than comparing
-    raw words.
-
-    Nullable for the same reasons and with the same consequence: a resume
-    stored before this existed, or while no LLM key was configured, still
-    matches, on the words of its own text.
-    """
+    """What an LLM read out of the CV, or NULL when nobody has."""
     file_hash: Mapped[str | None] = mapped_column(String(CONTENT_HASH_LENGTH))
     mime_type: Mapped[str | None] = mapped_column(String(MAX_MIME_LENGTH))
     original_filename: Mapped[str | None] = mapped_column(String(MAX_FILENAME_LENGTH))

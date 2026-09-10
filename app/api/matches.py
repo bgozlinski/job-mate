@@ -40,17 +40,7 @@ async def list_matches(
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[MatchSummary]:
-    """List the caller's own matches, newest first.
-
-    Filtered by owner in the statement rather than checked afterwards: a
-    history is a record of what somebody was told about their own CV, and
-    NFR-1 makes that theirs alone.
-
-    Ordered by created_at and then by id, because two matches run in the same
-    moment would otherwise have no defined order and offset paging could show
-    one of them twice. Ids are uuid7, so the tiebreaker runs the same way as
-    time.
-    """
+    """List the caller's own matches, newest first."""
     rows = await session.scalars(
         select(Match)
         .where(Match.user_id == user.id)
@@ -66,11 +56,7 @@ async def list_matches(
 async def read_match(
     match_id: uuid.UUID, user: CurrentUser, session: Session
 ) -> MatchRead:
-    """Return one stored match in full, or 404 if it is not the caller's.
-
-    Somebody else's match is a 404 rather than a 403, exactly as an unknown
-    resume is: a different answer would confirm the row exists.
-    """
+    """Return one stored match in full, or 404 if it is not the caller's."""
     match = await session.scalar(
         select(Match).where(Match.id == match_id, Match.user_id == user.id)
     )

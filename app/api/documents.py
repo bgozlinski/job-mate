@@ -56,9 +56,6 @@ from app.services.scraping import PostingSource, ScrapeError, SourceUnavailableE
 router = APIRouter(
     prefix="/documents",
     tags=["documents"],
-    # Authentication is a property of every route here. The knowledge base is
-    # shared, so nothing is scoped to the caller the way resumes are -- the
-    # ingesting routes name the user only to put a cost on their trace.
     dependencies=[Depends(get_current_user)],
 )
 
@@ -69,16 +66,20 @@ Extractor = Annotated[SkillExtractor | None, Depends(get_requirement_extractor)]
 Posting = Annotated[PostingSource, Depends(get_posting_source)]
 
 Ingesting = Depends(rate_limited("ingest", lambda s: s.ingest_rate_limit))
-"""All three ingestion routes share one budget: they cost the same embeddings
-calls, and which shape the source arrived in -- a paste, a file, an address --
-does not change the bill. The fetch the third one performs is free, and
-counting it separately would only let a user spend the same money twice."""
+"""
+All three ingestion routes share one budget: they cost the same embeddings calls, and
+which shape the source arrived in -- a paste, a file, an address -- does not change the
+bill. The fetch the third one performs is free, and counting it separately would only
+let a user spend the same money twice.
+"""
 
 DEFAULT_PAGE_SIZE = 20
 MAX_PAGE_SIZE = 100
-"""A page is capped because the knowledge base grows without bound and
-nothing about a listing needs every row at once. The default is what a first
-call gets when the caller has not thought about paging yet."""
+"""
+A page is capped because the knowledge base grows without bound and nothing about a
+listing needs every row at once. The default is what a first call gets when the caller
+has not thought about paging yet.
+"""
 
 
 def _describe(document: Document, chunk_count: int) -> DocumentRead:
@@ -94,12 +95,7 @@ def _describe(document: Document, chunk_count: int) -> DocumentRead:
 
 
 async def _read(session: AsyncSession, document: Document) -> DocumentRead:
-    """Describe a stored document, counting its chunks in the database.
-
-    The count is queried rather than read off the relationship because a
-    document that turned out to be a duplicate was loaded, not built here,
-    and touching its chunks would be lazy I/O outside a greenlet.
-    """
+    """Describe a stored document, counting its chunks in the database."""
     chunk_count = await session.scalar(
         select(func.count()).select_from(Chunk).where(Chunk.document_id == document.id)
     )
@@ -113,27 +109,7 @@ async def list_documents(
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[DocumentRead]:
-    """List the knowledge base, newest first.
-
-    FR-3 has the user pick the posting to be matched against, and until this
-    route existed the only way to learn a document_id was to send the same
-    text again and read it off the deduplicated answer. Formally the listing
-    belongs to administration (FR-6); practically FR-3 is unusable without
-    it, so it is here and open to any authenticated account, exactly like
-    ingestion. Deleting is what stays with an admin.
-
-    The content is not in the response -- DocumentRead leaves it out -- so a
-    page stays small no matter how long the postings are.
-
-    Ordering is by created_at and then by id, because two sources ingested in
-    the same moment would otherwise have no defined order and offset paging
-    could show one of them twice. Ids are uuid7, so the tiebreaker runs the
-    same way as time.
-
-    The caller pages until a short page comes back; no total is returned,
-    which would cost a second count query on every request to tell them
-    something the next call tells them for free.
-    """
+    """List the knowledge base, newest first."""
     counted = select(Document, func.count(Chunk.id)).outerjoin(
         Chunk, Chunk.document_id == Document.id
     )
@@ -158,19 +134,7 @@ async def create_document(  # noqa: PLR0913, PLR0917 -- five are dependencies
     extractor: Extractor,
     response: Response,
 ) -> DocumentRead:
-    """Ingest a source, or return the one it duplicates.
-
-    Any authenticated account may add to the knowledge base: FR-1 describes
-    a user pasting the posting they want to be matched against, and FR-3
-    then has them pick it. Administration -- browsing and deleting sources
-    (FR-6) -- is what stays with an admin.
-
-    A duplicate answers 200 with the document that was already there rather
-    than 409: the caller's intent, having this text in the knowledge base,
-    is satisfied, and the body tells them which document it is.
-
-    The route is rate limited (NFR-2): it spends money at a third-party API.
-    """
+    """Ingest a source, or return the one it duplicates."""
     return await _ingest(
         SourceDocument(
             content=payload.content,
@@ -200,33 +164,7 @@ async def upload_document(  # noqa: PLR0913, PLR0917 -- six are dependencies
     source_url: Annotated[str | None, Form()] = None,
     metadata: Annotated[str | None, Form()] = None,
 ) -> DocumentRead:
-    """Ingest a source from an uploaded PDF, DOCX or text file (FR-1).
-
-    The same knowledge base as the JSON route, reached with a file instead
-    of a paste, and answering the same way: 201 for a new source, 200 with
-    the existing one for a duplicate.
-
-    No file hash is stored, and that is the point. A document is identified
-    by the hash of its normalised text, so the same posting sent once as a
-    PDF and once as a DOCX is correctly one document -- two different files,
-    one source. Hashing the bytes here would break that, which is the
-    opposite of what it does for resumes, where the hash is what makes a
-    re-upload recognisable.
-
-    The fields are declared one by one rather than as a single Form model:
-    FastAPI flattens such a model only when every field is scalar, and
-    metadata is an object, so the whole thing arrives as one missing field.
-    They are validated together anyway, by handing them to DocumentUpload --
-    a real URL and metadata that parses -- so the two routes reject the same
-    input for the same reasons.
-
-    The length limit the JSON route gets from its schema is applied by hand:
-    a 5 MB file of prose parses to far more text than MAX_CONTENT_LENGTH
-    allows, and nothing would otherwise stop it.
-
-    The title falls back to the filename, which is the only name an upload
-    comes with and better than nothing in a listing.
-    """
+    """Ingest a source from an uploaded PDF, DOCX or text file (FR-1)."""
     try:
         form = DocumentUpload(
             title=title,
@@ -275,29 +213,7 @@ async def ingest_from_url(  # noqa: PLR0913, PLR0917 -- six are dependencies
     source: Posting,
     response: Response,
 ) -> DocumentRead:
-    """Ingest the posting published at an address (FR-1).
-
-    The third way into the same knowledge base, after a paste and a file, and
-    it answers exactly like them: 201 for a new posting, 200 with the
-    existing one for a duplicate, the same DocumentRead either way. Nothing
-    below _store knows the text arrived over the network.
-
-    Which addresses are read is settled by the allowlist rather than here --
-    see NFR-5 for why the list is closed, and app.services.scraping for the
-    request forgery it also prevents (NFR-1).
-
-    Parsing runs on the event loop rather than in a worker thread, which is
-    the opposite of what the upload route does with a PDF. The measurement is
-    the reason: a megabyte of markup takes about ten milliseconds here,
-    because HTMLParser skips script bodies wholesale, while a PDF of the same
-    size takes hundreds. Below a certain cost the hand-off is the expensive
-    part.
-
-    The fetch happens inside the trace, not before it, so a board that took
-    eight seconds to answer is visible as what made the ingestion slow
-    (NFR-2). It costs no money, which is why the rate limit it shares with
-    the other two routes is still about embeddings.
-    """
+    """Ingest the posting published at an address (FR-1)."""
     with traced("ingest", user.id, url=str(payload.url)):
         scraped = await _scrape(source, str(payload.url))
 
@@ -317,19 +233,7 @@ async def ingest_from_url(  # noqa: PLR0913, PLR0917 -- six are dependencies
 
 
 async def _scrape(source: PostingSource, url: str) -> ScrapedPosting:
-    """Read the posting at an address, turning every failure into a status.
-
-    The three that mean "your address is wrong" -- policy refused it, the
-    page could not be read, the page is not a posting -- answer 422 with the
-    message they carry, because each tells the caller something different to
-    do. Only a site that could not be reached is a 502: nothing is wrong with
-    what the caller asked for, and telling them otherwise sends them looking
-    for a mistake they did not make.
-
-    The length limit the JSON route gets from its schema is applied by hand
-    for the same reason the upload route does it: a page can publish a
-    description longer than MAX_CONTENT_LENGTH and nothing else would stop it.
-    """
+    """Read the posting at an address, turning every failure into a status."""
     try:
         page = await source.fetch(url)
         scraped = parse_job_posting(page)
@@ -360,13 +264,7 @@ async def _ingest(  # noqa: PLR0913, PLR0917 -- five are dependencies
     extractor: SkillExtractor | None,
     response: Response,
 ) -> DocumentRead:
-    """Store a source however it arrived, and describe what came of it.
-
-    The trace opens here rather than in either route, so both shapes of
-    request produce the same one. Until this existed the embedding calls
-    ingestion pays for were invisible: a hundred-page posting was
-    indistinguishable from no traffic at all (NFR-2).
-    """
+    """Store a source however it arrived, and describe what came of it."""
     with traced("ingest", user_id, title=source.title):
         return await _store(source, session, cache, model, extractor, response)
 
@@ -388,8 +286,6 @@ async def _store(  # noqa: PLR0913, PLR0917 -- five are dependencies
             detail="The document has no content to ingest",
         ) from exc
     except APIError as exc:
-        # The provider's message can carry request URLs and key fragments,
-        # so the caller is told what failed, not what it said (NFR-1).
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="The embeddings provider is unavailable",
@@ -399,8 +295,6 @@ async def _store(  # noqa: PLR0913, PLR0917 -- five are dependencies
         status.HTTP_201_CREATED if ingested.created else status.HTTP_200_OK
     )
     described = await _read(session, ingested.document)
-    # A duplicate costs nothing at the API, and a trace that does not say so
-    # makes the deduplication in FR-1 invisible next to a real ingestion.
     record(
         output={
             "document_id": str(ingested.document.id),

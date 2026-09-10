@@ -1,33 +1,4 @@
-"""Moving staged postings into the knowledge base (FR-7).
-
-The asyncio half of the seam. A spider has already written rows to
-staging_postings with a synchronous driver and gone away; this walks those
-rows through the ordinary FR-1 ingestion, so nothing about chunking,
-embedding or deduplication is decided a second time here.
-
-**Why this is not one transaction.** ingest_document commits for itself, so
-the document and the staged row's new state land in two transactions and a
-crash can fall between them. That is safe because a re-run is free of
-consequence: the row is still pending, the drain reaches it again, and
-ingest_document finds the document by content_hash and answers created=False
-before it spends anything on embeddings. The row is then marked ingested. The
-cost of the crash is one SELECT, and the alternative -- prying the commit out
-of the FR-1 path so that a much later feature can share its transaction --
-would put the risk on the path that already works.
-
-**A duplicate is not a failure.** A staged posting whose text is already in
-documents was collected correctly and needs no document of its own; it is
-counted apart from a real failure so that a source republishing unchanged
-listings does not read as a broken source.
-
-**Concurrency.** The claim uses FOR UPDATE SKIP LOCKED, which keeps two
-drains running at the same instant off each other's rows, but the lock ends
-with the claim transaction rather than covering the ingestion. Correctness
-under overlap therefore rests on the re-run being idempotent, not on the
-lock, and the intended arrangement is a single scheduled drain. Making
-overlap efficient rather than merely safe wants a claimed state, which is a
-migration, and nothing needs it yet.
-"""
+"""Moving staged postings into the knowledge base (FR-7)."""
 
 import logging
 import uuid
@@ -50,12 +21,7 @@ MAX_ERROR_LENGTH = 500
 
 @dataclass(frozen=True)
 class DrainReport:
-    """What one pass of the drain did.
-
-    duplicates counts postings that were already in the knowledge base, and
-    they are also ingested as far as the staging row is concerned -- the
-    split exists so that a source can be judged on it.
-    """
+    """What one pass of the drain did."""
 
     ingested: int = 0
     duplicates: int = 0
@@ -110,11 +76,7 @@ async def _mark(
     state: StagingState,
     error: str | None = None,
 ) -> None:
-    """Record what became of one staged row.
-
-    Addressed by id rather than through the ORM object, which a rollback in
-    the middle of a failed ingestion may have expired.
-    """
+    """Record what became of one staged row."""
     await session.execute(
         update(StagingPosting)
         .where(StagingPosting.id == posting_id)
@@ -130,14 +92,7 @@ async def drain_staging(
     extractor: SkillExtractor | None = None,
     batch_size: int = DEFAULT_BATCH_SIZE,
 ) -> DrainReport:
-    """Ingest every pending staged posting, one at a time.
-
-    One posting failing is not the batch failing: FR-7 wants a source that
-    has gone wrong to stop without taking the schedule with it, and that is
-    only true if the row records its own reason and the pass carries on. The
-    reason is stored on the row, which is where someone will look, and logged
-    with a traceback, which is where the cause is.
-    """
+    """Ingest every pending staged posting, one at a time."""
     claimed = await _claim(session, batch_size)
     ingested = duplicates = failed = 0
 
@@ -157,9 +112,6 @@ async def drain_staging(
                 extractor,
             )
         except Exception as exc:
-            # Anything at all: an empty posting, a provider that is down, a
-            # constraint nobody foresaw. The row keeps the reason and the
-            # pass moves on to the next posting.
             await session.rollback()
             logger.exception("Could not ingest staged posting %s", posting.id)
             await _mark(

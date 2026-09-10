@@ -22,13 +22,7 @@ JWT_SECRET_KEY=test-only-throwaway-key-padded-to-32-bytes
 
 @pytest.fixture(autouse=True)
 def clear_settings_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Drop every variable that maps to a Settings field before each test.
-
-    Settings reads the real environment as well as the file under test, so a
-    developer with OPENAI_API_KEY exported would fail the tests that assert
-    it is unset. Clearing here makes the file the only source, and keeps the
-    one test that deliberately sets a variable meaningful.
-    """
+    """Drop every variable that maps to a Settings field before each test."""
     for field_name in Settings.model_fields:
         monkeypatch.delenv(field_name.upper(), raising=False)
 
@@ -59,12 +53,7 @@ def test_complete_env_file_parses(tmp_path: Path) -> None:
 
 
 def test_the_cookie_settings_have_development_defaults(tmp_path: Path) -> None:
-    """A .env that says nothing about cookies must still start locally.
-
-    Secure defaults to false because the alternative is a browser dropping
-    the login cookie over http with no error anywhere -- and the deployment
-    that needs it true is the one that has somebody configuring it.
-    """
+    """A .env that says nothing about cookies must still start locally."""
     settings = Settings(_env_file=write_env(tmp_path))
 
     assert settings.cookie_secure is False
@@ -84,11 +73,7 @@ def test_the_cookie_settings_are_read_from_the_file(tmp_path: Path) -> None:
 
 
 def test_misspelt_key_in_env_file_fails_at_startup(tmp_path: Path) -> None:
-    """A typo has to name itself instead of surfacing as a 503 later.
-
-    OPEN_API_KEY is the real one that cost an hour; the point is that
-    Settings() raises here rather than leaving openai_api_key unset.
-    """
+    """A typo has to name itself instead of surfacing as a 503 later."""
     env_file = write_env(tmp_path, "OPEN_API_KEY=sk-typo\n")
 
     with pytest.raises(ValidationError) as excinfo:
@@ -98,12 +83,7 @@ def test_misspelt_key_in_env_file_fails_at_startup(tmp_path: Path) -> None:
 
 
 def test_misspelt_key_with_no_value_is_tolerated(tmp_path: Path) -> None:
-    """An empty line is a placeholder, not a typo worth failing on.
-
-    .env.example ships keys with nothing after the '=', and pydantic drops
-    them before the extra check. Documented here so the behaviour is a
-    decision rather than a surprise.
-    """
+    """An empty line is a placeholder, not a typo worth failing on."""
     settings = Settings(_env_file=write_env(tmp_path, "OPEN_API_KEY=\n"))
 
     assert settings.openai_api_key is None
@@ -112,12 +92,7 @@ def test_misspelt_key_with_no_value_is_tolerated(tmp_path: Path) -> None:
 def test_unknown_environment_variable_is_still_ignored(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The check reaches the file only -- the container's env is untouched.
-
-    Environment variables are matched to fields by name, so an unknown one
-    never reaches the model and extra="forbid" cannot see it. This is why
-    docker-compose mounts .env into the api container.
-    """
+    """The check reaches the file only -- the container's env is untouched."""
     monkeypatch.setenv("OPEN_API_KEY", "sk-typo")
 
     settings = Settings(_env_file=write_env(tmp_path))
@@ -126,21 +101,12 @@ def test_unknown_environment_variable_is_still_ignored(
 
 
 def test_env_example_declares_only_known_fields() -> None:
-    """Every key in the committed example must exist on the model.
-
-    Without this, .env.example drifts into a file that fails the moment it
-    is copied to .env -- which is the first thing anyone does.
-    """
+    """Every key in the committed example must exist on the model."""
     assert env_example_keys() <= set(Settings.model_fields)
 
 
 def test_env_example_declares_every_required_field() -> None:
-    """And the other direction: nothing required may be missing from it.
-
-    A new field without a default that never reaches the example turns that
-    first copy into a startup error listing a name the newcomer has never
-    seen.
-    """
+    """And the other direction: nothing required may be missing from it."""
     required = {
         name for name, field in Settings.model_fields.items() if field.is_required()
     }

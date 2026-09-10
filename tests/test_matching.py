@@ -126,11 +126,7 @@ def test_a_term_and_its_plural_count_as_one_keyword():
 
 
 def test_grammar_is_dropped_before_it_can_be_normalised():
-    """Stopwords are matched on the written form, not the folded one.
-
-    Folding first would turn "this" into "thi", which no stopword list
-    contains, and the word would score as a requirement of the posting.
-    """
+    """Stopwords are matched on the written form, not the folded one."""
     keywords = extract_keywords("This is what we have: docker and this again")
 
     assert "thi" not in keywords
@@ -171,29 +167,17 @@ def test_boilerplate_covers_its_own_plural():
 
 
 def test_boilerplate_entries_are_written_in_the_folded_form():
-    """A plural entry would sit in the list and never match anything.
-
-    "hands" was exactly that before this test existed: tokens reach the
-    filter already folded to "hand".
-    """
+    """A plural entry would sit in the list and never match anything."""
     assert [term for term in BOILERPLATE if singular(term) != term] == []
 
 
 def test_boilerplate_and_stopwords_do_not_overlap():
-    """Two lists, two reasons, checked at two different moments.
-
-    A term in both is a sign that the boundary between grammar and posting
-    vocabulary has blurred.
-    """
+    """Two lists, two reasons, checked at two different moments."""
     assert BOILERPLATE.isdisjoint(STOPWORDS)
 
 
 def test_the_words_kept_countable_on_purpose_survive():
-    """The boundary from the docstrings, pinned down.
-
-    A posting that stresses experience, a team or a job title is saying
-    something about the role -- dropping these would flatten the score.
-    """
+    """The boundary from the docstrings, pinned down."""
     keywords = extract_keywords(
         "Senior engineer wanted. Experience leading a team of developers."
     )
@@ -245,12 +229,7 @@ async def test_the_score_is_the_share_of_keywords_the_resume_covers(
 async def test_the_prompt_carries_the_posting_being_matched_and_no_other(
     session_factory, model, cache, writer, prompts
 ):
-    """Another company's posting is not advice, and never was.
-
-    It used to be kept out by asking retrieval for articles only. Nothing
-    retrieves now, so what keeps it out is that the prompt is built from one
-    posting -- the one the caller picked.
-    """
+    """Another company's posting is not advice, and never was."""
     async with session_factory() as session:
         job_post = await store(session, model, cache, JOB_POST)
         await store(session, model, cache, OTHER_POST)
@@ -269,11 +248,7 @@ async def test_the_prompt_carries_the_posting_being_matched_and_no_other(
 async def test_a_remark_about_the_resume_is_kept_out_of_the_resume(
     session_factory, model, cache, writer, prompts
 ):
-    """W-2: the model's gap note used to arrive as the last bullet point.
-
-    Nothing stops a model from writing one, so the schema gives it a place to
-    go. What matters here is that the two lists stay apart on the way out.
-    """
+    """W-2: the model's gap note used to arrive as the last bullet point."""
     async with session_factory() as session:
         job_post = await store(session, model, cache, JOB_POST)
 

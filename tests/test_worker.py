@@ -1,11 +1,4 @@
-"""How the worker loop starts, keeps going and stops.
-
-The pass itself is a stand-in throughout. What is worth pinning here is only
-the loop around it: that a stop is noticed between passes and never inside
-one, that a pass which raises does not end the process, and that the wait
-between passes gives up the moment the flag is set -- otherwise a container
-takes the whole interval to shut down and docker kills it instead.
-"""
+"""How the worker loop starts, keeps going and stops."""
 
 import asyncio
 from collections.abc import Awaitable, Callable

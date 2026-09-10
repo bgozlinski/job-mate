@@ -67,13 +67,9 @@ async def test_a_resume_is_matched_against_a_posting(client, owner, suggestion_w
     assert "kubernetes" in body["missing_keywords"]
     assert "python" in body["matched_keywords"]
     assert body["suggestions"] == suggestion_writer.suggestions
-    # The gap note travels in its own field: a client rendering suggestions
-    # into a document must not pick up a remark about the document (W-2).
     assert body["notes"] == suggestion_writer.notes
     assert body["notes"] not in body["suggestions"]
     assert body["retrieved_chunk_ids"]
-    # The posting reached the prompt, which is what grounding means now that
-    # the knowledge base holds nothing else.
     assert JOB_POST in suggestion_writer.prompts[0]
 
 
@@ -120,10 +116,6 @@ async def test_an_unknown_document_is_not_found(client, owner):
 async def test_matching_requires_a_token(client, owner):
     resume_id = await create_resume(client, owner)
     document_id = await create_document(client, owner)
-    # The owner fixture logged in, and logging in now also sets session
-    # cookies, which httpx keeps in its jar exactly as a browser would. So
-    # omitting the Authorization header no longer makes a request
-    # anonymous -- emptying the jar is what does.
     client.cookies.clear()
 
     response = await client.post(

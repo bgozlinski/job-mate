@@ -1,15 +1,4 @@
-"""What the harvester does when a host asks it to slow down.
-
-Nothing here touches the network, and that is the point twice over: the
-middleware exists so this application does not become a nuisance to someone
-else's server, and a suite that proved it by making real requests would be
-running the behaviour it is supposed to prevent. The robots.txt parser is
-substituted and every 429 is a Response built by hand.
-
-The delay these tests assert on lives on the downloader's Slot, which is a
-real scrapy.core.downloader.Slot -- the object AutoThrottle and the request
-queue actually read. Only the crawler around it is a stand-in.
-"""
+"""What the harvester does when a host asks it to slow down."""
 
 from email.utils import formatdate
 from time import time
@@ -129,7 +118,7 @@ def test_the_floor_survives_autothrottle_lowering_the_delay() -> None:
     slot = crawler.downloader.open_slot(Request(URL))
     middleware.process_request(Request(URL))
 
-    slot.delay = CONFIGURED_DELAY  # what AutoThrottle does after a response
+    slot.delay = CONFIGURED_DELAY
     middleware.process_request(Request(URL))
 
     assert slot.delay == ASKED_DELAY
@@ -256,7 +245,7 @@ def test_a_429_floor_outlives_the_retry() -> None:
     middleware.process_response(Request(URL), too_many(str(int(RETRY_AFTER))))
 
     middleware.process_request(Request(URL))
-    slot.delay = CONFIGURED_DELAY  # AutoThrottle again
+    slot.delay = CONFIGURED_DELAY
     middleware.process_request(Request(URL))
 
     assert slot.delay == RETRY_AFTER

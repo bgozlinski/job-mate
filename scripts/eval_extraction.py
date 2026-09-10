@@ -1,31 +1,4 @@
-"""Measure what the extraction prompts read out of a posting and a resume.
-
-The other evaluation is arithmetic over fixed lists; this one calls a real
-model. It therefore costs money, needs ANTHROPIC_API_KEY and answers a little
-differently every time -- which is the reason for --runs: a term that appears
-in one run out of three is not extracted, it is guessed, and a prompt change
-that fixes a case only sometimes has not fixed it.
-
-Three things are measured, and the third is the one nothing else covers:
-
-- recall of what must be there, per side and per domain;
-- violations, meaning something the posting offers or the resume never claimed;
-- agreement, meaning a term that both sides produce in a form cover() links.
-  A posting saying "postgresql" and a resume saying "postgres" are two correct
-  extractions and one broken match, and only this number sees it.
-
-An expected term counts as produced when the list covers it under the
-project's own rule, not by string equality: extraction is measured the way the
-score will read it.
-
-    uv run python -m scripts.eval_extraction
-    uv run python -m scripts.eval_extraction --runs 3
-    uv run python -m scripts.eval_extraction --only retail-shop --show
-
-Traces land in Langfuse like any other extraction. From the host that means
-LANGFUSE_HOST=http://localhost:3000; LANGFUSE_TRACING_ENABLED=false turns them
-off entirely.
-"""
+"""Measure what the extraction prompts read out of a posting and a resume."""
 
 import asyncio
 import json
@@ -53,12 +26,7 @@ def produced(terms: list[str], expected: list[str]) -> list[str]:
 
 
 def violated(terms: list[str], forbidden: list[str]) -> list[str]:
-    """Return the forbidden terms an entry carries, in either direction.
-
-    Either direction, because both failures are the same mistake seen from
-    two sides: an entry "private healthcare" against a forbidden "healthcare",
-    and an entry "healthcare" against a forbidden "private healthcare".
-    """
+    """Return the forbidden terms an entry carries, in either direction."""
     hits = []
 
     for term in forbidden:
@@ -115,11 +83,7 @@ def share(found: int, wanted: int) -> float:
 
 
 def report(pair: dict[str, Any], scored: dict[str, Any], show: bool = False) -> None:
-    """Print one pair: what was missed, what was invented, what disagreed.
-
-    With show, the lists themselves as well -- a miss is only actionable once
-    you can read the words the model chose instead.
-    """
+    """Print one pair: what was missed, what was invented, what disagreed."""
     print(f"\n{scored['id']} ({scored['domain']})")
 
     for index, run in enumerate(scored["runs"], start=1):

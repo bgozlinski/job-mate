@@ -1,14 +1,9 @@
-"""add staging postings
+"""
+add staging postings
 
 Revision ID: ee4d321eaa67
 Revises: d3ef2a2a7af4
 Create Date: 2026-09-10 15:59:17.040511
-
-staging_state is a native type and drop_table does not remove it, the same
-way source_kind did not in d3ef2a2a7af4. Left behind, it makes the next
-upgrade fail on "type staging_state already exists", so the downgrade drops
-it. The foreign key needs no such care: it is declared inside create_table
-and goes with the table.
 
 """
 
@@ -17,7 +12,6 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-# revision identifiers, used by Alembic.
 revision: str = "ee4d321eaa67"
 down_revision: str | Sequence[str] | None = "d3ef2a2a7af4"
 branch_labels: str | Sequence[str] | None = None

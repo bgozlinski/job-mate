@@ -1,16 +1,4 @@
-"""What the Twisted half of the FR-7 seam writes, and what it refuses to.
-
-The pipeline runs under Scrapy, so these tests drive it the way Scrapy does:
-open_spider, then items, then close_spider, with a stand-in crawler. The
-database is real -- the throwaway one every other test uses -- because the
-behaviour worth pinning is what the ON CONFLICT clause and the connection do,
-and a fake connection would only prove the SQL string is spelled the way this
-test spells it.
-
-The pipeline writes with synchronous psycopg while the assertions read with
-async SQLAlchemy. That is not an accident of testing: it is the seam itself,
-one database reached by two runtimes, which is exactly what FR-7 asks for.
-"""
+"""What the Twisted half of the FR-7 seam writes, and what it refuses to."""
 
 import uuid
 from typing import cast

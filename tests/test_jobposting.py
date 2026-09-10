@@ -35,13 +35,7 @@ POSTING = {
 
 
 def encode(block: object) -> str:
-    """Serialise a block the way a page that renders in a browser has to.
-
-    The escaping of '</' is not decoration: a literal '</script' ends a script
-    body for every HTML parser there is, browsers included, so a site whose
-    posting mentions markup escapes it or its own page breaks. Leaving it out
-    here would test this parser against a document no site ever serves.
-    """
+    """Serialise a block the way a page that renders in a browser has to."""
     if isinstance(block, str):
         return block
 
@@ -92,7 +86,6 @@ def test_fields_the_posting_does_not_state_are_absent_not_null():
 
     assert "salary_currency" not in scraped.metadata
     assert "salary_min" not in scraped.metadata
-    # An empty addressRegion is a value the page states and does not have.
     assert "region" not in scraped.metadata
 
 
@@ -142,7 +135,6 @@ def test_a_posting_without_a_description_is_rejected():
     [
         (POSTING | {"hiringOrganization": None}, "Python Developer"),
         (POSTING | {"title": None}, "DCV Technologies"),
-        # The standard allows the organisation to be a bare name.
         (
             POSTING | {"hiringOrganization": "DCV Technologies"},
             "Python Developer — DCV Technologies",
@@ -187,9 +179,6 @@ def test_a_description_mentioning_a_closing_script_tag_is_still_read():
 
     scraped = parse_job_posting(page(POSTING | {"description": described}))
 
-    # What proves the block was read whole is that the text after the escaped
-    # tag survived. The tag itself is gone because a description is treated as
-    # possibly being HTML, and there it is markup like any other.
     assert "in tests. Python." in scraped.content
 
 

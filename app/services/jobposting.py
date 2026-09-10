@@ -1,37 +1,4 @@
-"""Reading a job posting out of a page's structured data (FR-1).
-
-Pure functions over a string of HTML: no network, no clock and no database,
-so every shape a page can arrive in -- and every way it can fail -- is
-testable from a literal.
-
-What is read is the ``application/ld+json`` block of type ``JobPosting``:
-schema.org data a job board publishes on purpose, so that Google Jobs can
-index it. That choice is the whole design, and it buys three things.
-
-It is stable. The visible markup of these sites is generated CSS-in-JS --
-``class="mui-1y6apb5"`` -- and a selector written against it survives until
-the next build. The structured block is a contract with a search engine and
-changes at the speed of schema.org.
-
-It is unambiguous. A posting page carries about twenty *other* offers in its
-"similar jobs" rail, complete with their own titles, companies and skills.
-Anything that reduces the page to "its main text" -- a readability heuristic,
-a hand-written selector, a language model -- can and does swallow them, and
-four companies' postings would enter the knowledge base as one document. The
-``JobPosting`` block describes exactly one offer: the one the URL names.
-
-It is portable. Nothing here knows about any particular site, so a second
-board is a line on the allowlist rather than a second parser. Whether it is
-*allowed* is a separate question, and NFR-5 answers it.
-
-What the block does not carry, on the sites seen so far, is the seniority
-label, the working mode and the tech-stack chips. Those live in the framework
-payload beside it, doubly escaped and split across chunks, and reading them
-would mean re-implementing a rendering format that changes with the
-framework's minor version. They are left on the page: the requirements this
-project actually scores against are read out of the description by
-SkillExtractor, which does not care where the text came from.
-"""
+"""Reading a job posting out of a page's structured data (FR-1)."""
 
 import html
 import json
@@ -45,10 +12,12 @@ LD_JSON_TYPE = "application/ld+json"
 JOB_POSTING_TYPE = "JobPosting"
 
 MAX_METADATA_TEXT = 200
-"""How much of any one scraped value is kept. The fields mapped below are
-names and labels -- a company, a city, an employment type -- and one that
-arrives as a paragraph is a page doing something unexpected, not a fact worth
-storing at full length in a column that retrieval filters on."""
+"""
+How much of any one scraped value is kept. The fields mapped below are names and labels
+-- a company, a city, an employment type -- and one that arrives as a paragraph is a
+page doing something unexpected, not a fact worth storing at full length in a column
+that retrieval filters on.
+"""
 
 _BREAK = re.compile(r"<br\s*/?>", re.IGNORECASE)
 _BLOCK_END = re.compile(
@@ -57,30 +26,21 @@ _BLOCK_END = re.compile(
 )
 _TAG = re.compile(r"<[^>]+>")
 _BLANK_LINES = re.compile(r"\n{3,}")
-"""schema.org allows the description to carry HTML, and some boards send it
-that way. Stripping the tags without putting a separator in their place is
-what produces the run-on text this parser is trying to avoid, so the closing
-tags that end a block become blank lines before anything else is removed."""
+"""
+schema.org allows the description to carry HTML, and some boards send it that way.
+Stripping the tags without putting a separator in their place is what produces the run-
+on text this parser is trying to avoid, so the closing tags that end a block become
+blank lines before anything else is removed.
+"""
 
 
 class NoJobPostingError(ValueError):
-    """Raised for a page that carries no posting this parser can read.
-
-    One class for every way of not finding one -- no block, a block of some
-    other type, malformed JSON, a posting with no description -- because the
-    caller does the same thing with all of them: tell the user this address is
-    not a job posting. The message says which it was.
-    """
+    """Raised for a page that carries no posting this parser can read."""
 
 
 @dataclass(frozen=True)
 class ScrapedPosting:
-    """What one page yielded, in the shape ingestion already accepts.
-
-    Deliberately not a Document and not a SourceDocument: this module knows
-    nothing about the database, and the route is what decides that a scraped
-    posting is stored the same way a pasted one is.
-    """
+    """What one page yielded, in the shape ingestion already accepts."""
 
     content: str
     title: str | None = None
@@ -88,21 +48,7 @@ class ScrapedPosting:
 
 
 class _LdJsonScripts(HTMLParser):
-    r"""Collect the body of every ``application/ld+json`` script on a page.
-
-    A parser rather than a regular expression over the whole document,
-    because the hard part is the opening tag, not the body: the attributes
-    arrive in any order, quoted or not, with a charset or a nonce beside the
-    type, and every pattern that reads them by hand is wrong on some page.
-    HTMLParser is also lenient by construction -- it never raises on broken
-    markup -- which is the right disposition for pages nobody here controls.
-
-    It switches to CDATA for script content on its own, so what lands in
-    handle_data is raw JSON rather than something it tried to read as markup.
-    That mode still ends at the first literal ``</script``, exactly as a
-    browser does, which is why a page must escape one inside its JSON as
-    ``<\\/script>`` -- and every page that renders in a browser already has.
-    """
+    """Collect the body of every application/ld+json script on a page."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=False)
@@ -136,13 +82,7 @@ class _LdJsonScripts(HTMLParser):
 
 
 def _candidates(value: object) -> list[dict[str, Any]]:
-    """Flatten one parsed block into the objects it might contain.
-
-    A block is an object, a list of objects, or an object wrapping them in
-    @graph -- all three are valid JSON-LD and all three occur in the wild.
-    Recursing through @graph rather than only looking one level down costs a
-    line and removes a class of "works on one site" bug.
-    """
+    """Flatten one parsed block into the objects it might contain."""
     if isinstance(value, list):
         return [item for entry in value for item in _candidates(entry)]
 
@@ -159,11 +99,7 @@ def _candidates(value: object) -> list[dict[str, Any]]:
 
 
 def _is_job_posting(node: dict[str, Any]) -> bool:
-    """Say whether this node declares itself a JobPosting.
-
-    @type is a string on every page seen so far and a list in the standard,
-    so both are accepted.
-    """
+    """Say whether this node declares itself a JobPosting."""
     declared = node.get("@type")
 
     if isinstance(declared, str):
@@ -176,12 +112,7 @@ def _is_job_posting(node: dict[str, Any]) -> bool:
 
 
 def _job_postings(document: str) -> list[dict[str, Any]]:
-    """Return the JobPosting nodes on a page, in document order.
-
-    A block that is not JSON is skipped rather than fatal: a page may carry
-    several ld+json blocks -- a breadcrumb trail, an organisation card -- and
-    one of them being broken says nothing about the one that matters.
-    """
+    """Return the JobPosting nodes on a page, in document order."""
     scripts = _LdJsonScripts()
     scripts.feed(document)
     scripts.close()
@@ -200,41 +131,19 @@ def _job_postings(document: str) -> list[dict[str, Any]]:
 
 
 def plain_text(value: str) -> str:
-    """Reduce a description to text, keeping the breaks between its blocks.
-
-    Order matters twice here. Tags are removed before entities are decoded,
-    or a description mentioning ``&lt;script&gt;`` would grow a tag that then
-    gets stripped. And the closing tags that end a block become blank lines
-    before the rest are dropped, so a list does not arrive as one sentence.
-
-    None of this rescues a board that strips its own markup before publishing
-    the block -- justjoin.it sends "...w architekturzeO współpracy..." with the
-    heading welded to the sentence after it, and the separator it needed is
-    already gone. That text is still what the offer says, and both the chunker
-    and the extractor cope with it; it is worth knowing it is not a bug here.
-    """
+    """Reduce a description to text, keeping the breaks between its blocks."""
     text = _BREAK.sub("\n", value)
     text = _BLOCK_END.sub("\n\n", text)
     text = _TAG.sub(" ", text)
     text = html.unescape(text)
     text = text.replace("\xa0", " ")
-    # An opening tag becomes a space, so "</p><p>" leaves one stranded at the
-    # head of the next line. Only the edges of a line are touched: collapsing
-    # runs of spaces inside one would be a second normalisation competing
-    # with normalize_content, which deliberately leaves them alone.
     text = "\n".join(line.strip() for line in text.split("\n"))
 
     return _BLANK_LINES.sub("\n\n", text).strip()
 
 
 def _text(value: object) -> str | None:
-    """Take a scalar field as a short single line, or nothing.
-
-    Everything mapped into metadata goes through here, so a page that sends a
-    number where a name belongs, or a nested object where a string belongs,
-    yields None instead of putting whatever it liked into a JSONB column that
-    retrieval filters on.
-    """
+    """Take a scalar field as a short single line, or nothing."""
     if isinstance(value, bool) or not isinstance(value, str | int | float):
         return None
 
@@ -283,15 +192,7 @@ def _place(value: object) -> dict[str, str]:
 
 
 def _salary(value: object) -> dict[str, Any]:
-    """Map a MonetaryAmount to flat keys, when the posting states one.
-
-    Flat rather than nested because metadata is queried with jsonb
-    containment, which matches whole sub-objects: a nested salary could only
-    be filtered on by repeating every field of it at once.
-
-    Absent entirely on many postings -- not null, the key simply is not there
-    -- so nothing here treats a missing amount as a problem.
-    """
+    """Map a MonetaryAmount to flat keys, when the posting states one."""
     node = _first(value)
 
     if not isinstance(node, dict):
@@ -314,13 +215,7 @@ def _salary(value: object) -> dict[str, Any]:
 
 
 def _metadata(posting: dict[str, Any]) -> dict[str, Any]:
-    """Map the posting to the flat object documents.metadata is filtered on.
-
-    Only keys with a value are kept. A metadata object full of nulls would
-    make jsonb containment answer questions wrongly -- a posting that never
-    stated its employment type is not a posting whose employment type is
-    nothing -- and it would bloat the GIN index with them.
-    """
+    """Map the posting to the flat object documents.metadata is filtered on."""
     fields = {
         "company": _named(posting.get("hiringOrganization")),
         "employment_type": _text(_first(posting.get("employmentType"))),
@@ -336,12 +231,7 @@ def _metadata(posting: dict[str, Any]) -> dict[str, Any]:
 
 
 def _title(posting: dict[str, Any]) -> str | None:
-    """Name the document as a person would recognise it in a listing.
-
-    The role alone repeats across a knowledge base -- half of it is called
-    "Python Developer" -- so the company is part of the name. Neither half is
-    guaranteed, hence the three cases.
-    """
+    """Name the document as a person would recognise it in a listing."""
     role = _text(posting.get("title"))
     company = _named(posting.get("hiringOrganization"))
 
@@ -352,17 +242,7 @@ def _title(posting: dict[str, Any]) -> str | None:
 
 
 def parse_job_posting(document: str) -> ScrapedPosting:
-    """Read the first JobPosting on a page, or say why there is none.
-
-    The first rather than all of them: the block belongs to the offer the URL
-    names, and a page that somehow declared several would be describing
-    something this application has no way to store as one document.
-
-    Raises NoJobPostingError when the page carries no posting, or one with no
-    description. An empty description is a failure here rather than further
-    down, because "this page is not an offer" is what the user needs to hear,
-    and by the time ingestion notices the text is empty the reason is lost.
-    """
+    """Read the first JobPosting on a page, or say why there is none."""
     postings = _job_postings(document)
 
     if not postings:

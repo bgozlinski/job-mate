@@ -18,17 +18,14 @@ RESUME = (
     "Backend engineer with eight years of experience building services in "
     "Python, PostgreSQL and Docker, working on payments and search platforms."
 )
-"""Long enough to clear MIN_EXTRACTED_CHARS, so a test that is not about the
-threshold does not trip over it."""
+"""
+Long enough to clear MIN_EXTRACTED_CHARS, so a test that is not about the threshold does
+not trip over it.
+"""
 
 
 def _pdf_with(text: str) -> bytes:
-    """Build the smallest PDF that carries one line of extractable text.
-
-    Written here rather than committed as a binary fixture: a reader can see
-    what the test feeds the parser, and there is no file to keep in step with
-    the code.
-    """
+    """Build the smallest PDF that carries one line of extractable text."""
     stream = b"BT /F1 12 Tf 72 720 Td (" + text.encode("ascii") + b") Tj ET"
     bodies = [
         b"<</Type/Catalog/Pages 2 0 R>>",

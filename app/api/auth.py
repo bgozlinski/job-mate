@@ -35,13 +35,7 @@ INVALID_SESSION = HTTPException(
     detail="Invalid or expired token",
     headers={"WWW-Authenticate": "Bearer"},
 )
-"""The one answer every rejected renewal gets.
-
-Word for word what get_current_user answers with, and for the same reason:
-telling a missing cookie apart from an expired one, or from one whose
-account has since been deleted, reports to whoever is probing how far they
-got.
-"""
+"""The one answer every rejected renewal gets."""
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
@@ -49,12 +43,7 @@ async def register(
     payload: UserCreate,
     session: Annotated[AsyncSession, Depends(get_db)],
 ) -> UserRead:
-    """Create an account, or answer 409 if the address is taken.
-
-    The duplicate is caught from the unique index rather than prevented by a
-    prior SELECT: checking first leaves a window in which a concurrent
-    request can insert the same address between the check and the write.
-    """
+    """Create an account, or answer 409 if the address is taken."""
     user = User(email=payload.email, password_hash=hash_password(payload.password))
     session.add(user)
 
@@ -77,25 +66,7 @@ async def login(
     settings: Annotated[Settings, Depends(get_config)],
     response: Response,
 ) -> TokenResponse:
-    """Exchange credentials for a session, in both shapes at once.
-
-    The body carries a long-lived token for a client that sends an
-    Authorization header and cannot renew what it holds. The same response
-    sets httpOnly cookies for a browser, which can renew silently and so
-    gets a short access cookie backed by a refresh token. Both are issued
-    every time: which one a client uses is the client's business, and a
-    login that had to be told in advance would need a flag nobody wants to
-    explain.
-
-    A browser is handed a token in the body it will not use. That is the
-    price of one login route for two clients, and it is not a leak: the
-    response goes to a caller who just proved they own the account, over the
-    same connection as the cookies.
-
-    An unknown address and a wrong password produce the same response and,
-    thanks to the discarded verification, take the same time. Either one
-    would otherwise reveal which addresses have accounts (NFR-1).
-    """
+    """Exchange credentials for a session, in both shapes at once."""
     user = await session.scalar(select(User).where(User.email == payload.email))
 
     if user is None:
@@ -118,25 +89,7 @@ async def refresh(
     session: Annotated[AsyncSession, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_config)],
 ) -> None:
-    """Renew the short access cookie from the refresh cookie.
-
-    Cookie only: the refresh token is never handed out any other way, so
-    there is no header to read it from, and accepting one would widen the
-    surface for nothing. The Bearer client does not come here at all -- it
-    holds a long-lived token and has no refresh cookie to present.
-
-    The account is loaded rather than trusted from the claims, so a deleted
-    account cannot renew its way through the rest of the week. That database
-    read is the only thing standing between a deleted user and a working
-    session, since nothing revokes the tokens themselves.
-
-    Every failure is the same 401 as anywhere else: no cookie, a bad
-    signature, an expired token, an access token presented as a refresh one,
-    an account that is gone. The cookies are deliberately left in place on
-    failure -- clearing them would mean building the error response by hand,
-    and a dead refresh cookie is inert anyway. A 401 here means the caller
-    has to log in again, not retry.
-    """
+    """Renew the short access cookie from the refresh cookie."""
     presented = request.cookies.get(REFRESH_COOKIE)
 
     if presented is None:
@@ -159,17 +112,7 @@ async def logout(
     response: Response,
     settings: Annotated[Settings, Depends(get_config)],
 ) -> None:
-    """End the browser's session by removing both cookies.
-
-    No authentication required, on purpose. A session whose access cookie
-    has already expired is exactly the one a user wants to end, and a logout
-    that answered 401 would refuse at the moment it is most needed. Nothing
-    is destroyed that the caller does not already hold, so there is nothing
-    to protect here.
-
-    Answering the same way whether or not there was a session keeps this
-    from reporting whether the caller was logged in.
-    """
+    """End the browser's session by removing both cookies."""
     clear_session_cookies(response, settings)
 
 

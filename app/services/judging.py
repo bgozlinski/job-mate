@@ -1,24 +1,4 @@
-"""Deciding, requirement by requirement, what a resume proves (W-1).
-
-The deterministic rule in matching.py compares whole terms, which is why a
-resume evidencing PostgreSQL is told it lacks SQL, and a warehouse worker who
-drove a reach truck for three years is told he lacks a forklift licence. On
-the labelled cases in evals/skill_matching.json it awards nothing it should
-not -- precision 1.000 -- and reports two of every five proven skills as a
-gap, worse outside software than in it.
-
-A model reads the sentence instead. What it must not do is produce the
-number: it answers met or not met for each requirement and quotes the words
-that prove it, and the score is still counted here, in Python, from those
-answers. A number a model invents cannot be reproduced, explained or tested,
-and FR-3 asks for one that can.
-
-The two are combined rather than swapped. A requirement the deterministic
-rule matched stays matched whatever the model says -- it is the half with
-perfect precision, and letting a model overrule it can only lose. The model's
-job is the other half: the gap between what a resume proves and what a
-comparison of words can see.
-"""
+"""Deciding, requirement by requirement, what a resume proves (W-1)."""
 
 from typing import Protocol
 
@@ -30,8 +10,10 @@ from app.core.config import Settings
 from app.core.prompts import REQUIREMENT_VERDICTS, PromptStore
 
 MAX_EVIDENCE_LENGTH = 300
-"""A quote is a few words of the resume, not a paragraph of it. Anything
-longer is the model retelling the document rather than pointing at it."""
+"""
+A quote is a few words of the resume, not a paragraph of it. Anything longer is the
+model retelling the document rather than pointing at it.
+"""
 
 
 class Verdict(BaseModel):
@@ -49,11 +31,7 @@ class Verdicts(BaseModel):
 
 
 class RequirementJudge(Protocol):
-    """What matching needs from an LLM to compare two lists of terms.
-
-    A protocol for the same reason the writer and the extractors are ones: a
-    test that reaches a real model is slow, non-deterministic and billed.
-    """
+    """What matching needs from an LLM to compare two lists of terms."""
 
     async def judge(
         self, requirements: list[str], resume: str, skills: list[str] | None
@@ -65,22 +43,7 @@ class RequirementJudge(Protocol):
 def settle(
     requirements: list[str], matched: list[str], verdicts: list[Verdict]
 ) -> tuple[list[str], list[str], dict[str, str]]:
-    """Merge what the rule matched with what the model judged.
-
-    A union, not a replacement, and deliberately asymmetric: the model can
-    add a match, never take one away. The rule's positives are the ones with
-    measured precision, and a model having an off run must not be able to
-    tell a candidate they lack a skill the resume states in so many words.
-
-    Verdicts for anything that is not a requirement of this posting are
-    dropped. The model is asked to answer the list it was given; when it
-    invents an entry, that entry has no place in a denominator computed from
-    the posting.
-
-    The evidence is returned alongside so the answer can be argued with: a
-    match with a quote from the resume is a claim the candidate can check,
-    which is the whole reason the model is not allowed to produce the number.
-    """
+    """Merge what the rule matched with what the model judged."""
     wanted = {requirement: None for requirement in requirements}
     evidence = {}
     met = set(matched)
@@ -120,13 +83,7 @@ class AnthropicRequirementJudge:
     async def judge(
         self, requirements: list[str], resume: str, skills: list[str] | None
     ) -> list[Verdict]:
-        """Ask the model what the resume proves, one requirement at a time.
-
-        The skills read out of the resume at storage time are handed over
-        beside the text itself. They are a normalised summary -- k8s already
-        expanded to kubernetes -- and the resume is the evidence the quote
-        has to come from, so the model gets both rather than either.
-        """
+        """Ask the model what the resume proves, one requirement at a time."""
         response = await self._client.messages.parse(
             model=self._model,
             max_tokens=2048,

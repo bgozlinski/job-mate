@@ -22,8 +22,10 @@ SUBJECT = {"sub": str(uuid.uuid7())}
 HOUR_SECONDS = 3600
 DAY_SECONDS = 24 * HOUR_SECONDS
 TOLERANCE_SECONDS = 60
-"""The tokens are timed from datetime.now inside the function under test, so
-an assertion on exp has to allow for the gap between that call and this one."""
+"""
+The tokens are timed from datetime.now inside the function under test, so an assertion
+on exp has to allow for the gap between that call and this one.
+"""
 
 
 def lifetime_seconds(token: str) -> float:
@@ -48,11 +50,7 @@ def test_a_refresh_token_says_it_is_one():
 
 
 def test_an_access_token_cannot_buy_a_new_one():
-    """The check the type claim exists for.
-
-    Without it a token that authenticates a request also renews the session,
-    so its short life means nothing and it never really expires.
-    """
+    """The check the type claim exists for."""
     with pytest.raises(jwt.InvalidTokenError):
         decode_refresh_token(create_access_token(SUBJECT))
 
@@ -64,12 +62,7 @@ def test_a_refresh_token_cannot_authenticate_a_request():
 
 
 def test_a_token_from_before_the_type_claim_still_authenticates():
-    """Signed strings people are holding have no claim and no migration.
-
-    Rejecting them would log out every open session. It is safe because the
-    default is the weaker of the two types: the next test shows such a token
-    still cannot refresh.
-    """
+    """Signed strings people are holding have no claim and no migration."""
     settings = get_settings()
     legacy = jwt.encode(
         {**SUBJECT, "exp": int(datetime.now(UTC).timestamp()) + HOUR_SECONDS},

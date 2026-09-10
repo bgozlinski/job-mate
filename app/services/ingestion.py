@@ -23,18 +23,7 @@ class EmptyDocumentError(ValueError):
 
 @dataclass(frozen=True)
 class SourceDocument:
-    """What the caller supplies about one posting.
-
-    metadata is any JSON object; it lands in documents.metadata and is what
-    hybrid retrieval later filters on (role, seniority). Validating its shape
-    belongs to the request schema, not here -- the knowledge base has to be
-    able to carry fields the API does not know about yet.
-
-    source_id and external_id are the harvester's provenance (FR-7) and stay
-    None for everything a person pasted, uploaded or fetched by URL. They are
-    part of what the caller knows about the posting, which is why they belong
-    here rather than in an update the drain issues afterwards.
-    """
+    """What the caller supplies about one posting."""
 
     content: str
     title: str | None = None
@@ -46,11 +35,7 @@ class SourceDocument:
 
 @dataclass(frozen=True)
 class Ingested:
-    """The stored document, and whether this call is what stored it.
-
-    created lets the endpoint answer 201 for a new source and something else
-    for one that was already there, without a second query.
-    """
+    """The stored document, and whether this call is what stored it."""
 
     document: Document
     created: bool
@@ -59,13 +44,7 @@ class Ingested:
 async def _requirements(
     content: str, extractor: SkillExtractor | None
 ) -> list[str] | None:
-    """Read the posting's requirements, or leave the column empty.
-
-    Every way of not getting them is the same answer -- None -- because they
-    are an improvement on the score, not a precondition for storing the
-    document. A provider that is down must not lose an ingestion that has
-    already paid for its embeddings.
-    """
+    """Read the posting's requirements, or leave the column empty."""
     if extractor is None:
         return None
 
@@ -91,26 +70,7 @@ async def ingest_document(
     cache: Redis,
     extractor: SkillExtractor | None = None,
 ) -> Ingested:
-    """Split, embed and store a source, or return the duplicate it repeats.
-
-    The embeddings are fetched before anything is written, for two reasons:
-    a document must never reach the database without its chunks -- it would
-    be invisible to retrieval while its hash blocked a second attempt -- and
-    a call to the embeddings API inside an open transaction would hold a
-    database connection for the whole round trip.
-
-    Deduplication is settled by the unique index on content_hash, not by the
-    lookup that precedes it: two concurrent requests carrying the same text
-    both pass that lookup, and only the database can reject the loser. The
-    lookup is there to save an embeddings call in the common case.
-
-    The posting also has its requirements read out by an LLM, once, here --
-    they belong to the posting, and doing it in /match instead would pay for
-    a call per candidate (W-1 variant c). The extractor is optional and a
-    failure is survivable, because ingestion working without an LLM key is
-    what lets development and CI run, and matching falls back to the
-    frequency heuristic for a document that has none.
-    """
+    """Split, embed and store a source, or return the duplicate it repeats."""
     normalized = normalize_content(source.content)
     texts = split_content(normalized)
 
@@ -143,8 +103,6 @@ async def ingest_document(
     try:
         await session.commit()
     except IntegrityError:
-        # Another request stored the same text between the lookup and the
-        # commit. Its rows are the ones that count; ours never existed.
         await session.rollback()
         duplicate = await _by_hash(session, digest)
 

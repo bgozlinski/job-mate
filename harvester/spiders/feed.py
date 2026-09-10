@@ -1,17 +1,4 @@
-"""Reading job postings out of an RSS or Atom feed (FR-7, kind='feed').
-
-A feed is the form NFR-5 ranks above crawling: the site publishes it so that
-machines will read it, and one request per pass gets everything it offers.
-This spider therefore does exactly one thing -- fetch the feed and read its
-entries -- and **never follows the link to the full posting page**. A feed
-carrying only summaries is a source that should be registered as kind='crawl'
-after someone checks its robots.txt and terms; quietly walking through to the
-detail page would turn a permitted read into an unexamined one.
-
-The spider is deliberately ignorant of the database. It is told its
-source_id and endpoint by whatever launches it, because reading the sources
-table from inside a Twisted process is the coupling FR-7 exists to avoid.
-"""
+"""Reading job postings out of an RSS or Atom feed (FR-7, kind='feed')."""
 
 import re
 from typing import Any, Self
@@ -28,13 +15,17 @@ from harvester.items import Posting
 ALLOWED_SCHEME = "https"
 
 ENTRY_NODES = "//item | //entry"
-"""RSS calls an entry an item, Atom calls it an entry. Namespaces are
-stripped before this runs, so one expression covers both."""
+"""
+RSS calls an entry an item, Atom calls it an entry. Namespaces are stripped before this
+runs, so one expression covers both.
+"""
 
 CONTENT_FIELDS = ("content", "encoded", "description", "summary")
-"""Fullest first: Atom content, RSS content:encoded (namespace stripped to
-'encoded'), RSS description, and only then Atom summary, which is usually a
-teaser. The first field with text in it wins."""
+"""
+Fullest first: Atom content, RSS content:encoded (namespace stripped to 'encoded'), RSS
+description, and only then Atom summary, which is usually a teaser. The first field with
+text in it wins.
+"""
 
 _BLOCK_END = re.compile(r"(?i)<br\s*/?>|</(?:p|div|li|tr|h[1-6])\s*>")
 _TRAILING_SPACE = re.compile(r"[ \t]+(\n|$)")
@@ -42,23 +33,7 @@ _BLANK_LINES = re.compile(r"\n{3,}")
 
 
 def to_text(raw: str) -> str:
-    """Turn a feed's markup into the text a posting is made of.
-
-    Three steps, and the order of all three is load-bearing.
-
-    Entities are decoded first. Atom's content type="html" carries its markup
-    escaped, and the XML parser hands back one level of it decoded -- but a
-    feed that escaped it twice, or an RSS description quoting a tag, would
-    otherwise reach remove_tags looking like text and leave a literal <b> in
-    the posting. The cost is that a posting genuinely meaning to show a "<"
-    loses it, which is the cheaper mistake.
-
-    Block ends become newlines second. Stripping tags without that runs the
-    whole posting into one line, and chunking then has nothing to split on:
-    the requirement list and the bullet points arrive as one paragraph.
-
-    Tags go last, once everything that will ever look like a tag does.
-    """
+    """Turn a feed's markup into the text a posting is made of."""
     decoded = replace_entities(raw)
     with_breaks = _BLOCK_END.sub("\n", decoded)
     text = _TRAILING_SPACE.sub(r"\1", remove_tags(with_breaks))
@@ -71,18 +46,15 @@ class FeedSpider(Spider):
 
     name = "feed"
     allowed_domains: list[str]
-    """Declared here because Spider does not: the base class documents the
-    attribute but leaves it unset, so nothing types it for us."""
+    """
+    Declared here because Spider does not: the base class documents the attribute but
+    leaves it unset, so nothing types it for us.
+    """
 
     def __init__(
         self, source_id: str, endpoint: str, *args: Any, **kwargs: Any
     ) -> None:
-        """Take the source this pass belongs to, and the feed to read.
-
-        source_id is required because StagingPipeline has nowhere to file a
-        posting without it. Failing here rather than there means the run
-        stops before it has asked the site for anything.
-        """
+        """Take the source this pass belongs to, and the feed to read."""
         super().__init__(*args, **kwargs)
         self.source_id = source_id
         self.endpoint = endpoint
@@ -90,16 +62,7 @@ class FeedSpider(Spider):
 
     @classmethod
     def from_crawler(cls, crawler: Crawler, *args: Any, **kwargs: Any) -> Self:
-        """Build the spider against the one allowlist, and check the endpoint.
-
-        allowed_domains stops the spider wandering off a host mid-run, but it
-        does not cover where it starts: Scrapy sends start requests with
-        dont_filter, so the offsite middleware never sees them. An endpoint
-        outside SCRAPER_ALLOWED_HOSTS would be fetched despite the allowlist.
-        Hence the explicit check, and hence it refuses rather than skips --
-        a source pointing somewhere it may not go is a mistake to correct,
-        not a row to pass over.
-        """
+        """Build the spider against the one allowlist, and check the endpoint."""
         spider = super().from_crawler(crawler, *args, **kwargs)
         allowed = [
             host.strip().lower()
@@ -111,12 +74,7 @@ class FeedSpider(Spider):
         return spider
 
     def check_endpoint(self, allowed: list[str]) -> None:
-        """Refuse an endpoint the allowlist does not cover.
-
-        Exact host match, never a suffix: justjoin.it.example.com ends with
-        an allowed host and belongs to somebody else. The same rule the
-        interactive path applies in app/services/scraping.py.
-        """
+        """Refuse an endpoint the allowlist does not cover."""
         url = urlsplit(self.endpoint)
 
         if url.scheme != ALLOWED_SCHEME:
@@ -128,14 +86,7 @@ class FeedSpider(Spider):
             raise ValueError(f"{host or self.endpoint} is not on the allowlist")
 
     def parse(self, response: Response, **kwargs: Any) -> Any:
-        """Yield a Posting for every entry that carries any text.
-
-        The selector is built as XML explicitly rather than taken from the
-        response: a feed served as text/html would otherwise be parsed as
-        HTML, and the entries would quietly not be found. Namespaces are
-        removed for the same reason -- an Atom feed keeps its entries in a
-        namespace, and every expression here would miss them.
-        """
+        """Yield a Posting for every entry that carries any text."""
         selector = Selector(text=response.text, type="xml")
         selector.remove_namespaces()
 

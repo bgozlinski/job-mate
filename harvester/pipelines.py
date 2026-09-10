@@ -1,24 +1,4 @@
-"""Where a spider's items land: the staging table, and nothing further.
-
-This is the Twisted side of the seam FR-7 draws. The pipeline writes rows
-with synchronous psycopg and stops there. It must not touch the application's
-async SQLAlchemy session: that engine belongs to an asyncio loop which is not
-running in this process, and awaiting it from the reactor is not a thing that
-can be made to work. The drain step, on the asyncio side, is what turns these
-rows into Documents through the existing FR-1 pipeline.
-
-Blocking the reactor on an INSERT is a real cost and a small one here. The
-crawl is held to one request per domain every two seconds at minimum
-(NFR-5), so a millisecond insert cannot be the thing that starves it, and
-deferring to a thread would buy a thread pool and a connection per thread for
-no measurable gain. If a spider ever runs against many hosts at once, this is
-the assumption to revisit first.
-
-autocommit is on so that every staged posting survives the run that collected
-it. A pass killed by CLOSESPIDER_TIMEOUT or a 429 it could not wait out
-leaves its rows behind as pending, which is what makes the next pass a
-continuation rather than a repeat.
-"""
+"""Where a spider's items land: the staging table, and nothing further."""
 
 import logging
 import uuid
@@ -45,15 +25,7 @@ INSERT = """
 
 
 def default_dsn() -> str:
-    """Return the application database, spelled the way psycopg wants it.
-
-    Settings.database_url names the SQLAlchemy dialect (postgresql+psycopg),
-    which psycopg itself does not understand, so the driver half is dropped.
-
-    This is built here rather than published as a Scrapy setting on purpose.
-    Scrapy logs its overridden settings on startup, and a DSN carries the
-    database password (NFR-1).
-    """
+    """Return the application database, spelled the way psycopg wants it."""
     return (
         get_settings()
         .database_url.set(drivername="postgresql")
@@ -77,12 +49,7 @@ class StagingPipeline:
         return cls(crawler)
 
     def open_spider(self) -> None:
-        """Resolve the source and connect, or refuse to start.
-
-        A spider without a source_id has nowhere to file what it collects,
-        and a staged row cannot say which source it came from afterwards.
-        Failing here stops the crawl before it has asked anyone for anything.
-        """
+        """Resolve the source and connect, or refuse to start."""
         self._source_id = self._resolve_source_id()
         self._connection = psycopg.connect(
             self._dsn if self._dsn is not None else default_dsn(), autocommit=True
@@ -118,10 +85,6 @@ class StagingPipeline:
             ),
         )
 
-        # DO NOTHING reports no rows, which is how a posting we already
-        # staged announces itself. Not an error and not worth a log line per
-        # item: a resumed pass sees this for everything it collected before
-        # it was interrupted.
         staged = cursor.rowcount == 1
         self._count("staging/inserted" if staged else "staging/duplicate")
         return item

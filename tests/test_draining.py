@@ -1,17 +1,4 @@
-"""What the drain does with staged postings, including the bad ones.
-
-The interesting cases are the two that are easy to get wrong. A posting whose
-text is already in the knowledge base is not a failure and must not be
-counted as one, or a source that republishes unchanged listings will look
-broken. And a posting that cannot be ingested must not take the rest of the
-batch with it, because FR-7 wants a failing source to stop by itself and
-leave the schedule running.
-
-The third is the one a crash would expose: draining twice must be the same as
-draining once. The document is settled by content_hash and the staged row by
-its state, so a pass repeated after a crash between those two commits has
-nothing left to do.
-"""
+"""What the drain does with staged postings, including the bad ones."""
 
 import uuid
 from datetime import UTC, datetime
@@ -223,10 +210,6 @@ async def test_the_batch_size_bounds_one_pass(
 
         report = await drain_staging(session, model, cache, batch_size=2)
 
-    # Which two is deliberately not asserted: created_at defaults to now(),
-    # which in Postgres is the transaction timestamp, so rows inserted
-    # together are indistinguishable by it. A spider inserts one row per
-    # autocommitted statement, so in a real pass they do differ.
     handled = await states(session_factory)
     assert report.handled == 2  # noqa: PLR2004 -- the batch size under test
     assert sorted(handled) == ["ingested", "ingested", "pending"]

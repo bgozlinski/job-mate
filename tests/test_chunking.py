@@ -68,8 +68,6 @@ def test_long_text_splits_into_bounded_chunks(long_text):
 def test_chunks_overlap(long_text):
     chunks = split_content(long_text)
 
-    # Overlapping fragments cover the source more than once; without an
-    # overlap the totals would match the length of the text instead.
     assert sum(len(chunk) for chunk in chunks) > len(normalize_content(long_text))
 
 

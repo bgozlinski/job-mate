@@ -34,23 +34,14 @@ from app.services.scraping import SourceUnavailableError
 def pytest_asyncio_loop_factories(
     config: pytest.Config, item: pytest.Item
 ) -> Mapping[str, Callable[[], asyncio.AbstractEventLoop]]:
-    """Async psycopg cannot run on the Windows default (ProactorEventLoop).
-
-    The application itself never works around this -- it runs in Docker, on
-    Linux. The tests do, so they can also be run from the host.
-    """
+    """Async psycopg cannot run on the Windows default (ProactorEventLoop)."""
     if sys.platform == "win32":
         return {"selector": asyncio.SelectorEventLoop}
     return {"default": asyncio.new_event_loop}
 
 
 class FakeEmbeddingModel:
-    """An embeddings provider that costs nothing and counts its calls.
-
-    The vectors are derived from the text so that a cached one can be
-    compared with a freshly embedded one, and every value survives a float32
-    round trip exactly.
-    """
+    """An embeddings provider that costs nothing and counts its calls."""
 
     def __init__(self, name: str = "fake-embed", dimensions: int = 4) -> None:
         self._name = name
@@ -77,16 +68,7 @@ class FakeEmbeddingModel:
 
 
 class FakeSuggestionWriter:
-    """A stand-in for the LLM that keeps the prompt it was handed.
-
-    Recording the prompt is the point: the tests assert what the model was
-    shown, which is the only way to prove suggestions are grounded in
-    retrieved chunks (FR-3) without calling a real model.
-
-    It answers with a note by default. The two lists have to stay separable
-    from the endpoint's side, and a fake that never fills notes would let a
-    dropped field pass unnoticed.
-    """
+    """A stand-in for the LLM that keeps the prompt it was handed."""
 
     def __init__(
         self, suggestions: list[str] | None = None, notes: list[str] | None = None
@@ -108,18 +90,7 @@ class FakeSuggestionWriter:
 
 
 class FakePostingSource:
-    """A page source that answers from a dictionary instead of the network.
-
-    Every test that reaches /documents/from-url goes through one of these,
-    and the client fixture installs it whether the test asked for it or not.
-    That is the point: a suite that can reach justjoin.it would be slow, at
-    the mercy of an offer expiring, and impolite to a site this project has
-    promised not to hammer (NFR-5).
-
-    An address with no page registered raises the same error the real source
-    raises for an unreachable host, so "nothing there" is a case tests can
-    exercise without arranging a network failure.
-    """
+    """A page source that answers from a dictionary instead of the network."""
 
     def __init__(self, pages: dict[str, str] | None = None) -> None:
         self.pages = dict(pages or {})
@@ -136,18 +107,15 @@ class FakePostingSource:
 
 
 TEST_REDIS_DB = 15
-"""A database of its own, so flushing between tests cannot wipe the cache the
-development stack is using."""
+"""
+A database of its own, so flushing between tests cannot wipe the cache the development
+stack is using.
+"""
 
 
 @pytest_asyncio.fixture
 async def cache() -> AsyncIterator[Redis]:
-    """A Redis client on the test database, emptied around every test.
-
-    The database is swapped in the URL rather than passed as a keyword: what
-    the URL says wins in from_url, so a db argument would be ignored and the
-    flush would land on the development cache.
-    """
+    """A Redis client on the test database, emptied around every test."""
     url = urlsplit(get_settings().redis_url)
     client = Redis.from_url(
         urlunsplit(url._replace(path=f"/{TEST_REDIS_DB}")), decode_responses=True
@@ -167,7 +135,6 @@ def database_url() -> Iterator[URL]:
     name = f"{settings.postgres_db}_test"
     maintenance_url = settings.database_url.set(database="postgres")
 
-    # CREATE DATABASE cannot run inside a transaction block.
     admin = create_engine(maintenance_url, isolation_level="AUTOCOMMIT")
     with admin.connect() as connection:
         connection.execute(text(f'DROP DATABASE IF EXISTS "{name}"'))
@@ -177,9 +144,6 @@ def database_url() -> Iterator[URL]:
     url = settings.database_url.set(database=name)
     schema = create_engine(url)
     with schema.begin() as connection:
-        # create_all only knows about tables: the vector type the chunks
-        # table is declared with comes from an extension, which the real
-        # database gets from a migration and this one has to enable itself.
         connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     Base.metadata.create_all(schema)
     schema.dispose()
@@ -199,8 +163,6 @@ async def session_factory(
     """A session factory over empty tables."""
     engine = create_async_engine(database_url)
 
-    # Driven by the metadata so a new model does not silently leak rows from
-    # one test into the next. CASCADE because the tables reference each other.
     tables = ", ".join(f'"{table.name}"' for table in Base.metadata.sorted_tables)
 
     async with engine.begin() as connection:
@@ -225,11 +187,7 @@ def posting_source() -> FakePostingSource:
 
 @pytest.fixture
 def embedding_model() -> FakeEmbeddingModel:
-    """The embeddings provider the API uses in tests.
-
-    Full width, because the vectors reach a vector(1536) column; a narrower
-    fake would be rejected by the database rather than by the code.
-    """
+    """The embeddings provider the API uses in tests."""
     return FakeEmbeddingModel(dimensions=EMBEDDING_DIMENSIONS)
 
 
@@ -241,31 +199,7 @@ async def client(
     suggestion_writer: FakeSuggestionWriter,
     posting_source: FakePostingSource,
 ) -> AsyncIterator[AsyncClient]:
-    """Client wired to the test database, bypassing lifespan.
-
-    Both providers are overridden here rather than in the tests that need
-    them: an override that is forgotten means a test calling a real API, which
-    costs money and needs keys nobody has in CI. Prompts come from the shipped
-    texts for the same reason -- reaching Langfuse for one would need keys and
-    a network -- and the store is built here rather than handed over as the
-    class, whose __init__ FastAPI would read as request parameters.
-
-    The extractors and the judge are None by default: that is the
-    configuration CI runs in, and a test that wants requirements read or
-    verdicts passed supplies its own.
-
-    The page source is overridden for a fourth reason on top of those: it is
-    the only dependency that would otherwise reach a site belonging to
-    somebody else, and a suite that quietly fetched job boards is exactly
-    what NFR-5 says this application does not do.
-
-    One thing to know about this client: it keeps a cookie jar, and logging
-    in sets session cookies. A request that leaves out the Authorization
-    header is therefore still authenticated if anything logged in earlier in
-    the same test -- which is what a browser does, and what the cookie
-    session is for. A test that means "anonymous" has to empty the jar with
-    client.cookies.clear(); leaving out the header is no longer enough.
-    """
+    """Client wired to the test database, bypassing lifespan."""
 
     async def override_get_db() -> AsyncIterator[AsyncSession]:
         async with session_factory() as session:

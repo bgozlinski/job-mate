@@ -1,33 +1,4 @@
-"""Downloader middleware that turns two NFR-5 promises into behaviour.
-
-The spec says the crawl is permissible only as long as its conditions hold,
-and names two that Scrapy does not deliver on its own:
-
-* **Crawl-delay.** ``ROBOTSTXT_OBEY`` only filters forbidden paths.
-  ``scrapy/robotstxt.py`` parses the directive and exposes ``crawl_delay``,
-  but ``RobotsTxtMiddleware`` never reads it back, so a host asking for ten
-  seconds between requests is served two.
-* **Retry-After.** Scrapy's default ``RETRY_HTTP_CODES`` contains 429 and
-  ``RetryMiddleware`` resends without looking at the header -- being told to
-  slow down and answering with more traffic. Our settings drop 429 from that
-  list so this middleware can handle it instead.
-
-Both end up in the same place, which is why they share a class: a **floor**
-on the delay of the downloader slot for a host. The floor only ever rises
-during a run. A host that once asked us to slow down is never sped back up,
-even if it stops asking -- the alternative is re-testing someone's patience
-to find out whether they still mean it.
-
-Re-asserting the floor on every request is deliberate, not defensive coding.
-AutoThrottle recomputes ``slot.delay`` after each response and clamps it to
-``AUTOTHROTTLE_TARGET_CONCURRENCY`` and ``DOWNLOAD_DELAY``, neither of which
-knows about robots.txt; a floor set once would be eroded within a few
-responses.
-
-Ordering matters. The middleware must sit after ``RobotsTxtMiddleware``
-(100), because the ``robots_parsed`` signal that feeds the floor fires while
-that middleware awaits robots.txt on the first request to a host.
-"""
+"""Downloader middleware that turns two NFR-5 promises into behaviour."""
 
 import logging
 from datetime import UTC, datetime
@@ -67,16 +38,8 @@ class PolitenessMiddleware:
         crawler.signals.connect(middleware.robots_parsed, signal=signals.robots_parsed)
         return middleware
 
-    # --- Crawl-delay ------------------------------------------------------
-
     def robots_parsed(self, robotparser: RobotParser, request: Request) -> None:
-        """Record the Crawl-delay a host asks of the agent we identify as.
-
-        The signal carries the request that triggered the robots.txt fetch,
-        so its host is the one the directive applies to. A parser backend
-        that does not support the directive returns None, and a host that
-        does not set one leaves the floor where it was.
-        """
+        """Record the Crawl-delay a host asks of the agent we identify as."""
         host = self._host(request)
         if not host:
             return
@@ -91,27 +54,13 @@ class PolitenessMiddleware:
         if not floor:
             return
         slot = self._slot(request)
-        # No slot yet means this is the first request to the host, and a
-        # delay only ever spaces a request from the one before it. The slot
-        # exists by the second request, which is the first one a delay can
-        # apply to.
         if slot is not None and slot.delay < floor:
             slot.delay = floor
-
-    # --- Retry-After ------------------------------------------------------
 
     def process_response(
         self, request: Request, response: Response
     ) -> Request | Response:
-        """Back off on 429 for as long as the host asked, then retry once.
-
-        Returning the response unchanged is how this middleware gives up:
-        the request fails and the run carries on. That happens when the wait
-        exceeds JOBMATE_MAX_RETRY_AFTER_SECONDS, because honouring an hour
-        inside a scheduled run is not something we can promise, and waiting
-        a token amount instead would be ignoring the header while claiming
-        to respect it.
-        """
+        """Back off on 429 for as long as the host asked, then retry once."""
         if response.status != TOO_MANY_REQUESTS or request.meta.get("dont_retry"):
             return response
 
@@ -140,12 +89,7 @@ class PolitenessMiddleware:
         return retry or response
 
     def _retry_after(self, response: Response) -> float:
-        """Seconds to wait, from delta-seconds or an HTTP-date.
-
-        A 429 without a usable header still earns a wait: the host said we
-        are asking too often, which is the part that matters, and only the
-        duration is missing.
-        """
+        """Seconds to wait, from delta-seconds or an HTTP-date."""
         raw = response.headers.get(b"Retry-After")
         if raw is None:
             return self._blind_retry_after
@@ -160,8 +104,6 @@ class PolitenessMiddleware:
         if when.tzinfo is None:
             when = when.replace(tzinfo=UTC)
         return max(0.0, (when - datetime.now(UTC)).total_seconds())
-
-    # --- Shared machinery -------------------------------------------------
 
     def _raise_floor(self, host: str, seconds: float, *, reason: str) -> None:
         """Move the host's floor up, never down."""
@@ -179,11 +121,7 @@ class PolitenessMiddleware:
         return downloader.slots.get(downloader.get_slot_key(request))
 
     def _useragent(self, request: Request) -> str | bytes:
-        """Return the agent that robots.txt directives are matched against.
-
-        Same precedence as RobotsTxtMiddleware, so one robots.txt cannot be
-        read two ways within a single crawl.
-        """
+        """Return the agent that robots.txt directives are matched against."""
         if self._robotstxt_useragent:
             return self._robotstxt_useragent
         header = request.headers.get(b"User-Agent")
@@ -191,12 +129,7 @@ class PolitenessMiddleware:
 
     @staticmethod
     def _host(request: Request) -> str | None:
-        """Hostname, matching the key the downloader gives a slot by default.
-
-        A spider that sets its own ``download_slot`` breaks that match, and
-        the floor then applies to whichever hosts share the slot. Nothing
-        does that yet; a spider that starts to must be checked against this.
-        """
+        """Hostname, matching the key the downloader gives a slot by default."""
         return urlparse_cached(request).hostname
 
     def _stat(self, key: str) -> None:

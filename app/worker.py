@@ -1,25 +1,4 @@
-"""The FR-7 worker: a process that harvests on a schedule and nothing else.
-
-The counterpart to app.main. That module serves requests; this one wakes up,
-asks harvest_once whether any source is due, and goes back to sleep. It runs
-as its own container so that scaling the API does not multiply the passes --
-two API replicas are two servers, two harvesters would be two crawls of the
-same site, which is precisely what NFR-5 forbids.
-
-**Shutting down.** SIGTERM stops the *next* pass, never the one running. The
-sleep between passes is interruptible so the container still stops promptly
-when there is nothing to do, which is almost always. If a pass is running,
-docker kills it at the end of the grace period -- and that is safe rather
-than merely tolerated: the spider commits each staged posting on its own, and
-the drain is idempotent, so a killed pass leaves pending rows that the next
-start picks up without fetching anything again.
-
-**One session per pass, not one per process.** A session held open for days
-accumulates expired state and dies at the first dropped connection, and its
-transaction would sit open across a crawl that lasts half an hour. The engine
-and its pool are per process, which is what pooling is for; the session is
-per pass, which is what a unit of work is.
-"""
+"""The FR-7 worker: a process that harvests on a schedule and nothing else."""
 
 import asyncio
 import contextlib
@@ -62,25 +41,7 @@ class Resources:
 
 @asynccontextmanager
 async def resources(settings: Settings) -> AsyncIterator[Resources]:
-    """Open the engine, cache and providers, and close them afterwards.
-
-    The worker refuses to start without an embeddings key, unlike the API.
-    The API without one still does everything except ingest, so starting is
-    useful; this process would crawl politely, stage every posting it found
-    and then fail to ingest a single one, filling the staging table with work
-    nobody can finish. Saying so at startup is the difference between a
-    misconfiguration and a mystery.
-
-    The requirement extractor is optional and stays that way: without it the
-    requirements column is NULL and matching falls back to counting words, so
-    a missing LLM key costs quality rather than the feature. It is wired here
-    all the same, because a posting the automat collected should be worth as
-    much as one somebody pasted in by hand.
-
-    The tracer is shut down first and explicitly: the SDK batches events in a
-    background thread, and a process that exits without flushing loses the
-    traces of the pass it just made.
-    """
+    """Open the engine, cache and providers, and close them afterwards."""
     if settings.openai_api_key is None:
         raise NoEmbeddingsConfigured(
             "OPENAI_API_KEY is unset, so nothing staged could ever be ingested"
@@ -122,13 +83,7 @@ async def run(
     stop: asyncio.Event,
     interval: float,
 ) -> int:
-    """Harvest until asked to stop, and answer how many passes were made.
-
-    The flag is read between passes and never during one. A pass that has
-    started is allowed to finish: it is holding a session, may have a spider
-    running in a child process, and interrupting it would leave staged rows
-    pending for no reason at all.
-    """
+    """Harvest until asked to stop, and answer how many passes were made."""
     passes = 0
 
     while not stop.is_set():
@@ -140,15 +95,7 @@ async def run(
 
 
 async def harvest(once: Callable[[], Awaitable[HarvestReport]]) -> None:
-    """Make one pass, and survive it going wrong.
-
-    A pass that raises must not end the process. Everything inside
-    harvest_once already isolates one source from another; what is left here
-    is the unforeseeable -- the database gone, the provider refusing every
-    call -- and for that the right answer is to log it and try again after
-    the interval, not to exit and let the restart policy do the same thing
-    more expensively.
-    """
+    """Make one pass, and survive it going wrong."""
     try:
         report = await once()
     except Exception:
@@ -169,12 +116,7 @@ async def harvest(once: Callable[[], Awaitable[HarvestReport]]) -> None:
 
 
 def stop_on_signals(stop: asyncio.Event) -> None:
-    """Make SIGTERM and SIGINT set the flag rather than tear the loop down.
-
-    add_signal_handler is the right way and does not exist on Windows, where
-    this process is not meant to run anyway; the fallback keeps it startable
-    there for anyone poking at it.
-    """
+    """Make SIGTERM and SIGINT set the flag rather than tear the loop down."""
     loop = asyncio.get_running_loop()
 
     for number in (signal.SIGTERM, signal.SIGINT):

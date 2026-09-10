@@ -27,26 +27,11 @@ from app.services.requirements import SkillExtractor
 from app.services.scraping import PostingSource
 
 bearer_scheme = HTTPBearer(auto_error=False)
-"""auto_error=False because the header is no longer the only way in.
-
-With the default, a request carrying a valid session cookie and no
-Authorization header is rejected by the scheme before any of the code below
-runs. Turning it off moves the decision here, where both places a token can
-arrive are known -- and the 401 it used to raise is raised below instead,
-with the same status and the same WWW-Authenticate header.
-"""
+"""auto_error=False because the header is no longer the only way in."""
 
 
 async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
-    """Yield a session bound to the request, closed once the response is sent.
-
-    Committing is left to the caller: an IntegrityError raised by a commit
-    inside this dependency would surface after the handler has returned, too
-    late to be turned into a meaningful status code.
-
-    The factory is annotated on the way out of app.state, which is typed as
-    Any, so the rest of the call chain stays checked.
-    """
+    """Yield a session bound to the request, closed once the response is sent."""
     session_factory: async_sessionmaker[AsyncSession]
     session_factory = request.app.state.session_factory
     async with session_factory() as session:
@@ -58,27 +43,7 @@ async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     session: Annotated[AsyncSession, Depends(get_db)],
 ) -> User:
-    """Resolve the presented access token to the account that owns it.
-
-    Two clients, two places the token can be. A Bearer client sends a header;
-    a browser sends an httpOnly cookie it cannot read (see app.auth.cookies).
-    The header wins when both are present, because a caller who took the
-    trouble to set one means to use it, and because that is the order every
-    existing test and the Streamlit client already rely on.
-
-    Only an access token is accepted. A refresh token is signed by the same
-    key and names the same subject, and without the type claim checked in
-    decode_access_token it would authenticate requests for a week -- which
-    would make the short life of the access cookie decorative.
-
-    Every way of failing answers with the same 401: no token at all, a bad
-    signature, an expired or malformed token, a token of the wrong type, a
-    subject that is not a uuid, and a token whose account has since been
-    deleted. Telling them apart would report to an attacker how far they got.
-
-    The account is loaded on every request rather than trusted from the
-    claims, so a deleted user cannot keep working until their token expires.
-    """
+    """Resolve the presented access token to the account that owns it."""
     invalid_token = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid or expired token",
@@ -111,24 +76,14 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
 async def get_cache(request: Request) -> Redis:
-    """Hand out the shared Redis client.
-
-    One client per application, opened in the lifespan: a client per request
-    would build a new connection pool for every call.
-    """
+    """Hand out the shared Redis client."""
     cache: Redis = request.app.state.redis
 
     return cache
 
 
 def _configured[Client](client: Client | None, what: str) -> Client:
-    """Return a provider client, or refuse the request when there is none.
-
-    The application starts without provider keys so that everything unrelated
-    to them keeps working in development and in CI. The cost is paid here:
-    without a key the route answers 503, which is the truth -- a dependency it
-    needs is not configured -- rather than a 500 pretending it is a bug.
-    """
+    """Return a provider client, or refuse the request when there is none."""
     if client is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -149,11 +104,7 @@ async def get_embeddings(
     model: Annotated[EmbeddingModel, Depends(get_embedding_model)],
     cache: Annotated[Redis, Depends(get_cache)],
 ) -> tuple[EmbeddingModel, Redis]:
-    """Hand out the embeddings client together with its cache.
-
-    They are always used as a pair -- an embedding call goes through the cache
-    or it costs money -- so the services take them as one argument.
-    """
+    """Hand out the embeddings client together with its cache."""
     return model, cache
 
 
@@ -165,11 +116,7 @@ async def get_suggestion_writer(request: Request) -> SuggestionWriter:
 
 
 def get_config() -> Settings:
-    """Hand out the settings as a dependency.
-
-    A dependency rather than a direct call so a test can tighten a limit to
-    something it can reach in a few requests, instead of sending twenty.
-    """
+    """Hand out the settings as a dependency."""
     return get_settings()
 
 
@@ -177,19 +124,7 @@ type Limiter = Callable[..., Coroutine[Any, Any, None]]
 
 
 def rate_limited(scope: str, budget: Callable[[Settings], int]) -> Limiter:
-    """Build the dependency that caps one route's traffic per account (NFR-2).
-
-    Counted per account rather than per address: the caller is authenticated
-    anyway, and behind the container's proxy every request appears to come
-    from the same address, which would make an IP limit either useless or a
-    way for one user to lock out the rest.
-
-    A Redis outage refuses the request instead of waving it through. That is
-    the opposite of what the embeddings cache does with the same error, and
-    for the opposite reason: a cache that is down costs money and a limiter
-    that is down stops counting it. This route is the one that spends, so it
-    does not run while the thing that bounds the spending is unavailable.
-    """
+    """Build the dependency that caps one route's traffic per account (NFR-2)."""
 
     async def dependency(
         user: CurrentUser,
@@ -221,13 +156,7 @@ def rate_limited(scope: str, budget: Callable[[Settings], int]) -> Limiter:
 
 
 async def get_requirement_extractor(request: Request) -> SkillExtractor | None:
-    """Hand out the shared extractor, or nothing when no key is configured.
-
-    None rather than a 503, unlike the other two providers: a posting whose
-    requirements were never read is still worth storing, and matching has a
-    heuristic to fall back on. Refusing the ingestion instead would make an
-    optional improvement a hard dependency.
-    """
+    """Hand out the shared extractor, or nothing when no key is configured."""
     extractor: SkillExtractor | None = request.app.state.requirement_extractor
 
     return extractor
@@ -241,40 +170,21 @@ async def get_resume_skill_extractor(request: Request) -> SkillExtractor | None:
 
 
 async def get_requirement_judge(request: Request) -> RequirementJudge | None:
-    """Hand out the judge, or nothing when no key is configured.
-
-    None rather than a 503, like the extractors and unlike the writer: a match
-    without a judge is the deterministic score, which is worse and complete.
-    Refusing the request instead would make the semantic half a hard
-    dependency of a feature that worked without it.
-    """
+    """Hand out the judge, or nothing when no key is configured."""
     judge: RequirementJudge | None = request.app.state.requirement_judge
 
     return judge
 
 
 async def get_posting_source(request: Request) -> PostingSource:
-    """Hand out the shared client that reads a posting's page.
-
-    Never None, unlike the providers: reading a page needs no API key, so
-    there is no configuration under which the route has to refuse. What it
-    can refuse is an address, and that happens inside the source.
-
-    One client per application, opened in the lifespan, for the reason Redis
-    is: it owns a connection pool, and building one per request would mean a
-    new TLS handshake with the board on every ingestion.
-    """
+    """Hand out the shared client that reads a posting's page."""
     source: PostingSource = request.app.state.posting_source
 
     return source
 
 
 async def get_prompt_store(request: Request) -> PromptStore:
-    """Hand out the store the prompts are read from.
-
-    Never None, unlike the providers: there is always somewhere to get a
-    prompt from, because the texts ship with the code.
-    """
+    """Hand out the store the prompts are read from."""
     prompts: PromptStore = request.app.state.prompts
 
     return prompts
@@ -285,16 +195,7 @@ async def get_owned_resume(
     user: CurrentUser,
     session: Annotated[AsyncSession, Depends(get_db)],
 ) -> Resume:
-    """Load a resume belonging to the caller, or raise 404.
-
-    The owner is part of the query, not a check performed afterwards: an id
-    that exists but belongs to somebody else has to be indistinguishable from
-    one that does not exist at all (NFR-1). Answering 403 would confirm the
-    resume is real.
-
-    Every route that touches a single resume goes through this dependency, so
-    there is no second path on which the ownership filter could be forgotten.
-    """
+    """Load a resume belonging to the caller, or raise 404."""
     resume = await session.scalar(
         select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)
     )

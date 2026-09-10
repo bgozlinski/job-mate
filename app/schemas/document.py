@@ -8,19 +8,16 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 MAX_CONTENT_LENGTH = 200_000
-"""Long enough for any job posting, short enough that one request cannot fill
-the database or turn into hundreds of embedding calls."""
+"""
+Long enough for any job posting, short enough that one request cannot fill the database
+or turn into hundreds of embedding calls.
+"""
 
 MAX_TITLE_LENGTH = 500
 
 
 class DocumentCreate(BaseModel):
-    """Payload for ingesting one job posting.
-
-    metadata is left as an open object on purpose: it is what hybrid
-    retrieval filters on (role, seniority), and the knowledge base has to be
-    able to carry keys the API does not know about yet.
-    """
+    """Payload for ingesting one job posting."""
 
     content: str = Field(min_length=1, max_length=MAX_CONTENT_LENGTH)
     title: str | None = Field(default=None, max_length=MAX_TITLE_LENGTH)
@@ -29,14 +26,7 @@ class DocumentCreate(BaseModel):
 
 
 class DocumentUpload(BaseModel):
-    """Everything an upload carries beside the file itself.
-
-    A model rather than three separate Form parameters so the handler keeps a
-    signature a reader can take in, and so the same validation the JSON route
-    gets for free -- a real URL, metadata that parses -- applies here too.
-
-    content is absent on purpose: it is the file.
-    """
+    """Everything an upload carries beside the file itself."""
 
     title: str | None = Field(default=None, max_length=MAX_TITLE_LENGTH)
     source_url: HttpUrl | None = None
@@ -45,12 +35,7 @@ class DocumentUpload(BaseModel):
     @field_validator("metadata", mode="before")
     @classmethod
     def _from_json(cls, value: object) -> object:
-        """Accept metadata as a JSON string, which is all multipart can carry.
-
-        Multipart has no notion of a nested value, so the field arrives as
-        text. Anything that is not a JSON object fails validation here and
-        becomes a 422 naming the field, exactly as the JSON route would.
-        """
+        """Accept metadata as a JSON string, which is all multipart can carry."""
         if value is None:
             return {}
 
@@ -64,29 +49,14 @@ class DocumentUpload(BaseModel):
 
 
 class DocumentFromUrl(BaseModel):
-    """Payload for ingesting the posting published at an address (FR-1).
-
-    No content and no title: both are read off the page. Which addresses are
-    read at all is a question of policy, answered by the allowlist in
-    Settings rather than by this schema -- HttpUrl only proves the string is
-    a URL, and http://169.254.169.254/ is a perfectly good one (NFR-1).
-
-    metadata is here for the same reason the other two routes have it: to
-    label a posting with the role or seniority a listing is filtered by. What
-    the caller supplies wins over what was scraped, because a caller who
-    bothers to send a key means to correct what the page said.
-    """
+    """Payload for ingesting the posting published at an address (FR-1)."""
 
     url: HttpUrl
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class DocumentRead(BaseModel):
-    """Public view of a stored posting.
-
-    The content itself is left out: the caller has just sent it, and a
-    listing of the knowledge base should not ship every posting in full.
-    """
+    """Public view of a stored posting."""
 
     model_config = ConfigDict(from_attributes=True)
 

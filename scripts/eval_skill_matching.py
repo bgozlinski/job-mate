@@ -1,22 +1,4 @@
-"""Measure the skill-matching rule against the hand-labelled cases (W-1).
-
-Not a test: nothing here passes or fails. It prints the numbers a change to
-the matching rule has to be argued with, so that "the model matches better"
-can be told apart from "the model matches more" -- two different things, and
-only one of them is an improvement.
-
-Recall is the interesting half. Precision is easy: awarding nothing scores
-perfectly on it, and awarding everything scores perfectly on recall. What a
-matcher is for is both at once.
-
-    uv run python -m scripts.eval_skill_matching
-    uv run python -m scripts.eval_skill_matching --judge
-
-With --judge the same cases go through the LLM that settles a requirement the
-word comparison could not see. That run calls a model: it costs money, needs a
-key and answers a little differently every time. Without the flag nothing
-leaves the process.
-"""
+"""Measure the skill-matching rule against the hand-labelled cases (W-1)."""
 
 import asyncio
 import json
@@ -38,11 +20,7 @@ def rate(hits: int, total: int) -> float:
 
 
 async def predict(case: dict[str, Any], judge: RequirementJudge | None) -> set[str]:
-    """Return the requirements this case is judged to meet.
-
-    The same composition the endpoint performs: the deterministic rule first,
-    and the judge only able to add to it.
-    """
+    """Return the requirements this case is judged to meet."""
     requirements: list[str] = case["requirements"]
     matched, _ = cover(requirements, evidence(case["resume"], case["skills"]))
 
@@ -56,12 +34,7 @@ async def predict(case: dict[str, Any], judge: RequirementJudge | None) -> set[s
 
 
 def report(case: dict[str, Any], predicted: set[str]) -> tuple[int, int, int, float]:
-    """Print one case and return its true positives, false ones and the gap.
-
-    The gap is between the score the rule computes and the score the labels
-    imply -- the number the user is actually shown, which is why it is worth
-    reporting next to the set arithmetic.
-    """
+    """Print one case and return its true positives, false ones and the gap."""
     requirements: list[str] = case["requirements"]
     expected = set(case["expected_met"])
 
@@ -84,12 +57,7 @@ def report(case: dict[str, Any], predicted: set[str]) -> tuple[int, int, int, fl
 
 
 def summarise(name: str, tally: list[tuple[int, int, int, float]]) -> None:
-    """Print the four numbers a matcher is compared on, for one group.
-
-    Split by domain, because that is where a rule tuned on one vocabulary
-    hides its failures: software terms are what this code was written
-    against, and a kitchen or a garage names the same work differently.
-    """
+    """Print the four numbers a matcher is compared on, for one group."""
     hits = sum(row[0] for row in tally)
     wrong = sum(row[1] for row in tally)
     missed = sum(row[2] for row in tally)

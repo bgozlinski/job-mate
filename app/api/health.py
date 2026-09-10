@@ -31,21 +31,13 @@ def _describe(result: BaseException | None) -> str:
 
 @router.get("/health")
 async def liveness() -> dict[str, str]:
-    """Report that the process is up, without touching any dependency.
-
-    An orchestrator restarts a container that fails this, so it must not go
-    red because the database is briefly unreachable.
-    """
+    """Report that the process is up, without touching any dependency."""
     return {"status": "ok"}
 
 
 @router.get("/health/ready")
 async def readiness(request: Request, response: Response) -> dict[str, str]:
-    """Report whether the dependencies are reachable, 503 if any is not.
-
-    Both checks run concurrently and their exceptions are collected rather
-    than raised, so one dead dependency still leaves the other one reported.
-    """
+    """Report whether the dependencies are reachable, 503 if any is not."""
     database, redis = await asyncio.gather(
         _check_database(request.app.state.engine),
         _check_redis(request.app.state.redis),

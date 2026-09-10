@@ -42,19 +42,7 @@ async def match(  # noqa: PLR0913, PLR0917 -- five are dependencies
     prompts: Prompts,
     judge: Judge,
 ) -> MatchRead:
-    """Score one of the caller's resumes against a posting and suggest edits.
-
-    The answer is stored before it is returned, and the stored row is what
-    comes back: the response and the history are then the same object, and a
-    reader comparing the two later cannot find them disagreeing.
-
-    The resume comes from a dependency that filters by owner, so a resume
-    belonging to somebody else is a 404 here exactly as a missing one is: a
-    different answer would confirm it exists (NFR-1).
-
-    This is the most expensive route in the application -- it calls an LLM --
-    which is why it carries the tighter of the two rate limits (NFR-2).
-    """
+    """Score one of the caller's resumes against a posting and suggest edits."""
     document = await session.get(Document, payload.document_id)
 
     if document is None:

@@ -22,29 +22,15 @@ if TYPE_CHECKING:
     from app.models.document import Document
 
 EMBEDDING_DIMENSIONS = 1536
-"""Fixed by the embedding model. Changing models means a re-indexing
-migration (FR-6), not an in-place edit: the column width is part of the
-schema and old vectors are meaningless under a new model."""
+"""
+Fixed by the embedding model. Changing models means a re-indexing migration (FR-6), not
+an in-place edit: the column width is part of the schema and old vectors are meaningless
+under a new model.
+"""
 
 
 class Chunk(Base):
-    """One fragment of a document, with the vector it was embedded into.
-
-    chunk_index numbers the fragments within their document from 0, so the
-    original order can be reconstructed. The unique constraint over
-    (document_id, chunk_index) is what stops a repeated ingestion of the
-    same document from writing every fragment twice.
-
-    embedding is NOT NULL on purpose: a chunk without a vector could never
-    be found by a vector search, so it would be silent data loss rather than
-    a state worth representing. Chunks and their embeddings are written in
-    one transaction; the Redis cache in front of the embeddings API (NFR-2a)
-    is what keeps that affordable on re-ingestion.
-
-    Nothing reads these vectors since the retrieval service was removed
-    (2026-09-02): they are written, indexed and kept, and the first thing to
-    search them will be whatever answers the questions of FR-4.
-    """
+    """One fragment of a document, with the vector it was embedded into."""
 
     __tablename__ = "chunks"
     __table_args__ = (

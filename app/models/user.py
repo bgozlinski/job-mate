@@ -14,15 +14,7 @@ if TYPE_CHECKING:
 
 
 class User(Base):
-    """An account.
-
-    Addresses are stored folded to lower case, because the unique index is
-    case-sensitive and would otherwise let one address register twice.
-
-    passive_deletes leaves the cascade to the database instead of loading
-    every resume just to null out its user_id first; the matching ON DELETE
-    CASCADE lives on Resume.user_id.
-    """
+    """An account."""
 
     __tablename__ = "users"
 

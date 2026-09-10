@@ -29,31 +29,7 @@ from app.services.scraping import HttpPostingSource
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Open the shared resources on startup and close them on shutdown.
-
-    The engine, its session factory and the Redis client are built once and
-    kept on app.state, where dependencies pick them up per request. Closing
-    happens in a finally block so a failed startup still releases whatever
-    was already opened.
-
-    Every provider is built once, and only when its key is configured:
-    development and CI run without one, and everything except ingestion works
-    fine that way. No key means postings are ingested without their
-    requirements read, and matching falls back to counting words.
-
-    Order matters in the middle of this. Building the tracer registers the
-    process-wide client that @observe in the service layer picks up, and the
-    prompt store is handed that same instance, so it comes before anything
-    that renders a prompt and stays on app.state for shutdown to flush. The
-    store reads from Langfuse when there is a tracer and from the shipped
-    texts otherwise; it is warmed here rather than in the first request,
-    because the fetch is synchronous and at startup nobody is waiting for it.
-
-    The tracer is shut down before the rest: the SDK batches events in a
-    background thread, and a container that stops without flushing loses the
-    traces of the last requests it served -- the ones most likely to be worth
-    reading.
-    """
+    """Open the shared resources on startup and close them on shutdown."""
     settings = get_settings()
     app.state.engine = create_engine(settings)
     app.state.session_factory = create_session_factory(app.state.engine)

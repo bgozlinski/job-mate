@@ -69,7 +69,6 @@ async def test_the_knowledge_base_can_be_listed(client):
     assert [row["id"] for row in body] == [created.json()["id"]]
     assert body[0]["chunk_count"] == created.json()["chunk_count"]
     assert body[0]["title"] == "Backend engineer"
-    # A listing that carried every article in full would be unusable.
     assert "content" not in body[0]
 
 
@@ -107,7 +106,6 @@ async def test_a_page_can_be_walked_with_limit_and_offset(client):
         )
     ).json()
 
-    # Newest first, so the pages walk backwards through the order of ingestion.
     assert [row["id"] for row in first] == list(reversed(ids))[:2]
     assert [row["id"] for row in second] == list(reversed(ids))[2:]
 

@@ -1,19 +1,10 @@
-"""add sources and document provenance
+"""
+add sources and document provenance
 
 Revision ID: d3ef2a2a7af4
 Revises: 25dc29c14b4b
 Create Date: 2026-09-10 15:10:04.996467
 
-Two things autogenerate got wrong here and both only bite on the way back.
-
-The foreign key came out as create_foreign_key(None, ...): PostgreSQL is
-happy to name it for us on the way up, but the matching drop_constraint(None)
-has nothing to drop and fails. It is named.
-
-The source_kind enum is a native type. create_table creates it, drop_table
-does not remove it, so a downgrade would leave the type behind and the next
-upgrade would fail on "type source_kind already exists". The downgrade drops
-it explicitly.
 """
 
 from collections.abc import Sequence
@@ -21,7 +12,6 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-# revision identifiers, used by Alembic.
 revision: str = "d3ef2a2a7af4"
 down_revision: str | Sequence[str] | None = "25dc29c14b4b"
 branch_labels: str | Sequence[str] | None = None
@@ -63,9 +53,6 @@ def upgrade() -> None:
     )
     op.add_column("documents", sa.Column("source_id", sa.Uuid(), nullable=True))
     op.add_column("documents", sa.Column("external_id", sa.Text(), nullable=True))
-    # Not unique, and not a nullable-unique either: FR-7 makes an edited
-    # posting a new row, so one external_id covers every version we saw of it.
-    # This index is for finding those versions, not for allowing only one.
     op.create_index(
         "ix_documents_source_external",
         "documents",

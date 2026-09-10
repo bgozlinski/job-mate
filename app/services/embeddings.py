@@ -1,10 +1,4 @@
-"""Embedding chunks, with Redis in front of the embeddings API (NFR-2a).
-
-The cache is keyed by the hash of the chunk, so re-ingesting a document that
-has not changed -- or ingesting two postings that share a paragraph -- costs
-nothing at the API. Redis is never a source of truth: a cache that is down
-or corrupt only costs money, it must not fail ingestion.
-"""
+"""Embedding chunks, with Redis in front of the embeddings API (NFR-2a)."""
 
 import base64
 from array import array
@@ -21,22 +15,21 @@ from app.models.chunk import EMBEDDING_DIMENSIONS
 from app.services.chunking import content_hash
 
 CACHE_TTL_SECONDS = 30 * 24 * 60 * 60
-"""A month. A cache without a TTL grows forever, and an embedding older than
-that is likely to belong to a model the application no longer uses."""
+"""
+A month. A cache without a TTL grows forever, and an embedding older than that is likely
+to belong to a model the application no longer uses.
+"""
 
 BATCH_SIZE = 128
-"""How many texts go to the API in one request. Providers cap both the number
-of inputs and the total tokens per call, so a document that splits into
-hundreds of chunks has to arrive in several requests rather than one."""
+"""
+How many texts go to the API in one request. Providers cap both the number of inputs and
+the total tokens per call, so a document that splits into hundreds of chunks has to
+arrive in several requests rather than one.
+"""
 
 
 class EmbeddingModel(Protocol):
-    """What the cache needs from an embeddings provider.
-
-    A protocol rather than a concrete client so that tests can substitute a
-    fake and count its calls: proving that the cache saves API calls is
-    impossible against the real thing, which costs money to call.
-    """
+    """What the cache needs from an embeddings provider."""
 
     @property
     def name(self) -> str:
@@ -54,13 +47,7 @@ class EmbeddingModel(Protocol):
 
 
 class OpenAIEmbeddingModel:
-    """The real provider: OpenAI's embeddings endpoint.
-
-    Anthropic has no embeddings API, so the LLM provider and the embedding
-    provider are deliberately separate concerns here. text-embedding-3-small
-    returns 1536 dimensions natively, which is the width the schema and the
-    HNSW index were built for.
-    """
+    """The real provider: OpenAI's embeddings endpoint."""
 
     def __init__(self, settings: Settings) -> None:
         """Build the client, failing loudly when no key is configured."""
@@ -81,13 +68,7 @@ class OpenAIEmbeddingModel:
         return EMBEDDING_DIMENSIONS
 
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
-        """Embed a batch of texts in a single request.
-
-        The response is sorted by index rather than trusted to arrive in
-        order: the caller matches vectors to chunks positionally, and a
-        silently reordered batch would attach every embedding to the wrong
-        fragment.
-        """
+        """Embed a batch of texts in a single request."""
         response = await self._client.embeddings.create(
             model=self._name,
             input=list(texts),
@@ -98,33 +79,17 @@ class OpenAIEmbeddingModel:
 
 
 def cache_key(model: EmbeddingModel, text: str) -> str:
-    """Build the Redis key for one text under one model.
-
-    The model name and the width are part of the key on purpose: after a
-    change of embedding model (FR-6) the old vectors are still in Redis, and
-    a key made of the content hash alone would serve them to the new index.
-    """
+    """Build the Redis key for one text under one model."""
     return f"emb:{model.name}:{model.dimensions}:{content_hash(text)}"
 
 
 def _encode(vector: Sequence[float]) -> str:
-    """Pack a vector into base64-encoded 32-bit floats.
-
-    JSON would be about four times larger for no benefit: pgvector stores
-    float32 anyway, so the narrower type loses nothing, and the client is
-    configured with decode_responses, which cannot carry raw bytes.
-    """
+    """Pack a vector into base64-encoded 32-bit floats."""
     return base64.b64encode(array("f", vector).tobytes()).decode("ascii")
 
 
 def _decode(payload: str | bytes, dimensions: int) -> list[float] | None:
-    """Unpack a cached vector, or None if it cannot be trusted.
-
-    Anything unreadable or of the wrong width is treated as a miss rather
-    than an error: a bad cache entry must cost one API call, not a failed
-    ingestion. bytes are accepted as well as str because decode_responses is
-    the client's decision, not this function's.
-    """
+    """Unpack a cached vector, or None if it cannot be trusted."""
     vector = array("f")
 
     try:
@@ -154,16 +119,7 @@ async def _read_cache(
 
 
 async def _write_cache(cache: Redis, entries: dict[str, list[float]]) -> None:
-    """Store fresh vectors under their cache keys, ignoring an outage.
-
-    One pipeline rather than a write per key, and every entry carries the
-    same TTL. Failing here would throw away work that has already been paid
-    for at the API.
-
-    The buffered commands are awaited even though nothing is sent yet: on the
-    asyncio client queueing a command is itself a coroutine, and skipping the
-    await leaves the pipeline empty.
-    """
+    """Store fresh vectors under their cache keys, ignoring an outage."""
     if not entries:
         return
 
@@ -180,26 +136,7 @@ async def _write_cache(cache: Redis, entries: dict[str, list[float]]) -> None:
 async def embed_texts(
     texts: Sequence[str], model: EmbeddingModel, cache: Redis
 ) -> list[list[float]]:
-    """Return one vector per text, in the order the texts came in.
-
-    Order is part of the contract: the caller pairs the result with
-    chunks.chunk_index positionally. Texts that repeat within one call are
-    embedded once, and anything already in Redis never reaches the API --
-    which is the whole point of NFR-2a.
-
-    What the span records is that point: how many texts were asked for, how
-    many the cache answered, and how many batches still went to the provider.
-    Without those three numbers the cache is a claim rather than a measured
-    saving, and NFR-2a is what it exists to satisfy.
-
-    Neither the texts nor the vectors are captured. The texts are chunks of a
-    document whose content is already on the trace above, and 1536 floats per
-    text would bury every other field in the span.
-
-    Token counts are absent because EmbeddingModel returns vectors and
-    nothing else; putting real costs here means widening that protocol, and
-    a fabricated number would be worse than none.
-    """
+    """Return one vector per text, in the order the texts came in."""
     if not texts:
         return []
 

@@ -136,7 +136,6 @@ async def test_the_judge_widens_the_score(client: AsyncClient) -> None:
     assert "sql" in body["matched_keywords"]
     assert "sql" not in body["missing_keywords"]
     assert body["matched_evidence"]["sql"] == "modelled and tuned postgresql schemas"
-    # The judge is asked about the posting's requirements, not about prose.
     requirements, _, _ = judge.calls[0]
     assert "sql" in requirements
 

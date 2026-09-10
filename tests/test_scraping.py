@@ -1,10 +1,4 @@
-"""What the fetcher must refuse, and it never reaches the network to find out.
-
-Every request in here is answered by MockTransport. That is not only about
-speed: the module under test exists to stop this application from fetching
-things it should not, and a suite that proved it by fetching things would be
-the bug it is testing for.
-"""
+"""What the fetcher must refuse, and it never reaches the network to find out."""
 
 from collections.abc import Callable
 

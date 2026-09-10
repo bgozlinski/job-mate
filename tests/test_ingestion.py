@@ -158,12 +158,7 @@ async def test_the_cache_is_optional(session_factory, model):
 async def test_a_document_stored_mid_flight_is_treated_as_the_duplicate(
     session_factory, cache
 ):
-    """The unique index, not the lookup, is what settles a race.
-
-    The competing document is committed from inside embed(), which is
-    exactly the window between this call's lookup and its commit -- so the
-    IntegrityError branch runs deterministically rather than by luck.
-    """
+    """The unique index, not the lookup, is what settles a race."""
 
     class RacingModel(FakeEmbeddingModel):
         async def embed(self, texts):

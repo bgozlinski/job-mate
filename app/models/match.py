@@ -12,26 +12,7 @@ from app.core.db import Base
 
 
 class Match(Base):
-    """One stored comparison of a resume with a posting (FR-3).
-
-    A snapshot, not a view. The lists are copied in rather than recomputed on
-    read, because everything they were computed from moves: a resume is
-    edited, a posting is deleted, a prompt gets a new version, the model
-    behind the judge changes. A history that silently answered differently
-    tomorrow would be worse than none -- the point of keeping it is to see
-    what the candidate was actually told.
-
-    That is also why the posting's title is copied beside its id. The row
-    survives the document being removed from the knowledge base, and a
-    listing that reads "untitled" for everything old is not a history.
-
-    user_id is the owner and the only key anything is filtered by (NFR-1);
-    ondelete lives in the database so that removing an account takes its
-    matches with it even when the deletion never passes through the ORM.
-    resume_id and document_id are nullable and set to NULL when what they
-    point at is deleted: the answer stays readable, the link stops leading
-    anywhere.
-    """
+    """One stored comparison of a resume with a posting (FR-3)."""
 
     __tablename__ = "matches"
 
@@ -53,11 +34,7 @@ class Match(Base):
     notes: Mapped[list[str]] = mapped_column(JSONB)
     matched_evidence: Mapped[dict[str, Any]] = mapped_column(JSONB)
     retrieved_chunk_ids: Mapped[list[str]] = mapped_column(JSONB)
-    """The chunks the answer was built from, as text rather than uuids.
-
-    JSONB has no uuid of its own, and the alternative -- a join table -- would
-    hold references to chunks that are deleted with their document, which is
-    exactly the audit trail this column exists to survive."""
+    """The chunks the answer was built from, as text rather than uuids."""
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

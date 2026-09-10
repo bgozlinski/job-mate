@@ -1,15 +1,4 @@
-"""What the schema allows once postings arrive from a source (FR-7).
-
-The test that earns its place is the first one. FR-7 makes an edited posting
-a new document, so the pair (source_id, external_id) has to be free to
-repeat. A unique constraint there would turn every edit at the source into a
-conflict, and the obvious way to handle a conflict on ingestion -- skip the
-row -- would drop exactly the updates the harvester exists to notice, with
-nothing in the logs to say so.
-
-The rest pins the surrounding promises: deduplication still rests on
-content_hash, and removing a source does not remove what it collected.
-"""
+"""What the schema allows once postings arrive from a source (FR-7)."""
 
 from hashlib import sha256
 

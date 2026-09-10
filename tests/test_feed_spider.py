@@ -1,14 +1,4 @@
-"""What the feed spider reads, and where it refuses to start.
-
-No request is made here. The feeds are strings and the responses are built by
-hand, which is the only honest way to test a component whose job includes not
-fetching things: a suite that proved the allowlist by trying an address off
-it would be making the request the check exists to prevent.
-
-Both dialects are covered on purpose. Atom keeps its entries in a namespace
-and RSS does not, and an expression that works on one silently finds nothing
-on the other -- the failure looks like an empty feed rather than a bug.
-"""
+"""What the feed spider reads, and where it refuses to start."""
 
 from typing import cast
 

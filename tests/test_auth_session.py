@@ -1,8 +1,4 @@
-"""Renewing and ending a browser session: /auth/refresh and /auth/logout.
-
-The httpx client keeps a cookie jar, so these read like a browser's day:
-log in, let the access cookie die, renew, carry on, log out.
-"""
+"""Renewing and ending a browser session: /auth/refresh and /auth/logout."""
 
 import uuid
 
@@ -30,13 +26,7 @@ async def log_in(client: AsyncClient, email: str = EMAIL) -> None:
 
 
 async def test_refresh_issues_a_new_access_cookie(client: AsyncClient) -> None:
-    """Asserted as "a cookie was set", not as "the string changed".
-
-    Both tokens carry iat and exp in whole seconds, so a renewal inside the
-    same second as the login is byte-identical to it. That is correct and
-    harmless -- it is the same claims for the same account -- but it makes
-    inequality a test of the clock rather than of the route.
-    """
+    """Asserted as "a cookie was set", not as "the string changed"."""
     await log_in(client)
     settings = get_settings()
 
@@ -56,7 +46,6 @@ async def test_refresh_issues_a_new_access_cookie(client: AsyncClient) -> None:
 async def test_a_renewed_cookie_authenticates(client: AsyncClient) -> None:
     """The point of the whole arrangement, end to end."""
     await log_in(client)
-    # What the browser is left with once the short access cookie has died.
     client.cookies.delete(ACCESS_COOKIE)
     assert (await client.get("/auth/me")).status_code == status.HTTP_401_UNAUTHORIZED
 
@@ -68,11 +57,7 @@ async def test_a_renewed_cookie_authenticates(client: AsyncClient) -> None:
 
 
 async def test_refresh_does_not_reissue_the_refresh_cookie(client: AsyncClient) -> None:
-    """No rotation: without a store to detect reuse against it buys nothing.
-
-    Recorded as a test because the alternative looks like an improvement
-    until you notice it also slides the seven-day limit forward for ever.
-    """
+    """No rotation: without a store to detect reuse against it buys nothing."""
     await log_in(client)
     before = client.cookies[REFRESH_COOKIE]
 
@@ -132,11 +117,7 @@ async def test_a_refresh_token_for_a_subject_that_is_not_a_uuid_is_rejected(
 async def test_a_deleted_account_cannot_renew_its_session(
     client: AsyncClient, session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
-    """The database read is the only thing that ends a session early.
-
-    Nothing revokes a token, so without loading the account here a deleted
-    user would keep renewing for the rest of the week.
-    """
+    """The database read is the only thing that ends a session early."""
     await log_in(client)
 
     async with session_factory() as session:
@@ -181,10 +162,7 @@ async def test_logout_clears_the_refresh_cookie_too(client: AsyncClient) -> None
 
 
 async def test_logout_works_without_a_live_session(client: AsyncClient) -> None:
-    """The session a user most wants to end is the one already expired.
-
-    A logout behind authentication would answer 401 exactly then.
-    """
+    """The session a user most wants to end is the one already expired."""
     await log_in(client)
     client.cookies.delete(ACCESS_COOKIE)
 
@@ -205,13 +183,8 @@ async def test_logout_answers_the_same_when_nobody_was_logged_in(
 async def test_logout_does_not_end_a_session_on_another_device(
     client: AsyncClient,
 ) -> None:
-    """Only the cookies on this device are removed; no token is revoked.
-
-    Stated as a test because it is a real limit of a stateless session, and
-    the kind of thing a reader assumes works the other way.
-    """
+    """Only the cookies on this device are removed; no token is revoked."""
     await log_in(client)
-    # What another device would still be holding, taken before the logout.
     elsewhere = client.cookies[ACCESS_COOKIE]
 
     await client.post("/auth/logout")
