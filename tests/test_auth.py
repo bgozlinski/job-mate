@@ -185,8 +185,11 @@ async def test_me_rejects_a_token_signed_with_another_key(client: AsyncClient) -
 
 async def test_me_rejects_an_unsigned_token(client: AsyncClient) -> None:
     user_id = (await register(client))["id"]
+    # "" rather than None: PyJWT's NoneAlgorithm maps an empty key to None
+    # itself, and the annotated signature has no room for None once
+    # cryptography is installed (it arrives with Scrapy, via pyOpenSSL).
     unsigned = jwt.encode(
-        {"sub": user_id, "exp": 9_999_999_999}, key=None, algorithm="none"
+        {"sub": user_id, "exp": 9_999_999_999}, key="", algorithm="none"
     )
 
     response = await client.get("/auth/me", headers=auth_header(unsigned))
