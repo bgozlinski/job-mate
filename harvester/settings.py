@@ -37,12 +37,21 @@ USER_AGENT = _JOBMATE_USER_AGENT
 
 ROBOTSTXT_OBEY = True
 
-# KNOWN GAP. NFR-5 promises we honour Crawl-delay; ROBOTSTXT_OBEY does not
-# deliver it. Scrapy parses the directive (scrapy/robotstxt.py exposes
-# crawl_delay) but RobotsTxtMiddleware only ever filters forbidden paths --
-# nothing reads the value back to slow the scheduler down. Until a
-# middleware applies it per host, DOWNLOAD_DELAY below is the only floor,
-# and a host asking for more than it gets must be entered by hand.
+# ROBOTSTXT_OBEY only filters forbidden paths; it does not apply
+# Crawl-delay, and Scrapy has nothing that does. PolitenessMiddleware reads
+# the directive and holds the slot at it, which is what lets NFR-5 claim
+# robots.txt is decisive rather than merely consulted.
+DOWNLOADER_MIDDLEWARES = {
+    "harvester.middlewares.PolitenessMiddleware": 101,
+}
+
+# Bounds for the 429 handling in that middleware. A host may ask for any
+# wait it likes; we honour it up to the first number and abandon the
+# request past it, rather than wait a token amount and call that respect.
+JOBMATE_MAX_RETRY_AFTER_SECONDS = 300.0
+# What a 429 with no usable Retry-After costs. The header is missing, but
+# the message -- you are asking too often -- is not.
+JOBMATE_BLIND_RETRY_AFTER_SECONDS = 60.0
 
 # --- Rate: one request at a time, per domain -------------------------------
 
@@ -50,10 +59,12 @@ CONCURRENT_REQUESTS = 4
 CONCURRENT_REQUESTS_PER_DOMAIN = 1
 DOWNLOAD_DELAY = 2.0
 
-# Scrapy multiplies the delay by a random 0.5-1.5 by default, which turns
-# the floor into an average and lets half the requests arrive twice as
-# fast as promised. Off, so DOWNLOAD_DELAY means what it says.
-RANDOMIZE_DOWNLOAD_DELAY = False
+# Scrapy varies the delay by +-50% by default, which turns the floor into
+# an average and lets half the requests arrive sooner than promised -- the
+# same argument applies to a Crawl-delay the middleware installs. Zero, so
+# DOWNLOAD_DELAY means what it says. (The older RANDOMIZE_DOWNLOAD_DELAY
+# spelling still works but warns since 2.19.)
+DOWNLOAD_DELAY_JITTER = 0.0
 
 AUTOTHROTTLE_ENABLED = True
 AUTOTHROTTLE_START_DELAY = 2.0
@@ -68,8 +79,9 @@ AUTOTHROTTLE_TARGET_CONCURRENCY = 1.0
 # 429 is deliberately missing from the retry list. Scrapy's default
 # includes it and RetryMiddleware would resend the request without ever
 # reading Retry-After, which is the opposite of what NFR-5 promises: being
-# told to slow down and answering with more traffic. Until a middleware
-# reads that header, a 429 fails loudly instead of being hammered.
+# told to slow down and answering with more traffic. PolitenessMiddleware
+# claims the code instead, waits for as long as the host asked, and only
+# then retries.
 RETRY_HTTP_CODES = [500, 502, 503, 504, 522, 524, 408]
 RETRY_TIMES = 2
 
