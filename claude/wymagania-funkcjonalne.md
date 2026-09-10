@@ -30,6 +30,7 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 | CI/CD | GitHub Actions | Lint, testy, build |
 | Frontend | React + TypeScript (Vite) | Klient w przeglądarce; typy generowane z OpenAPI, więc zmiana schematu w Pythonie psuje build, a nie ekran |
 | Klient deweloperski | Streamlit | Narzędzie do ręcznego dziurawienia API; nie jest częścią produktu |
+| Harvester ofert (FR-7) | Scrapy | Obowiązki z NFR-5 — `robots.txt`, throttling, limit na domenę, cache warunkowy, bezpieczniki przebiegu — są konfiguracją frameworka, nie kodem do napisania. Wyłącznie w workerze; reaktor Twisted nie styka się z asyncio API |
 
 ## 3. Wymagania funkcjonalne
 
@@ -97,6 +98,53 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 - Administrator może przeglądać i usuwać źródła.
 - Obsługiwana jest re-indeksacja po zmianie modelu embeddingów.
 
+### FR-7. Automatyczne pozyskiwanie ofert
+- Użytkownik definiuje **zapisane wyszukiwanie**: rola, seniority, lokalizacja, słowa kluczowe, wskazane CV
+  oraz próg score, powyżej którego oferta ma się pojawić.
+- Worker **poza procesem API** cyklicznie odpytuje źródła z allowlisty (warunki w NFR-5) i wprowadza nowe
+  ogłoszenia **tą samą ścieżką co FR-1**: `SourceDocument` → chunking → embedding → deduplikacja po
+  `content_hash`. Automat nie jest nową ścieżką ingestii, tylko nowym wyzwalaczem istniejącej.
+- Dla każdego nowego ogłoszenia i każdego aktywnego zapisanego wyszukiwania system liczy dopasowanie do
+  wskazanego CV i zapisuje je w `matches`, oznaczone jako powstałe automatycznie. **FR-3 pozostaje bez
+  zmian** — ten sam `match_resume`, ten sam zapis, inna przyczyna wywołania.
+- Pełne dopasowanie woła LLM wymaganie po wymaganiu, więc poprzedza je **tani pre-filtr**: filtr po
+  `documents.metadata` (rola, seniority) plus podobieństwo wektorowe CV↔ogłoszenie. Do LLM trafia wyłącznie
+  top-k. Bez tego kroku koszt automatu rośnie liniowo z rynkiem, a nie z tym, co użytkownika interesuje.
+- Użytkownik widzi ranking nowych ofert powyżej progu i wchodzi z niego w pełne dopasowanie z FR-3.
+  Widzi wyłącznie własne (NFR-1).
+- Każdy przebieg jest widoczny w Langfuse i w panelu admina (FR-6): źródło, liczba pobranych, odrzuconych
+  jako duplikat i odrzuconych przez pre-filtr, liczba dopasowań, koszt tokenów.
+- **Awaria jednego źródła nie zatrzymuje pozostałych** ani nie blokuje kolejnego przebiegu.
+
+> **Jednostka harmonogramu.** Cykl chodzi **per źródło**, nie per zapisane wyszukiwanie. Ogłoszenia są
+> wspólne dla wszystkich użytkowników i deduplikowane globalnie, więc odpytywanie źródła raz na przebieg
+> jest jedyną wersją, która nie mnoży ruchu wobec cudzego serwera przez liczbę kont — a ten ruch jest tym,
+> za co odpowiadamy w NFR-5. Zapisane wyszukiwanie jest jednostką **filtrowania i scoringu**, nie pobierania.
+
+> **Edycja oferty.** Ogłoszenie o tym samym `(source_id, external_id)`, ale zmienionej treści, tworzy
+> **nowy dokument**; poprzedni zostaje. Historyczne wpisy w `matches` dalej wskazują na treść, którą model
+> faktycznie widział — ta sama zasada, dla której istnieje `messages.retrieved_chunk_ids`. Ceną jest
+> rosnąca baza i to, że ranking musi jawnie pokazywać wyłącznie najnowszą wersję oferty; przycinanie
+> starych wersji jest zadaniem administracyjnym (FR-6), nie skutkiem ubocznym pobierania.
+
+> **Decyzja projektowa: Scrapy.** Harvester w FR-7 stoi na Scrapy, mimo że ścieżka URL z FR-1 stoi na httpx.
+> Powód: obowiązki, które NFR-5 nakłada na automat — respektowanie `robots.txt`, własny User-Agent, odstęp
+> między żądaniami, limit współbieżności na domenę, limit rozmiaru odpowiedzi, cache warunkowy po ETag —
+> są w Scrapym **konfiguracją** (`ROBOTSTXT_OBEY`, `USER_AGENT`, `AUTOTHROTTLE_*`,
+> `CONCURRENT_REQUESTS_PER_DOMAIN`, `DOWNLOAD_MAXSIZE`, `HTTPCACHE_POLICY`), a nie kodem do napisania
+> i przetestowania od zera. Twarde bezpieczniki przebiegu (`CLOSESPIDER_ITEMCOUNT`, `CLOSESPIDER_TIMEOUT`,
+> `DEPTH_LIMIT`) też są wbudowane. Przy pełnym crawlowaniu dopuszczonym w NFR-5 to właśnie te ustawienia
+> są miejscem, w którym warunki zgody przestają być deklaracją, a stają się egzekwowalne.
+>
+> **Granica.** Scrapy uruchamia się wyłącznie w procesie workera. FastAPI nigdy nie importuje Scrapy'ego
+> ani nie startuje reaktora Twisted — mieszanie reaktora z pętlą asyncio serwera jest wykluczone.
+> Przekazanie wyniku do istniejącej ingestii idzie przez **staging** (tabela lub plik), a nie przez zapis
+> do async SQLAlchemy z item pipeline'u; osobny krok asyncio zabiera stamtąd dane i wywołuje `ingestion`.
+> Dwa runtime'y stykają się na danych, nie na wywołaniach.
+>
+> `allowed_domains` pająka wywodzi się z `SCRAPER_ALLOWED_HOSTS`, tej samej konfiguracji co ścieżka
+> interaktywna — jedna allowlista, dwa konsumenty. `HttpPostingSource` na httpx zostaje nietknięty.
+
 ## 4. Wymagania niefunkcjonalne
 
 - **NFR-1 Bezpieczeństwo:** uwierzytelnianie JWT; hasła przechowywane jako hashe; użytkownik ma dostęp wyłącznie do własnych danych. Token dociera do API na dwa sposoby: nagłówkiem `Authorization: Bearer` albo ciasteczkiem `httpOnly` — szczegóły niżej.
@@ -147,7 +195,48 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 > job Pythona regeneruje `web/openapi.json` z aplikacji i porównuje z zacommitowanym, job Node'a robi to
 > samo dla `web/src/api/schema.d.ts` względem tego dokumentu. Razem **nie da się zmienić modelu Pydantic
 > i zostawić frontendu z nieaktualnymi typami** — rozjazd psuje build, zamiast psuć ekran u użytkownika.
-- **NFR-5 Aspekty prawne:** brak scrapingu Indeed/LinkedIn (naruszenie regulaminów); dane pochodzą z ręcznego wprowadzania, z publicznych datasetów (np. zbiory ogłoszeń z Kaggle) albo z odczytu pojedynczej strony ogłoszenia w serwisie z allowlisty — na warunkach opisanych niżej.
+- **NFR-5 Aspekty prawne:** brak scrapingu Indeed/LinkedIn (naruszenie regulaminów); dane pochodzą z ręcznego wprowadzania, z publicznych datasetów (np. zbiory ogłoszeń z Kaggle), z odczytu pojedynczej strony ogłoszenia w serwisie z allowlisty albo z automatycznego pozyskiwania z serwisów z allowlisty (FR-7) — na warunkach opisanych niżej.
+
+> **Zmiana 2026-09-10.** Wymaganie wykluczało pobieranie „w tle ani według harmonogramu" i przeczesywanie
+> serwisu robotem. **Oba zakazy zostają uchylone** na rzecz FR-7. Zdania „nie crawlujemy: nie ma kolejki
+> adresów, nie chodzimy po linkach, nie czytamy sitemap, nie pobieramy nic w tle ani według harmonogramu"
+> ze zmiany 2026-09-07 **nie obowiązują**; zostają niżej jako zapis stanu, w którym powstała ścieżka URL
+> z FR-1, i ta ścieżka nadal działa dokładnie tak, jak tam opisano.
+>
+> **Dlaczego mimo to nie jest to scraper Indeed.** Poprzednia wersja opierała granicę na jednym zdaniu:
+> nie crawlujemy. Po jego uchyleniu granicy nie trzyma już deklaracja, tylko **warunki spisane niżej** —
+> i tylko one. Jeśli którykolwiek przestanie być spełniany, zgoda znika razem z nim; nie ma wersji
+> „w zasadzie przestrzegamy".
+>
+> **Co robimy.** Cyklicznie pozyskujemy ogłoszenia ze źródeł z zamkniętej allowlisty, w trzech formach,
+> w kolejności pierwszeństwa: (1) udokumentowane publiczne API job boardów i systemów ATS, (2) feedy
+> RSS/Atom, (3) crawl stron ogłoszeń — listy ofert i strony pojedynczych ofert — z kolejką adresów
+> i podążaniem za linkami. Formy (1) i (2) mają pierwszeństwo zawsze, gdy źródło je udostępnia: crawl jest
+> ostatecznością dla serwisów, które nie dają nic innego, a nie domyślnym sposobem pobierania.
+>
+> **Warunki, na których wolno crawlować.**
+> - `robots.txt` jest rozstrzygający i sprawdzany przy każdym przebiegu (`ROBOTSTXT_OBEY`), razem
+>   z `Crawl-delay`. Ścieżka zabroniona w `robots.txt` jest zabroniona — bez wyjątków i bez „tylko raz".
+> - Jedno żądanie na domenę naraz (`CONCURRENT_REQUESTS_PER_DOMAIN = 1`), z odstępem i AutoThrottle.
+>   Nie rozpędzamy się dlatego, że serwer odpowiada szybko.
+> - `429` i `Retry-After` są respektowane. Powtarzające się `5xx` wyłączają źródło do czasu decyzji
+>   człowieka, a nie uruchamiają ponawiania w pętli.
+> - Zasięg ograniczony do ścieżek ogłoszeń: `DEPTH_LIMIT`, twarde bezpieczniki przebiegu
+>   (`CLOSESPIDER_ITEMCOUNT`, `CLOSESPIDER_TIMEOUT`) i cache warunkowy (ETag / `If-Modified-Since`),
+>   żeby kolejny przebieg nie pobierał ponownie tego, co się nie zmieniło.
+> - Własny User-Agent `JobMate/…` z adresem kontaktowym. **Nie podszywamy się pod przeglądarkę.**
+>
+> **Czego nie robimy.** Nie omijamy niczego, co serwis postawił nam na drodze: ani CAPTCHY, ani wyzwań
+> JavaScript, ani limitów, ani logowania — treść za logowaniem jest poza zasięgiem. Nie sięgamy po
+> wewnętrzne API serwisu, którego `robots.txt` je blokuje; dotyczy to `api.justjoin.it`. Nie rotujemy
+> adresów IP ani User-Agentów. Nie zbieramy danych osobowych rekruterów — pobieramy treść oferty,
+> nie profile ludzi.
+>
+> **Granica.** Host trafia na allowlistę **decyzją, nie kodem** — po przeczytaniu jego regulaminu
+> i `robots.txt`; sam fakt, że pająk zadziała, nie jest podstawą. Zgoda dla danego hosta wygasa
+> natychmiast, gdy: serwis zablokuje ścieżkę ogłoszeń w `robots.txt`, jego regulamin zabroni
+> automatycznego odczytu, serwis poprosi nas o zaprzestanie, albo złamiemy którykolwiek z warunków wyżej.
+> **Indeed i LinkedIn pozostają wykluczone i nie trafiają na allowlistę w żadnej z trzech form.**
 
 > **Zmiana 2026-09-07.** Wymaganie mówiło „brak scrapingu" i pod tym hasłem mieściły się dwie różne rzeczy:
 > przeczesywanie serwisu robotem i odczytanie jednej strony, którą użytkownik ma właśnie otwartą. Pierwsze
@@ -191,12 +280,22 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 - `messages` — kolejne wypowiedzi w sesji; przechowuje `retrieved_chunk_ids` do audytu tego, co model faktycznie widział, oraz koszt tokenów
 - `matches` — historia dopasowań per użytkownik (migracja `25dc29c14b4b`): score, listy trafień i luk, sugestie, notatki, cytaty z CV oraz `retrieved_chunk_ids`. Migawka, nie widok: kopiuje też tytuł ogłoszenia, a `resume_id` i `document_id` przechodzą w NULL, gdy to, na co wskazują, zostanie usunięte
 
+**Encje dochodzące z FR-7** (jeszcze nie istnieją):
+
+- `sources` — źródło automatu: host, forma (API / feed / crawl), harmonogram, watermark ostatniego przebiegu, stan (aktywne / wyłączone po awariach). Wyłączenie źródła jest stanem w bazie, nie zmianą kodu — tego wymaga „granica" z NFR-5
+- `saved_searches` — zapisane wyszukiwanie: `user_id`, `resume_id`, kryteria, próg score, aktywność
+- `documents` — dochodzi `(source_id, external_id)` z ograniczeniem unikalności **na parę razem z `content_hash`**: sam `content_hash` rozpoznaje identyczną treść, ale edytowana oferta ma inny hash, a ten sam `external_id`. Zgodnie z FR-7 powstaje wtedy nowy dokument, więc para `(source_id, external_id)` nie może być unikalna sama z siebie
+- `matches` — dochodzi znacznik pochodzenia (na żądanie / automat) oraz `saved_search_id`, żeby ranking dało się odtworzyć i żeby historia z FR-3 nie zlała się z wynikami automatu
+
 **Relacje:**
 ```
 users 1—N resumes
 users 1—N matches
+users 1—N saved_searches
 users 1—N sessions 1—N messages
 documents 1—N chunks
+sources 1—N documents (opcjonalnie — dokument może pochodzić z ręcznego wprowadzenia)
+saved_searches 1—N matches (opcjonalnie — dopasowanie może powstać na żądanie)
 sessions N—1 resumes (opcjonalnie)
 ```
 
@@ -223,7 +322,16 @@ Przeglądarka                              Klient deweloperski
      └── Mock interview (LangGraph) → stanowy graf rozmowy   [etap 4, jeszcze nie istnieje]
                     ↓                ↘
               [PostgreSQL + pgvector]  [Langfuse — trace'y, koszty, ewaluacja]
+                    ▲
+                    │  ten sam serwis ingestion, inny wyzwalacz
+                    │
+     [Worker FR-7]  ─┴─ harmonogram per źródło          [etap 7, jeszcze nie istnieje]
+        └── Scrapy (Twisted) → staging → krok asyncio → ingestion → pre-filtr → match_resume
+               źródła: publiczne API / feed RSS / crawl stron ofert (allowlista, NFR-5)
 ```
+
+> Worker jest osobnym procesem. Strzałka do ingestii biegnie przez staging, nie przez wywołanie —
+> FastAPI nie importuje Scrapy'ego i nie startuje reaktora Twisted (FR-7).
 
 ## 7. Roadmapa
 
@@ -235,6 +343,7 @@ Przeglądarka                              Klient deweloperski
 | 4 | Tryb mock interview na LangGraph (FR-4) | Sesje konwersacyjne (graf stanowy) |
 | 5 | Eksport + panel admina (FR-5, FR-6) | Gotowe MVP |
 | 6 (bonus) | Rozmowy głosowe (speech-to-text), trendy wynagrodzeń | Cele dodatkowe |
+| 7 | Automat pozyskiwania ofert (FR-7): worker, harvester na Scrapy, zapisane wyszukiwania, pre-filtr przed dopasowaniem | Oferty same trafiają do rankingu |
 
 > **Zmiana 2026-09-07. Etap 4 został świadomie przeskoczony.** Po zamknięciu etapu 3 powstał klient
 > w przeglądarce (React), którego nie było ani w roadmapie, ani w tabeli stacku — architektura wysokopoziomowa
