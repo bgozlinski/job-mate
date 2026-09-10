@@ -83,47 +83,6 @@ services:
       retries: 3
       start_period: 40s
 
-  # --- Automat zbierania ofert (FR-7) -----------------------------------------
-  # Ten sam obraz co `api`, inny proces. Osobny serwis, a nie watek w `api`,
-  # bo skalowanie API zwielokrotniloby przebiegi: dwie repliki API to dwa
-  # serwery, dwa harvestery to dwa crawle tego samego serwisu -- czyli
-  # dokladnie to, czego zabrania NFR-5. Bez `ports`: nic sie tu nie laczy.
-
-  harvester:
-    container_name: harvester-service
-    build:
-      context: .
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      POSTGRES_HOST: db
-      POSTGRES_PORT: 5432
-      REDIS_URL: redis://redis:6379/0
-    command:
-      - python
-      - -m
-      - app.worker
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./app:/app/app
-      # Pajaki i ich ustawienia. Worker odpala je jako osobny proces
-      # (`python -m scrapy.cmdline crawl`), wiec katalog musi byc w obrazie
-      # obok scrapy.cfg -- inaczej `scrapy crawl` nie znajdzie projektu.
-      - ./harvester:/app/harvester
-      - ./.env:/app/.env:ro
-    # SIGTERM zatrzymuje dopiero NASTEPNY przebieg, nigdy trwajacy. Przebieg
-    # dluzszy niz to okno zostanie zabity i to jest bezpieczne, a nie tylko
-    # tolerowane: pajak commituje kazda oferte osobno, a drenaz jest
-    # idempotentny, wiec ubity przebieg zostawia wiersze `pending`, ktore
-    # nastepny start dokancza bez ponownego pobierania czegokolwiek.
-    stop_grace_period: 30s
-
   # --- Klient w przegladarce --------------------------------------------------
   # Serwer deweloperski Vite. Proxuje /api na kontener `api`, wiec przegladarka
   # widzi jeden origin -- bez tego ciasteczka sesji wymagalyby CORS-a z

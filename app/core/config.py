@@ -46,9 +46,6 @@ class Settings(BaseSettings):
     broken response can spend, and a limit far above anything real does not do that.
     """
 
-    harvest_interval_seconds: float = 300.0
-    """How often the FR-7 worker looks for something to do."""
-
     langfuse_public_key: str | None = None
     langfuse_secret_key: SecretStr | None = None
     langfuse_host: str = "http://langfuse-web:3000"

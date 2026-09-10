@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func, text
+from sqlalchemy import DateTime, Index, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -29,18 +29,11 @@ class Document(Base):
             postgresql_using="gin",
             postgresql_ops={"metadata": "jsonb_path_ops"},
         ),
-        Index("ix_documents_source_external", "source_id", "external_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
     title: Mapped[str | None] = mapped_column(Text())
     source_url: Mapped[str | None] = mapped_column(Text())
-    source_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("sources.id", ondelete="SET NULL")
-    )
-    """Which harvester source brought this in, or NULL for manual ingestion."""
-    external_id: Mapped[str | None] = mapped_column(Text())
-    """The posting's id at the source, or NULL when it has none."""
     content: Mapped[str] = mapped_column(Text())
     content_hash: Mapped[str] = mapped_column(
         String(CONTENT_HASH_LENGTH), unique=True, index=True
