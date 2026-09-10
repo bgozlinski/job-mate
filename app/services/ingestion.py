@@ -1,5 +1,6 @@
 """Storing a job posting together with its embedded chunks (FR-1)."""
 
+import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -28,12 +29,19 @@ class SourceDocument:
     hybrid retrieval later filters on (role, seniority). Validating its shape
     belongs to the request schema, not here -- the knowledge base has to be
     able to carry fields the API does not know about yet.
+
+    source_id and external_id are the harvester's provenance (FR-7) and stay
+    None for everything a person pasted, uploaded or fetched by URL. They are
+    part of what the caller knows about the posting, which is why they belong
+    here rather than in an update the drain issues afterwards.
     """
 
     content: str
     title: str | None = None
     source_url: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    source_id: uuid.UUID | None = None
+    external_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -123,6 +131,8 @@ async def ingest_document(
         content_hash=digest,
         doc_metadata=source.metadata,
         requirements=await _requirements(normalized, extractor),
+        source_id=source.source_id,
+        external_id=source.external_id,
     )
     document.chunks = [
         Chunk(chunk_index=index, content=text, embedding=vector)
