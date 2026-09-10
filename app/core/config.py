@@ -92,6 +92,15 @@ class Settings(BaseSettings):
     bound what a hostile or broken response can spend, and a limit far above
     anything real does not do that."""
 
+    harvest_interval_seconds: float = 300.0
+    """How often the FR-7 worker looks for something to do.
+
+    Not how often a source is read: that is sources.poll_interval_seconds,
+    decided per source, and a tick that finds nothing due does nothing. This
+    is only the resolution of the schedule, so it is short -- the cost of a
+    tick with no due source is one SELECT.
+    """
+
     langfuse_public_key: str | None = None
     langfuse_secret_key: SecretStr | None = None
     langfuse_host: str = "http://langfuse-web:3000"
