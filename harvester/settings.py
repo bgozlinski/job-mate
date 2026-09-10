@@ -122,6 +122,9 @@ TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 FEED_EXPORT_ENCODING = "utf-8"
 LOG_LEVEL = "INFO"
 
-# Staging pipeline lands here (FR-7): the spider writes rows, a separate
-# asyncio step picks them up and calls the existing ingestion service.
-ITEM_PIPELINES: dict[str, int] = {}
+# The Twisted side of the FR-7 seam: the spider writes staging rows with a
+# synchronous driver, and a separate asyncio step drains them into the
+# existing ingestion service. Nothing downstream of this belongs here.
+ITEM_PIPELINES = {
+    "harvester.pipelines.StagingPipeline": 300,
+}
