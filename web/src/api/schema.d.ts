@@ -36,23 +36,6 @@ export interface paths {
         /**
          * Login
          * @description Exchange credentials for a session, in both shapes at once.
-         *
-         *     The body carries a long-lived token for a client that sends an
-         *     Authorization header and cannot renew what it holds. The same response
-         *     sets httpOnly cookies for a browser, which can renew silently and so
-         *     gets a short access cookie backed by a refresh token. Both are issued
-         *     every time: which one a client uses is the client's business, and a
-         *     login that had to be told in advance would need a flag nobody wants to
-         *     explain.
-         *
-         *     A browser is handed a token in the body it will not use. That is the
-         *     price of one login route for two clients, and it is not a leak: the
-         *     response goes to a caller who just proved they own the account, over the
-         *     same connection as the cookies.
-         *
-         *     An unknown address and a wrong password produce the same response and,
-         *     thanks to the discarded verification, take the same time. Either one
-         *     would otherwise reveal which addresses have accounts (NFR-1).
          */
         post: operations["login_auth_login_post"];
         delete?: never;
@@ -73,15 +56,6 @@ export interface paths {
         /**
          * Logout
          * @description End the browser's session by removing both cookies.
-         *
-         *     No authentication required, on purpose. A session whose access cookie
-         *     has already expired is exactly the one a user wants to end, and a logout
-         *     that answered 401 would refuse at the moment it is most needed. Nothing
-         *     is destroyed that the caller does not already hold, so there is nothing
-         *     to protect here.
-         *
-         *     Answering the same way whether or not there was a session keeps this
-         *     from reporting whether the caller was logged in.
          */
         post: operations["logout_auth_logout_post"];
         delete?: never;
@@ -122,23 +96,6 @@ export interface paths {
         /**
          * Refresh
          * @description Renew the short access cookie from the refresh cookie.
-         *
-         *     Cookie only: the refresh token is never handed out any other way, so
-         *     there is no header to read it from, and accepting one would widen the
-         *     surface for nothing. The Bearer client does not come here at all -- it
-         *     holds a long-lived token and has no refresh cookie to present.
-         *
-         *     The account is loaded rather than trusted from the claims, so a deleted
-         *     account cannot renew its way through the rest of the week. That database
-         *     read is the only thing standing between a deleted user and a working
-         *     session, since nothing revokes the tokens themselves.
-         *
-         *     Every failure is the same 401 as anywhere else: no cookie, a bad
-         *     signature, an expired token, an access token presented as a refresh one,
-         *     an account that is gone. The cookies are deliberately left in place on
-         *     failure -- clearing them would mean building the error response by hand,
-         *     and a dead refresh cookie is inert anyway. A 401 here means the caller
-         *     has to log in again, not retry.
          */
         post: operations["refresh_auth_refresh_post"];
         delete?: never;
@@ -159,10 +116,6 @@ export interface paths {
         /**
          * Register
          * @description Create an account, or answer 409 if the address is taken.
-         *
-         *     The duplicate is caught from the unique index rather than prevented by a
-         *     prior SELECT: checking first leaves a window in which a concurrent
-         *     request can insert the same address between the check and the write.
          */
         post: operations["register_auth_register_post"];
         delete?: never;
@@ -181,42 +134,12 @@ export interface paths {
         /**
          * List Documents
          * @description List the knowledge base, newest first.
-         *
-         *     FR-3 has the user pick the posting to be matched against, and until this
-         *     route existed the only way to learn a document_id was to send the same
-         *     text again and read it off the deduplicated answer. Formally the listing
-         *     belongs to administration (FR-6); practically FR-3 is unusable without
-         *     it, so it is here and open to any authenticated account, exactly like
-         *     ingestion. Deleting is what stays with an admin.
-         *
-         *     The content is not in the response -- DocumentRead leaves it out -- so a
-         *     page stays small no matter how long the postings are.
-         *
-         *     Ordering is by created_at and then by id, because two sources ingested in
-         *     the same moment would otherwise have no defined order and offset paging
-         *     could show one of them twice. Ids are uuid7, so the tiebreaker runs the
-         *     same way as time.
-         *
-         *     The caller pages until a short page comes back; no total is returned,
-         *     which would cost a second count query on every request to tell them
-         *     something the next call tells them for free.
          */
         get: operations["list_documents_documents_get"];
         put?: never;
         /**
          * Create Document
          * @description Ingest a source, or return the one it duplicates.
-         *
-         *     Any authenticated account may add to the knowledge base: FR-1 describes
-         *     a user pasting the posting they want to be matched against, and FR-3
-         *     then has them pick it. Administration -- browsing and deleting sources
-         *     (FR-6) -- is what stays with an admin.
-         *
-         *     A duplicate answers 200 with the document that was already there rather
-         *     than 409: the caller's intent, having this text in the knowledge base,
-         *     is satisfied, and the body tells them which document it is.
-         *
-         *     The route is rate limited (NFR-2): it spends money at a third-party API.
          */
         post: operations["create_document_documents_post"];
         delete?: never;
@@ -237,27 +160,6 @@ export interface paths {
         /**
          * Ingest From Url
          * @description Ingest the posting published at an address (FR-1).
-         *
-         *     The third way into the same knowledge base, after a paste and a file, and
-         *     it answers exactly like them: 201 for a new posting, 200 with the
-         *     existing one for a duplicate, the same DocumentRead either way. Nothing
-         *     below _store knows the text arrived over the network.
-         *
-         *     Which addresses are read is settled by the allowlist rather than here --
-         *     see NFR-5 for why the list is closed, and app.services.scraping for the
-         *     request forgery it also prevents (NFR-1).
-         *
-         *     Parsing runs on the event loop rather than in a worker thread, which is
-         *     the opposite of what the upload route does with a PDF. The measurement is
-         *     the reason: a megabyte of markup takes about ten milliseconds here,
-         *     because HTMLParser skips script bodies wholesale, while a PDF of the same
-         *     size takes hundreds. Below a certain cost the hand-off is the expensive
-         *     part.
-         *
-         *     The fetch happens inside the trace, not before it, so a board that took
-         *     eight seconds to answer is visible as what made the ingestion slow
-         *     (NFR-2). It costs no money, which is why the rate limit it shares with
-         *     the other two routes is still about embeddings.
          */
         post: operations["ingest_from_url_documents_from_url_post"];
         delete?: never;
@@ -278,31 +180,6 @@ export interface paths {
         /**
          * Upload Document
          * @description Ingest a source from an uploaded PDF, DOCX or text file (FR-1).
-         *
-         *     The same knowledge base as the JSON route, reached with a file instead
-         *     of a paste, and answering the same way: 201 for a new source, 200 with
-         *     the existing one for a duplicate.
-         *
-         *     No file hash is stored, and that is the point. A document is identified
-         *     by the hash of its normalised text, so the same posting sent once as a
-         *     PDF and once as a DOCX is correctly one document -- two different files,
-         *     one source. Hashing the bytes here would break that, which is the
-         *     opposite of what it does for resumes, where the hash is what makes a
-         *     re-upload recognisable.
-         *
-         *     The fields are declared one by one rather than as a single Form model:
-         *     FastAPI flattens such a model only when every field is scalar, and
-         *     metadata is an object, so the whole thing arrives as one missing field.
-         *     They are validated together anyway, by handing them to DocumentUpload --
-         *     a real URL and metadata that parses -- so the two routes reject the same
-         *     input for the same reasons.
-         *
-         *     The length limit the JSON route gets from its schema is applied by hand:
-         *     a 5 MB file of prose parses to far more text than MAX_CONTENT_LENGTH
-         *     allows, and nothing would otherwise stop it.
-         *
-         *     The title falls back to the filename, which is the only name an upload
-         *     comes with and better than nothing in a listing.
          */
         post: operations["upload_document_documents_upload_post"];
         delete?: never;
@@ -321,9 +198,6 @@ export interface paths {
         /**
          * Liveness
          * @description Report that the process is up, without touching any dependency.
-         *
-         *     An orchestrator restarts a container that fails this, so it must not go
-         *     red because the database is briefly unreachable.
          */
         get: operations["liveness_health_get"];
         put?: never;
@@ -344,9 +218,6 @@ export interface paths {
         /**
          * Readiness
          * @description Report whether the dependencies are reachable, 503 if any is not.
-         *
-         *     Both checks run concurrently and their exceptions are collected rather
-         *     than raised, so one dead dependency still leaves the other one reported.
          */
         get: operations["readiness_health_ready_get"];
         put?: never;
@@ -367,15 +238,6 @@ export interface paths {
         /**
          * List Matches
          * @description List the caller's own matches, newest first.
-         *
-         *     Filtered by owner in the statement rather than checked afterwards: a
-         *     history is a record of what somebody was told about their own CV, and
-         *     NFR-1 makes that theirs alone.
-         *
-         *     Ordered by created_at and then by id, because two matches run in the same
-         *     moment would otherwise have no defined order and offset paging could show
-         *     one of them twice. Ids are uuid7, so the tiebreaker runs the same way as
-         *     time.
          */
         get: operations["list_matches_matches_get"];
         put?: never;
@@ -396,9 +258,6 @@ export interface paths {
         /**
          * Read Match
          * @description Return one stored match in full, or 404 if it is not the caller's.
-         *
-         *     Somebody else's match is a 404 rather than a 403, exactly as an unknown
-         *     resume is: a different answer would confirm the row exists.
          */
         get: operations["read_match_matches__match_id__get"];
         put?: never;
@@ -445,14 +304,6 @@ export interface paths {
         /**
          * Upload Resume
          * @description Store a resume from an uploaded PDF, DOCX or text file (FR-1).
-         *
-         *     What is kept is the extracted text; the file itself is not stored. The
-         *     three columns beside it record where that text came from, so a later
-         *     upload of the same document is recognisable as such.
-         *
-         *     The four ways this fails are told apart on purpose, because the useful
-         *     answer differs: too large, not a format we read, a scan with no text in
-         *     it, or a file already uploaded.
          */
         post: operations["upload_resume_resumes_upload_post"];
         delete?: never;
@@ -485,10 +336,6 @@ export interface paths {
         /**
          * Update Resume
          * @description Update the fields the request actually carries.
-         *
-         *     exclude_unset is what separates an omitted field from one sent as null:
-         *     the first is left alone, the second clears the column. Dumping the whole
-         *     model would silently blank everything the caller did not mention.
          */
         patch: operations["update_resume_resumes__resume_id__patch"];
         trace?: never;
@@ -505,17 +352,6 @@ export interface paths {
         /**
          * Match
          * @description Score one of the caller's resumes against a posting and suggest edits.
-         *
-         *     The answer is stored before it is returned, and the stored row is what
-         *     comes back: the response and the history are then the same object, and a
-         *     reader comparing the two later cannot find them disagreeing.
-         *
-         *     The resume comes from a dependency that filters by owner, so a resume
-         *     belonging to somebody else is a 404 here exactly as a missing one is: a
-         *     different answer would confirm it exists (NFR-1).
-         *
-         *     This is the most expensive route in the application -- it calls an LLM --
-         *     which is why it carries the tighter of the two rate limits (NFR-2).
          */
         post: operations["match_resumes__resume_id__match_post"];
         delete?: never;
@@ -549,10 +385,6 @@ export interface components {
         /**
          * DocumentCreate
          * @description Payload for ingesting one job posting.
-         *
-         *     metadata is left as an open object on purpose: it is what hybrid
-         *     retrieval filters on (role, seniority), and the knowledge base has to be
-         *     able to carry keys the API does not know about yet.
          */
         DocumentCreate: {
             /** Content */
@@ -569,16 +401,6 @@ export interface components {
         /**
          * DocumentFromUrl
          * @description Payload for ingesting the posting published at an address (FR-1).
-         *
-         *     No content and no title: both are read off the page. Which addresses are
-         *     read at all is a question of policy, answered by the allowlist in
-         *     Settings rather than by this schema -- HttpUrl only proves the string is
-         *     a URL, and http://169.254.169.254/ is a perfectly good one (NFR-1).
-         *
-         *     metadata is here for the same reason the other two routes have it: to
-         *     label a posting with the role or seniority a listing is filtered by. What
-         *     the caller supplies wins over what was scraped, because a caller who
-         *     bothers to send a key means to correct what the page said.
          */
         DocumentFromUrl: {
             /** Metadata */
@@ -594,9 +416,6 @@ export interface components {
         /**
          * DocumentRead
          * @description Public view of a stored posting.
-         *
-         *     The content itself is left out: the caller has just sent it, and a
-         *     listing of the knowledge base should not ship every posting in full.
          */
         DocumentRead: {
             /** Chunk Count */
@@ -628,9 +447,6 @@ export interface components {
         /**
          * LoginRequest
          * @description Credentials presented at login.
-         *
-         *     The password is only bounded, never checked for length: rejecting a
-         *     short password here would answer a question about the stored account.
          */
         LoginRequest: {
             /**
@@ -655,20 +471,6 @@ export interface components {
         /**
          * MatchRead
          * @description The result of one match.
-         *
-         *     retrieved_chunk_ids is part of the response, not an internal detail: the
-         *     caller is told which fragments the suggestions were built from, so an
-         *     answer can be checked against what the model actually saw.
-         *
-         *     suggestions is text for the resume; notes is what the model has to say
-         *     about the resume. Two fields, because a client that renders one list
-         *     would otherwise render a remark about a missing skill as a line of the
-         *     document itself.
-         *
-         *     matched_evidence carries, for a requirement an LLM judged met, the words
-         *     of the resume it quoted. Empty for a match the deterministic rule made --
-         *     the term is then literally in the text -- and empty everywhere when no
-         *     judge is configured. It is what lets a candidate disagree with a match.
          */
         MatchRead: {
             /**
@@ -710,10 +512,6 @@ export interface components {
         /**
          * MatchSummary
          * @description One row of the history: enough to choose which match to open.
-         *
-         *     The lists are left out and counted instead. A history is read to find
-         *     something, and a page of it should not carry every suggestion ever
-         *     written for every posting.
          */
         MatchSummary: {
             /**
@@ -752,13 +550,6 @@ export interface components {
         /**
          * ResumeRead
          * @description Public view of a resume.
-         *
-         *     user_id is left out on purpose: a caller only ever sees their own
-         *     resumes, so the column carries no information for them.
-         *
-         *     original_filename is shown back because it is how the owner recognises
-         *     which upload this row is. file_hash stays out: it identifies the file
-         *     the text came from and is of no use to the caller.
          */
         ResumeRead: {
             /** Content */
@@ -781,10 +572,6 @@ export interface components {
         /**
          * ResumeUpdate
          * @description Payload for a partial update: what the caller omits stays as it is.
-         *
-         *     Omitting target_role and sending it as null are different requests,
-         *     which is why the handler applies model_dump(exclude_unset=True) rather
-         *     than the whole model.
          */
         ResumeUpdate: {
             /** Content */
@@ -795,9 +582,6 @@ export interface components {
         /**
          * TokenResponse
          * @description A signed access token and the scheme it is used with.
-         *
-         *     token_type carries the scheme name required by RFC 6750, not a secret;
-         *     the noqa silences the linter rule that flags the literal.
          */
         TokenResponse: {
             /** Access Token */
@@ -811,10 +595,6 @@ export interface components {
         /**
          * UserCreate
          * @description Registration payload.
-         *
-         *     The upper bound on the password is not about strength: argon2 has no
-         *     length limit of its own, and hashing time grows with the input, so an
-         *     unbounded field is a cheap way to tie up the server.
          */
         UserCreate: {
             /**
@@ -828,10 +608,6 @@ export interface components {
         /**
          * UserRead
          * @description Public view of a user, deliberately without password_hash.
-         *
-         *     This schema is the last thing between the ORM object and the response
-         *     body, which makes it the barrier that keeps the hash from leaving the
-         *     application.
          */
         UserRead: {
             /**
