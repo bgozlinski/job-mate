@@ -1,18 +1,26 @@
 import { useState } from 'react'
 import type { ReactElement, SyntheticEvent } from 'react'
 
-import type { Resume } from '../api/resumes'
+import { saveFile } from '../api/download'
+import type { ExportFormat, Resume } from '../api/resumes'
 import {
   MAX_RESUME_LENGTH,
   MAX_TARGET_ROLE_LENGTH,
   useCreateResume,
   useDeleteResume,
+  useExportResume,
   useResumes,
   useUploadResume,
 } from '../api/resumes'
 import { Alert, Button, Card, Field, Muted, PageTitle } from '../ui'
 
 const UPLOAD_TYPES = '.pdf,.docx,.txt,.md'
+
+const EXPORTS: { format: ExportFormat; label: string }[] = [
+  { format: 'pdf', label: 'PDF' },
+  { format: 'docx', label: 'Word' },
+  { format: 'md', label: 'Markdown' },
+]
 
 const SUMMARY =
   'cursor-pointer text-sm font-medium text-ink-soft hover:text-accent'
@@ -185,6 +193,52 @@ function AddByText(): ReactElement {
   )
 }
 
+/**
+ * Take a resume away as a file (FR-5). The version downloaded is the one
+ * stored: an improved resume is a version its owner wrote, and exporting only
+ * converts it.
+ */
+function Download({ resume, name }: { resume: Resume; name: string }): ReactElement {
+  const download = useExportResume()
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div
+        role="group"
+        aria-label={`Download ${name}`}
+        className="flex flex-wrap items-center gap-2"
+      >
+        <span className="text-sm text-ink-faint">Download:</span>
+        {EXPORTS.map(({ format, label }) => (
+          <Button
+            key={format}
+            type="button"
+            variant="secondary"
+            disabled={download.isPending}
+            // The format alone would be three identical "PDF" buttons per
+            // list to a screen reader, one for every resume on the page.
+            aria-label={`Download ${name} as ${label}`}
+            onClick={() => {
+              download.mutate(
+                { id: resume.id, format },
+                {
+                  onSuccess: ({ blob, filename }) => {
+                    saveFile(blob, filename)
+                  },
+                },
+              )
+            }}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+
+      {download.error ? <Alert>{download.error.message}</Alert> : null}
+    </div>
+  )
+}
+
 function Stored({ resume }: { resume: Resume }): ReactElement {
   const [confirming, setConfirming] = useState(false)
   const remove = useDeleteResume()
@@ -212,6 +266,8 @@ function Stored({ resume }: { resume: Resume }): ReactElement {
             {resume.content}
           </pre>
         </details>
+
+        <Download resume={resume} name={name} />
 
         {/* Two presses rather than a native confirm(): deleting is the one
             irreversible thing on this page, and window.confirm is a dialog

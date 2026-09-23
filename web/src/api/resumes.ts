@@ -114,6 +114,47 @@ export function useUploadResume(): UseMutationResult<Resume, Error, Uploaded> {
   })
 }
 
+export type ExportFormat = components['schemas']['ExportFormat']
+
+export interface ExportRequest {
+  id: string
+  format: ExportFormat
+}
+
+export interface Exported {
+  blob: Blob
+  filename: string
+}
+
+/**
+ * Fetch one of the caller's resumes as a file (FR-5).
+ *
+ * A mutation rather than a query: it runs when somebody asks for a file, and
+ * there is nothing about the answer worth caching. The name is built here to
+ * match what the API writes into Content-Disposition, rather than parsed back
+ * out of that header.
+ */
+export function useExportResume(): UseMutationResult<Exported, Error, ExportRequest> {
+  return useMutation({
+    mutationFn: async ({ id, format }: ExportRequest) => {
+      const { data, error, response } = await api.GET('/resumes/{resume_id}/export', {
+        params: { path: { resume_id: id }, query: { format } },
+        // Without it the file would be parsed as JSON. An error body is still
+        // parsed as JSON whatever this says, so detailOf below can read it.
+        parseAs: 'blob',
+      })
+
+      if (!data) {
+        throw new Error(
+          detailOf(error) ?? `Could not export the resume (${String(response.status)})`,
+        )
+      }
+
+      return { blob: data, filename: `resume-${id}.${format}` }
+    },
+  })
+}
+
 /** Delete one of the caller's resumes. */
 export function useDeleteResume(): UseMutationResult<void, Error, string> {
   return useResumeMutation(async (id: string) => {
