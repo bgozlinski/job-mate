@@ -5,9 +5,10 @@ import docx
 import pytest
 from fastapi import status
 from httpx import AsyncClient
+from pypdf import PdfReader
 
 from app.models.resume import Resume
-from app.services.export import to_docx, to_markdown
+from app.services.export import to_docx, to_markdown, to_pdf
 from tests.test_resumes import account, create_resume
 
 DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -42,8 +43,46 @@ def test_docx_survives_control_characters_extracted_from_a_pdf() -> None:
     assert paragraphs(data) == ["Jan Kowalski", "Python"]
 
 
+def pdf_text(data: bytes) -> str:
+    return "\n".join(page.extract_text() for page in PdfReader(io.BytesIO(data)).pages)
+
+
+def test_pdf_carries_the_role_and_the_polish_text() -> None:
+    data = to_pdf(resume())
+    text = pdf_text(data)
+
+    assert data.startswith(b"%PDF-")
+    assert "Backend Engineer" in text
+    assert "Zażółć gęślą jaźń" in text
+    assert "Python, PostgreSQL" in text
+
+
+def test_pdf_leaves_out_what_the_font_cannot_draw() -> None:
+    text = pdf_text(to_pdf(resume(content="Jan\x00 Kowalski 🚀\x0b", target_role=None)))
+
+    assert "Jan Kowalski" in text
+    assert "🚀" not in text
+
+
+def test_a_long_resume_runs_onto_more_pages() -> None:
+    content = "\n".join(f"Line {index} of a long career" for index in range(400))
+
+    assert len(PdfReader(io.BytesIO(to_pdf(resume(content=content)))).pages) > 1
+
+
+def test_a_line_without_spaces_is_wrapped_rather_than_refused() -> None:
+    data = to_pdf(resume(content="https://example.com/" + "a" * 500))
+
+    assert "https://example.com/" in pdf_text(data)
+
+
 @pytest.mark.parametrize(
-    ("fmt", "media"), [("md", "text/markdown; charset=utf-8"), ("docx", DOCX)]
+    ("fmt", "media"),
+    [
+        ("md", "text/markdown; charset=utf-8"),
+        ("docx", DOCX),
+        ("pdf", "application/pdf"),
+    ],
 )
 async def test_a_resume_is_downloaded_as_a_file(
     client: AsyncClient, fmt: str, media: str
@@ -91,7 +130,7 @@ async def test_a_hostile_role_stays_out_of_the_header(client: AsyncClient) -> No
     assert "set-cookie" not in response.headers
 
 
-@pytest.mark.parametrize("fmt", ["pdf", "exe", ""])
+@pytest.mark.parametrize("fmt", ["exe", "html", ""])
 async def test_an_unsupported_format_is_rejected(client: AsyncClient, fmt: str) -> None:
     headers = await account(client, "owner@example.com")
     created = await create_resume(client, headers)

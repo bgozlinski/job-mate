@@ -460,7 +460,7 @@ export interface components {
             title: string | null;
         };
         /** @enum {string} */
-        ExportFormat: "md" | "docx";
+        ExportFormat: "md" | "docx" | "pdf";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1254,6 +1254,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/pdf": string;
                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
                     "text/markdown; charset=utf-8": string;
                 };

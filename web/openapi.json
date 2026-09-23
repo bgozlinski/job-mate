@@ -202,7 +202,8 @@
       "ExportFormat": {
         "enum": [
           "md",
-          "docx"
+          "docx",
+          "pdf"
         ],
         "type": "string"
       },
@@ -1508,6 +1509,12 @@
         "responses": {
           "200": {
             "content": {
+              "application/pdf": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
               "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
                 "schema": {
                   "format": "binary",

@@ -6,6 +6,8 @@ dependencies = [
     "alembic>=1.19.1",
     "anthropic>=1.0.0",
     "fastapi>=0.141.1",
+    "fonttools>=4.66.0",
+    "fpdf2>=2.8.8",
     "httpx>=0.28.1",
     "langchain-text-splitters>=1.1.2",
     "langfuse>=4.15.1",
@@ -78,6 +80,12 @@ plugins = ["pydantic.mypy"]
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false
+
+# fontTools ships no type information; only the PDF export reads it, for the
+# font's character map.
+[[tool.mypy.overrides]]
+module = "fontTools.*"
+ignore_missing_imports = true
 
 [tool.pydantic-mypy]
 init_forbid_extra = true

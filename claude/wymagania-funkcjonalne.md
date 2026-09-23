@@ -100,10 +100,16 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 > bez struktury, więc nie ma gdzie ich wstawić) i przepisywanie CV przez LLM (sprzeczne z FR-3, kosztowne,
 > nietestowalne bez ewaluacji).
 >
-> `GET /resumes/{id}/export?format=md|docx` — Markdown to rola jako nagłówek i tekst CV dosłownie, DOCX to
-> akapit na linię. Nazwa pliku to `resume-<id>.<format>`, nigdy tekst od użytkownika, bo ten trafiłby do
-> nagłówka `Content-Disposition`. **PDF jeszcze nie istnieje** — wymaga nowej biblioteki i jest osobnym
-> krokiem.
+> `GET /resumes/{id}/export?format=md|docx|pdf` — Markdown to rola jako nagłówek i tekst CV dosłownie, DOCX
+> to akapit na linię. Nazwa pliku to `resume-<id>.<format>`, nigdy tekst od użytkownika, bo ten trafiłby do
+> nagłówka `Content-Disposition`.
+>
+> PDF powstaje w **fpdf2**, nie w WeasyPrint: czysty Python działa bez zmian w obrazie i na Windowsie, na
+> którym chodzą testy, a WeasyPrint wymagałby Pango/GTK z systemu. Czcionki wbudowane w PDF znają tylko
+> Latin-1, więc w repozytorium leży **PT Sans** (`app/assets/fonts/`, licencja OFL obok) — niezmodyfikowana,
+> bo przycięcie większej czcionki pod limit 500 KB hooka byłoby wersją zmodyfikowaną, a zarezerwowana nazwa
+> zabrania rozpowszechniania jej pod tą nazwą. Znaki, których czcionka nie ma (głównie emoji), są pomijane
+> jawnie, zamiast zostawiać pustą lukę z ostrzeżeniem w logu.
 
 ### FR-6. Administracja bazą wiedzy
 - Administrator może przeglądać i usuwać źródła.
