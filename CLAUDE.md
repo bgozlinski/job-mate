@@ -8,9 +8,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Rules:
 - **Never write, edit, or create project files.** No code generation, no "here's the full file",
-  no applying fixes. Exception: I explicitly ask with the word "napisz" / "write it".
-- **Dictate one task at a time.** Give me a single, concrete task (e.g. "create the SQLAlchemy
-  model for `documents` with a unique constraint on `content_hash`"), then stop and wait.
+  no applying fixes. Exception: I explicitly ask with "napisz" / "write it" / "wykonaj za mnie" /
+  "wprowadź zmiany" — then implement that one thing, not the rest of the stage.
+- **Dictate one task at a time.** Give me a single, concrete task (e.g. "add an admin-only dependency
+  and `DELETE /documents/{id}`"), then stop and wait.
 - **After each task, review my work.** I'll paste code or command output. Verify it against the
   spec (`claude/wymagania-funkcjonalne.md`), point out bugs, security issues (NFR-1), and
   deviations from the data model — but describe the fix, don't write it.
@@ -18,74 +19,105 @@ Rules:
   what the acceptance criteria for the task are.
 - **Hints escalate gradually.** If I'm stuck: first a leading question, then a pointer to docs
   or the relevant spec section, then pseudocode. Full code only on explicit request.
-- **Follow the roadmap order** (stages 1–6 in the spec). Don't skip ahead; when a stage is done,
+- **Follow the roadmap order** (spec §7). Don't skip ahead; when a stage is done,
   summarize what was built and state the next task.
-- **Running commands:** allowed for verification only (tests, `docker compose ps`, healthchecks,
-  reading files). Never run commands that modify project files.
+- **Running commands:** allowed for verification only (tests, linters, `docker compose ps`,
+  healthchecks, reading files). Never run commands that modify project files.
 - Explanations in Polish; code, commit messages, and identifiers in English.
 
 ## Project
 
-JobMate — an AI career assistant (resume/job-offer matching + mock interviews) built as a RAG pipeline.
-The authoritative spec is `claude/wymagania-funkcjonalne.md` (Polish): functional requirements FR-1…FR-6,
-non-functional requirements, the PostgreSQL data model, and a 6-stage roadmap. **Read it before designing
-any feature** — it defines the intended stack and entity names, and most of the codebase does not exist yet.
+JobMate — an AI career assistant: store job postings, match a resume against one, get grounded suggestions.
+The authoritative spec is `claude/wymagania-funkcjonalne.md` (Polish): FR-1…FR-6, NFR-1…NFR-5, the data model,
+the roadmap, and dated **"Zmiana"** entries that record every change of direction with its reason. **Read it
+before designing any feature**, and read §8 ("Pułapki, których nie widać z kodu") before touching scraping,
+migrations, ingestion or tokens — that section is the only record of traps that were stripped from code comments.
 
-Current state: stage 1 of the roadmap, scaffold only. `src/main.py` is a bare FastAPI app with a `/` route.
-`app/` and `services/` are empty placeholder directories. There is no git history yet (no commits on `master`),
-no `.gitignore`, no tests, and no linter configured.
+### Current state (2026-09-23)
+
+- **Done:** stages 1–3. Auth (JWT via Bearer header or httpOnly cookies), resumes (text or file upload),
+  job-posting ingestion (pasted text, PDF/DOCX/TXT upload, or URL from an allowlisted host), chunking +
+  embeddings with a Redis cache, requirement-by-requirement matching with stored match history, a React
+  client in `web/`, Langfuse tracing and prompt store, rate limiting, offline evals in `evals/`.
+- **Deferred:** stage 4 (mock interview, FR-4). Open decision recorded at FR-4 — where interview questions
+  come from now that the knowledge base holds only postings. Must be settled before any code.
+- **Removed:** FR-7 automated harvesting (Scrapy) — built and reverted on 2026-09-10; the spec says why.
+  Don't reintroduce crawling: NFR-5 allows one fetch per explicit user action, nothing more.
+- **Next:** stage 5 — FR-6 admin (`users.is_admin` exists but nothing checks it; no `DELETE /documents/{id}`;
+  no re-indexing; no admin page in `web/`) and FR-5 export (Markdown/PDF/DOCX, nothing exists yet).
+
+## Layout
+
+- `app/` — FastAPI package (`app.main:app`). `api/` routers + `deps.py` (DI, auth, rate limits, ownership
+  checks like `OwnedResume`), `auth/`, `core/` (config, db, redis, Langfuse, prompts), `models/`, `schemas/`,
+  `services/` (chunking, embeddings, extraction, ingestion, jobposting, scraping, requirements, judging,
+  matching, rate_limit).
+- `migrations/` — Alembic; the only source of truth for the schema (no `db/schema.sql`).
+- `web/` — React + TypeScript (Vite) client. Types in `web/src/api/schema.d.ts` are generated from
+  `web/openapi.json`, which is generated from the app.
+- `ui/` — Streamlit dev client for poking the API. Not part of the product; kept on purpose.
+- `scripts/` — `export_openapi`, `seed_prompts` (Langfuse), `eval_*` runners for `evals/`.
+- `docs/superpowers/specs/` — per-stage design docs.
 
 ## Commands
 
-Dependencies are managed with **uv** (`pyproject.toml` + `uv.lock`); Python >= 3.14 is required.
+Dependencies are managed with **uv**; Python >= 3.14. Locally the API runs in Docker only (Linux); tests run
+on the host against the compose Postgres/Redis.
 
 ```bash
-uv sync                                    # install/refresh the venv from the lockfile
-uv add <pkg>                               # add a dependency (updates pyproject.toml + uv.lock)
-uv run uvicorn src.main:app --reload       # run the API locally on :8000
+docker compose up --build                  # db (pgvector), redis, api :8000, web :5173, Langfuse :3000
+docker compose --profile prod up --build web-prod   # nginx + built client on :8080
+docker compose logs -f api
 
-docker compose up --build                  # full stack: pgvector Postgres (:5432) + api (:8000)
-docker compose logs -f api                 # follow API logs
+uv sync                                    # host venv (tests, linters, scripts)
+uv run alembic upgrade head                # apply migrations
+uv run alembic check                       # models match migrations (CI runs this)
+uv run pytest -q                           # all tests; single: uv run pytest tests/test_matching.py -k name
+uv run --group ui streamlit run ui/main.py # dev client
+
+cd web && npm run gen                      # regenerate openapi.json + schema.d.ts after any API schema change
+cd web && npm run lint && npm run typecheck && npm test
 ```
 
-`.env` (not committed, no example file exists) supplies `DB_NAME`, `DB_USER`, `DB_PASSWORD`; it is read by both
-`db` and `api` services via `env_file`. Note that the `db` service also hardcodes `POSTGRES_*` values in
-`environment:`, which override nothing but can drift from `.env` — the healthcheck uses `${DB_USER}`/`${DB_NAME}`
-from `.env`, so those must match the hardcoded credentials or the container never reports healthy.
+`.env` (from `.env.example`) configures the API; `Settings` uses `extra="forbid"`, so an unknown key in `.env`
+aborts startup. Langfuse's own config lives in `.env.langfuse` for exactly that reason — never merge them.
 
-### Known scaffold inconsistencies
+### Verification — what "green" means here
 
-These are unresolved and will bite anyone running the container — point them out and guide me through
-fixing them (mentor mode: describe the fix, don't apply it):
+Run all of these over the tree before claiming anything passes:
 
-- `Dockerfile` sets `WORKDIR /app` and runs `app.main:app`, but the application module is `src/main.py`.
-- `docker-compose.yml` mounts `./app:/src/`, i.e. the empty `app/` dir over a path that isn't the workdir.
-- `uv sync --no-install-project` runs before `COPY . .`, so the project itself is never installed into the venv.
+```bash
+uv run pytest -q
+uv run ruff check . && uv run ruff format --check .
+uv run mypy                                # bare: pyproject covers app, migrations, scripts, tests, ui
+uv run bandit -c pyproject.toml -r app migrations scripts
+uv run pre-commit run --all-files          # last, not only: skips untracked files
+```
 
-Decide on one package root (`src/` vs `app/`) and make the Dockerfile, compose mount, and uvicorn target agree.
+CI (`.github/workflows/ci.yml`) has two jobs. Python: pre-commit, OpenAPI drift check, migrations,
+`alembic check`, pytest. Node: `schema.d.ts` drift check, lint, typecheck, vitest, build. **Any change to a
+Pydantic schema or route must regenerate `web/openapi.json` and `web/src/api/schema.d.ts`**, or both jobs fail.
 
-## Intended architecture (per the spec)
+## Architecture notes
 
-FastAPI is the single entrypoint; everything below it is a service layer:
-
-- **Ingestion** (LangChain): job posts / career articles → chunking (500–1000 tokens, overlap) → embedding →
-  `chunks.embedding vector(1536)` in pgvector. Deduplication happens at the document level via `documents.content_hash`.
-  Redis is a **cache in front of the embeddings API only** (key = hash of chunk content); Postgres stays the source of truth.
-- **Retrieval**: hybrid search — filter on `documents.metadata` JSONB (role, seniority) plus vector similarity
-  (HNSW index, cosine distance, target < 500 ms).
-- **Generation**: prompts are always query + retrieved chunks. Suggestions must be grounded in retrieved chunks
-  rather than free LLM generation — this is a core requirement (FR-3), not a stylistic preference.
-- **Mock interview** (LangGraph, FR-4): stateful graph `retrieve_questions → ask_question → collect_answer →
-  evaluate_answer → (loop | summarize)`, with target role / asked questions / answers / partial scores in graph state.
-- **Observability**: every LLM and retrieval call is traced in Langfuse (token cost, latency, chunks used);
-  LLM endpoints are rate-limited.
-
-Data model: `users`, `resumes`, `documents`, `chunks`, `sessions`, `messages`. `messages.retrieved_chunk_ids`
-exists so any answer can be audited against what the model actually saw — preserve it when touching the chat path.
-The spec references `db/schema.sql` for the full DDL; that file does not exist yet.
+- **Knowledge base = job postings only** (since 2026-09-02). Ingestion dedups on the unique index on
+  `documents.content_hash` (catching `IntegrityError`, not select-then-insert) and commits on its own.
+  Requirements are extracted by an LLM at write time into `documents.requirements`.
+- **Matching (FR-3) does not use vector retrieval.** A deterministic rule matches skills first; an LLM judge
+  may only *add* matches, requirement by requirement, quoting the resume. Score and gaps are computed in Python
+  from the verdicts. Suggestions must be grounded in the posting + resume — never invent employers, dates,
+  technologies or achievements. Every match is stored in `matches` (a snapshot; FKs go NULL on delete).
+- Embeddings + HNSW index are still written and maintained; the reader returns with stage 4.
+- **Prompts** are served from Langfuse with a code fallback (`app/core/prompts.py`); every LLM call is traced.
+- **URL ingestion** reads only the `application/ld+json` `JobPosting` block from hosts in
+  `SCRAPER_ALLOWED_HOSTS` (exact match, redirects validated per hop, body capped after decompression).
+- **Browser and API share one origin** (Vite/nginx proxy `/api`). Cookie auth relies on `SameSite=Lax` —
+  splitting origins needs a real CSRF answer, not looser cookies. `COOKIE_PATH_PREFIX` must match the proxy.
 
 ## Constraints
 
-- **No scraping of Indeed/LinkedIn** (NFR-5, terms-of-service violation). Job data comes from manual input or
-  public datasets only.
-- Auth is JWT; users may only ever access their own resumes, sessions, and messages (NFR-1).
+- **No scraping of Indeed/LinkedIn, no crawling anywhere** (NFR-5). Adding a host to the allowlist is a
+  documented decision (robots.txt + terms checked), not a code change.
+- Auth is JWT; users may only ever access their own resumes, matches, sessions, and messages (NFR-1).
+- `messages.retrieved_chunk_ids` / `matches.retrieved_chunk_ids` exist for auditing what the model saw —
+  preserve them when touching those paths.
