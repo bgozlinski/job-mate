@@ -132,6 +132,38 @@ async def test_a_source_without_content_is_rejected(session_factory, model, cach
     assert model.calls == []
 
 
+async def test_every_chunk_records_the_model_that_embedded_it(
+    session_factory, model, cache
+):
+    async with session_factory() as session:
+        result = await ingest_document(session, job_post(), model, cache)
+
+    assert {chunk.embedding_model for chunk in result.document.chunks} == {model.name}
+
+
+async def test_a_duplicate_keeps_the_model_it_was_first_embedded_with(
+    session_factory, model, cache
+):
+    """Pasting a posting again is not re-indexing it."""
+    other = FakeEmbeddingModel(name="another-embed", dimensions=EMBEDDING_DIMENSIONS)
+
+    async with session_factory() as session:
+        await ingest_document(session, job_post(), model, cache)
+        repeated = await ingest_document(session, job_post(), other, cache)
+
+    async with session_factory() as session:
+        stored = set(
+            await session.scalars(
+                select(Chunk.embedding_model).where(
+                    Chunk.document_id == repeated.document.id
+                )
+            )
+        )
+
+    assert not repeated.created
+    assert stored == {model.name}
+
+
 async def test_a_repeated_source_is_not_embedded_again(session_factory, model, cache):
     async with session_factory() as session:
         await ingest_document(session, job_post(), model, cache)

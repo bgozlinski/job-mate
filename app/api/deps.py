@@ -75,6 +75,20 @@ async def get_current_user(
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
+async def get_current_admin(user: CurrentUser) -> User:
+    """Let an administrator through, or raise 403 (FR-6)."""
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator access required",
+        )
+
+    return user
+
+
+CurrentAdmin = Annotated[User, Depends(get_current_admin)]
+
+
 async def get_cache(request: Request) -> Redis:
     """Hand out the shared Redis client."""
     cache: Redis = request.app.state.redis
