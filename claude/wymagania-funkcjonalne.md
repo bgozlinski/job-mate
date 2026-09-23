@@ -97,6 +97,18 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 - Administrator może przeglądać i usuwać źródła.
 - Obsługiwana jest re-indeksacja po zmianie modelu embeddingów.
 
+> **Zmiana 2026-09-23.** Usuwanie ogłoszeń: `DELETE /documents/{id}`, tylko dla admina. Uprawnienia nadaje
+> skrypt `scripts.grant_admin`, nie endpoint — pierwszego admina i tak nie dałoby się utworzyć przez API,
+> a endpoint byłby nową drogą eskalacji uprawnień.
+>
+> Re-indeksacja to skrypt `scripts.reindex` (z `--dry-run`, który liczy chunki i szacuje tokeny bez
+> wydawania pieniędzy), a nie endpoint: przeliczenie całej bazy przekracza czas żądania HTTP, a workera
+> do zadań w tle nie ma od usunięcia FR-7. Nieaktualny jest chunk, którego `embedding_model` różni się od
+> obecnego **albo jest `NULL`** (`IS DISTINCT FROM`, nie `!=`). Wektory są podmieniane w miejscu — ID chunków
+> się nie zmieniają, więc `retrieved_chunk_ids` dalej wskazują na istniejące wiersze — z commitem po każdym
+> dokumencie, więc przerwany przebieg można po prostu uruchomić ponownie. Model o innym wymiarze niż
+> `vector(1536)` jest odrzucany przed pierwszym wywołaniem API: wymaga migracji schematu, nie re-indeksacji.
+
 > **Zmiana 2026-09-10 (wieczorem). FR-7 usunięte.** Powstał kompletny automat pozyskiwania ofert: projekt
 > Scrapy z pająkiem do feedów, tabela `sources`, staging, drenaż do ingestii z FR-1, worker w osobnym
 > kontenerze i 80 testów. Wszystko przechodziło; usunięte mimo to.
@@ -210,7 +222,7 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 - `users` — konta użytkowników (e-mail, hash hasła)
 - `resumes` — wersje CV per użytkownik (surowy tekst, docelowa rola)
 - `documents` — ogłoszenia o pracę (od 2026-09-02 baza wiedzy nie zawiera niczego innego, więc nie ma kolumny rozróżniającej rodzaj źródła); deduplikacja po `content_hash`; `metadata JSONB` (rola, seniority) umożliwia filtrowane wyszukiwanie hybrydowe; `requirements JSONB` — wymagania odczytane przez LLM przy zapisie
-- `chunks` — fragmenty dokumentów z embeddingami `vector(1536)`; indeks HNSW z metryką kosinusową (Redis pełni rolę cache'a przed API embeddingów; Postgres pozostaje źródłem prawdy)
+- `chunks` — fragmenty dokumentów z embeddingami `vector(1536)`; indeks HNSW z metryką kosinusową (Redis pełni rolę cache'a przed API embeddingów; Postgres pozostaje źródłem prawdy); `embedding_model` — model, który wyliczył wektor (migracja `49572ac20106`), `NULL` dla wierszy starszych niż ta kolumna, czyli „nie wiadomo"
 - `sessions` — sesje przeglądu CV lub mock interview per użytkownik
 - `messages` — kolejne wypowiedzi w sesji; przechowuje `retrieved_chunk_ids` do audytu tego, co model faktycznie widział, oraz koszt tokenów
 - `matches` — historia dopasowań per użytkownik (migracja `25dc29c14b4b`): score, listy trafień i luk, sugestie, notatki, cytaty z CV oraz `retrieved_chunk_ids`. Migawka, nie widok: kopiuje też tytuł ogłoszenia, a `resume_id` i `document_id` przechodzą w NULL, gdy to, na co wskazują, zostanie usunięte
