@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
 
+import { sessionKey } from '../auth/session'
 import { api } from './client'
 import { detailOf } from './errors'
 import type { components } from './schema'
@@ -136,5 +137,41 @@ export function useIngestFile(): UseMutationResult<Ingested, Error, File> {
     })
 
     return ingested(data, error, response.status)
+  })
+}
+
+/**
+ * Remove a posting and its chunks from the knowledge base (FR-6).
+ *
+ * The API is what enforces administrator rights; the page only hides the
+ * action from everyone else. A 404 counts as done: another window got there
+ * first, and the posting is gone either way. A 403 means the rights were
+ * revoked after this page read the session, which is cached for good -- so
+ * the session is read again and the action disappears with it.
+ */
+export function useDeleteDocument(): UseMutationResult<undefined, Error, string> {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error, response } = await api.DELETE('/documents/{document_id}', {
+        params: { path: { document_id: id } },
+      })
+
+      if (response.ok || response.status === 404) {
+        return undefined
+      }
+
+      if (response.status === 403) {
+        await queryClient.invalidateQueries({ queryKey: sessionKey })
+      }
+
+      throw new Error(
+        detailOf(error) ?? `Could not delete the posting (${String(response.status)})`,
+      )
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: documentsKey })
+    },
   })
 }

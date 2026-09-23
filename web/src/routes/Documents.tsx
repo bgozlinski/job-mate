@@ -5,11 +5,13 @@ import type { Document, Ingested } from '../api/documents'
 import {
   MAX_PAGE_SIZE,
   PAGE_SIZE,
+  useDeleteDocument,
   useDocuments,
   useIngestFile,
   useIngestText,
   useIngestUrl,
 } from '../api/documents'
+import { useSession } from '../auth/session'
 import { Alert, Button, Card, Field, Muted, PageTitle, Status } from '../ui'
 
 const MAX_CONTENT_LENGTH = 200_000
@@ -206,7 +208,85 @@ function AddByText(): ReactElement {
   )
 }
 
-function Posting({ document }: { document: Document }): ReactElement {
+/**
+ * Deleting a posting, for administrators (FR-6). Two steps in place rather
+ * than window.confirm: the second step says what is lost, and it can be
+ * tested and styled like everything else on the page.
+ */
+function DeletePosting({ document }: { document: Document }): ReactElement {
+  const [confirming, setConfirming] = useState(false)
+  const remove = useDeleteDocument()
+  const name = document.title ?? 'Untitled'
+
+  if (!confirming) {
+    return (
+      <div className="flex flex-col gap-2 border-t border-line pt-2">
+        <div className="flex">
+          <Button
+            type="button"
+            variant="quiet"
+            // Named after the posting: a list of identical "Delete" buttons
+            // is one button to a screen reader, repeated.
+            aria-label={`Delete ${name}`}
+            onClick={() => {
+              remove.reset()
+              setConfirming(true)
+            }}
+          >
+            Delete
+          </Button>
+        </div>
+        {remove.error ? <Alert>{remove.error.message}</Alert> : null}
+      </div>
+    )
+  }
+
+  return (
+    <div
+      role="group"
+      aria-label={`Confirm deleting ${name}`}
+      className="flex flex-col gap-2 border-t border-line pt-2"
+    >
+      <p className="text-sm">
+        This removes the posting and its chunks for good. Matches already in
+        anyone’s history stay, without a link to it.
+      </p>
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          disabled={remove.isPending}
+          onClick={() => {
+            remove.mutate(document.id, {
+              onSettled: () => {
+                setConfirming(false)
+              },
+            })
+          }}
+        >
+          {remove.isPending ? 'Deleting…' : 'Delete for good'}
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={remove.isPending}
+          onClick={() => {
+            setConfirming(false)
+          }}
+        >
+          Cancel
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function Posting({
+  document,
+  admin,
+}: {
+  document: Document
+  admin: boolean
+}): ReactElement {
   const stored = new Date(document.created_at)
 
   return (
@@ -237,6 +317,8 @@ function Posting({ document }: { document: Document }): ReactElement {
         {document.chunk_count === 0 ? (
           <Alert>No chunks: nothing about this posting can be retrieved.</Alert>
         ) : null}
+
+        {admin ? <DeletePosting document={document} /> : null}
       </Card>
     </li>
   )
@@ -246,6 +328,8 @@ function Posting({ document }: { document: Document }): ReactElement {
 export function Documents(): ReactElement {
   const [shown, setShown] = useState(PAGE_SIZE)
   const documents = useDocuments(shown)
+  // A convenience, not a guard: the API refuses a non-administrator anyway.
+  const admin = useSession().data?.is_admin === true
 
   return (
     <>
@@ -288,7 +372,7 @@ export function Documents(): ReactElement {
 
         <ul className="grid gap-3 sm:grid-cols-2">
           {documents.data?.map((document) => (
-            <Posting key={document.id} document={document} />
+            <Posting key={document.id} document={document} admin={admin} />
           ))}
         </ul>
 
