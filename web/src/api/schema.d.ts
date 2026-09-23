@@ -340,6 +340,26 @@ export interface paths {
         patch: operations["update_resume_resumes__resume_id__patch"];
         trace?: never;
     };
+    "/resumes/{resume_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Resume
+         * @description Download one of the caller's resumes as Markdown or Word (FR-5).
+         */
+        get: operations["export_resume_resumes__resume_id__export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/resumes/{resume_id}/match": {
         parameters: {
             query?: never;
@@ -439,6 +459,8 @@ export interface components {
             /** Title */
             title: string | null;
         };
+        /** @enum {string} */
+        ExportFormat: "md" | "docx";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1200,6 +1222,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResumeRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_resume_resumes__resume_id__export_get: {
+        parameters: {
+            query: {
+                format: components["schemas"]["ExportFormat"];
+            };
+            header?: never;
+            path: {
+                resume_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resume as a file to download. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                    "text/markdown; charset=utf-8": string;
                 };
             };
             /** @description Validation Error */

@@ -199,6 +199,13 @@
         "title": "DocumentRead",
         "type": "object"
       },
+      "ExportFormat": {
+        "enum": [
+          "md",
+          "docx"
+        ],
+        "type": "string"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1469,6 +1476,70 @@
           }
         ],
         "summary": "Update Resume",
+        "tags": [
+          "resumes"
+        ]
+      }
+    },
+    "/resumes/{resume_id}/export": {
+      "get": {
+        "description": "Download one of the caller's resumes as Markdown or Word (FR-5).",
+        "operationId": "export_resume_resumes__resume_id__export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "resume_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Resume Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ExportFormat"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "text/markdown; charset=utf-8": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The resume as a file to download."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Export Resume",
         "tags": [
           "resumes"
         ]

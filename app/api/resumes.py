@@ -4,7 +4,17 @@ import hashlib
 from typing import Annotated
 
 from anthropic import APIError as AnthropicError
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +34,7 @@ from app.schemas.resume import (
     ResumeRead,
     ResumeUpdate,
 )
+from app.services.export import MEDIA_TYPES, RENDERERS, ExportFormat, filename
 from app.services.extraction import media_type
 from app.services.requirements import SkillExtractor
 
@@ -123,6 +134,33 @@ async def list_resumes(user: CurrentUser, session: Session) -> list[ResumeRead]:
 async def read_resume(resume: OwnedResume) -> ResumeRead:
     """Return one of the caller's resumes."""
     return ResumeRead.model_validate(resume)
+
+
+@router.get(
+    "/{resume_id}/export",
+    response_class=Response,
+    responses={
+        status.HTTP_200_OK: {
+            "content": {
+                media: {"schema": {"type": "string", "format": "binary"}}
+                for media in MEDIA_TYPES.values()
+            },
+            "description": "The resume as a file to download.",
+        }
+    },
+)
+async def export_resume(
+    resume: OwnedResume,
+    fmt: Annotated[ExportFormat, Query(alias="format")],
+) -> Response:
+    """Download one of the caller's resumes as Markdown or Word (FR-5)."""
+    return Response(
+        content=RENDERERS[fmt](resume),
+        media_type=MEDIA_TYPES[fmt],
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename(resume, fmt)}"'
+        },
+    )
 
 
 @router.patch("/{resume_id}")

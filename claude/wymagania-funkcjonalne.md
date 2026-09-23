@@ -93,6 +93,18 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 ### FR-5. Eksport
 - Użytkownik może wyeksportować poprawione CV do formatu Markdown / PDF / DOCX.
 
+> **Zmiana 2026-09-23.** „Poprawione CV" to **wersja w `resumes`, którą użytkownik sam przygotował** na
+> podstawie sugestii z dopasowania (FR-2 pozwala trzymać wiele wersji, `PATCH` je edytować). Eksport tylko
+> konwertuje zapisaną wersję do pliku: nie woła modelu, więc nie może dopisać faktu, którego w CV nie ma
+> (ta sama zasada co w FR-3). Odrzucone warianty: składanie CV z wybranych sugestii (CV to surowy tekst
+> bez struktury, więc nie ma gdzie ich wstawić) i przepisywanie CV przez LLM (sprzeczne z FR-3, kosztowne,
+> nietestowalne bez ewaluacji).
+>
+> `GET /resumes/{id}/export?format=md|docx` — Markdown to rola jako nagłówek i tekst CV dosłownie, DOCX to
+> akapit na linię. Nazwa pliku to `resume-<id>.<format>`, nigdy tekst od użytkownika, bo ten trafiłby do
+> nagłówka `Content-Disposition`. **PDF jeszcze nie istnieje** — wymaga nowej biblioteki i jest osobnym
+> krokiem.
+
 ### FR-6. Administracja bazą wiedzy
 - Administrator może przeglądać i usuwać źródła.
 - Obsługiwana jest re-indeksacja po zmianie modelu embeddingów.
