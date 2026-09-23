@@ -90,7 +90,12 @@ async def ingest_document(
         requirements=await _requirements(normalized, extractor),
     )
     document.chunks = [
-        Chunk(chunk_index=index, content=text, embedding=vector)
+        Chunk(
+            chunk_index=index,
+            content=text,
+            embedding=vector,
+            embedding_model=model.name,
+        )
         for index, (text, vector) in enumerate(zip(texts, vectors, strict=True))
     ]
     session.add(document)
