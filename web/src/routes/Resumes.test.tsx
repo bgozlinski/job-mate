@@ -2,11 +2,20 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter } from 'react-router'
-import { expect, test } from 'vitest'
+import { beforeEach, expect, test, vi } from 'vitest'
 
+import { saveFile } from '../api/download'
 import { Providers, createQueryClient } from '../providers'
 import { server } from '../test/server'
 import { Resumes } from './Resumes'
+
+// jsdom implements neither URL.createObjectURL nor navigation, so the step
+// that hands bytes to the browser is replaced; what it receives is the test.
+vi.mock('../api/download', () => ({ saveFile: vi.fn() }))
+
+beforeEach(() => {
+  vi.mocked(saveFile).mockClear()
+})
 
 interface Stored {
   id: string
@@ -236,4 +245,142 @@ test('a cancelled delete leaves the resume alone', async () => {
 
   expect(deleted).toEqual([])
   expect(screen.getByRole('button', { name: 'Delete cv.pdf' })).toBeInTheDocument()
+})
+
+/** An export route that records what was asked for and answers with `body`. */
+function exporting(asked: string[], status = 200): void {
+  server.use(
+    http.get('/api/resumes/:id/export', ({ params, request }) => {
+      const format = new URL(request.url).searchParams.get('format') ?? ''
+      asked.push(`${String(params.id)}.${format}`)
+
+      if (status !== 200) {
+        return HttpResponse.json({ detail: 'Not found' }, { status })
+      }
+
+      return new HttpResponse(`${format} bytes`, {
+        headers: { 'Content-Type': 'application/octet-stream' },
+      })
+    }),
+  )
+}
+
+test('every resume offers each format under its own name', async () => {
+  listing(resume(), resume({ id: '01a0-other', original_filename: 'old.docx' }))
+
+  show()
+
+  for (const name of ['cv.pdf', 'old.docx']) {
+    const group = await screen.findByRole('group', { name: `Download ${name}` })
+
+    for (const label of ['PDF', 'Word', 'Markdown']) {
+      expect(
+        within(group).getByRole('button', { name: `Download ${name} as ${label}` }),
+      ).toBeInTheDocument()
+    }
+  }
+})
+
+test.each([
+  ['PDF', 'pdf'],
+  ['Word', 'docx'],
+  ['Markdown', 'md'],
+])('a %s download fetches that format and saves it', async (label, format) => {
+  const asked: string[] = []
+  listing(resume())
+  exporting(asked)
+
+  show()
+  await userEvent.click(
+    await screen.findByRole('button', { name: `Download cv.pdf as ${label}` }),
+  )
+
+  await waitFor(() => {
+    expect(saveFile).toHaveBeenCalledTimes(1)
+  })
+  const [blob, filename] = vi.mocked(saveFile).mock.calls[0] ?? []
+  expect(asked).toEqual([`01a0-resume.${format}`])
+  expect(filename).toBe(`resume-01a0-resume.${format}`)
+  expect(await blob?.text()).toBe(`${format} bytes`)
+})
+
+test('the buttons are held while a download is on its way', async () => {
+  // A second press would fetch and save the same file twice.
+  let answer: () => void = () => undefined
+  const held = new Promise<void>((resolve) => {
+    answer = resolve
+  })
+  listing(resume())
+  server.use(
+    http.get('/api/resumes/:id/export', async () => {
+      await held
+
+      return new HttpResponse('pdf bytes')
+    }),
+  )
+
+  show()
+  await userEvent.click(
+    await screen.findByRole('button', { name: 'Download cv.pdf as PDF' }),
+  )
+
+  for (const label of ['PDF', 'Word', 'Markdown']) {
+    expect(
+      screen.getByRole('button', { name: `Download cv.pdf as ${label}` }),
+    ).toBeDisabled()
+  }
+
+  answer()
+  await waitFor(() => {
+    expect(saveFile).toHaveBeenCalledTimes(1)
+  })
+  expect(screen.getByRole('button', { name: 'Download cv.pdf as PDF' })).toBeEnabled()
+})
+
+test('a failed download says why and saves nothing', async () => {
+  // The resume was deleted in another tab after this list was drawn.
+  const asked: string[] = []
+  listing(resume())
+  exporting(asked, 404)
+
+  show()
+  await userEvent.click(
+    await screen.findByRole('button', { name: 'Download cv.pdf as PDF' }),
+  )
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Not found')
+  expect(saveFile).not.toHaveBeenCalled()
+})
+
+test('a stale session is renewed and the download still arrives', async () => {
+  // The reason this is not a plain link: only the API client renews an
+  // expired access cookie, and a link followed after it expired opens a 401.
+  const calls: string[] = []
+  let renewed = false
+  listing(resume())
+  server.use(
+    http.get('/api/resumes/:id/export', () => {
+      calls.push('export')
+
+      return renewed
+        ? new HttpResponse('pdf bytes')
+        : new HttpResponse(null, { status: 401 })
+    }),
+    http.post('/api/auth/refresh', () => {
+      calls.push('refresh')
+      renewed = true
+
+      return new HttpResponse(null, { status: 204 })
+    }),
+  )
+
+  show()
+  await userEvent.click(
+    await screen.findByRole('button', { name: 'Download cv.pdf as PDF' }),
+  )
+
+  await waitFor(() => {
+    expect(saveFile).toHaveBeenCalledTimes(1)
+  })
+  expect(calls).toEqual(['export', 'refresh', 'export'])
 })
