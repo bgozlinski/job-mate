@@ -23,9 +23,9 @@ if TYPE_CHECKING:
 
 EMBEDDING_DIMENSIONS = 1536
 """
-Fixed by the embedding model. Changing models means a re-indexing migration (FR-6), not
-an in-place edit: the column width is part of the schema and old vectors are meaningless
-under a new model.
+Fixed by the embedding model. A new model of the same width only needs re-indexing
+(FR-6), found through `embedding_model`; a different width needs a migration first,
+because the column width is part of the schema.
 """
 
 
@@ -51,6 +51,8 @@ class Chunk(Base):
     chunk_index: Mapped[int] = mapped_column(Integer())
     content: Mapped[str] = mapped_column(Text())
     embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIMENSIONS))
+    embedding_model: Mapped[str | None] = mapped_column(Text())
+    """The model that produced the vector; NULL for rows older than this column."""
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
