@@ -1,4 +1,4 @@
-"""Adding sources to the knowledge base (FR-1) and browsing it (FR-6)."""
+"""Adding sources to the knowledge base (FR-1), browsing and pruning it (FR-6)."""
 
 import json
 import uuid
@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import (
     CurrentUser,
     get_cache,
+    get_current_admin,
     get_current_user,
     get_db,
     get_embedding_model,
@@ -122,6 +123,22 @@ async def list_documents(
     )
 
     return [_describe(document, chunk_count) for document, chunk_count in rows]
+
+
+@router.delete(
+    "/{document_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(get_current_admin)],
+)
+async def delete_document(document_id: uuid.UUID, session: Session) -> None:
+    """Remove a posting and its chunks from the knowledge base (FR-6)."""
+    document = await session.get(Document, document_id)
+
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
+    await session.delete(document)
+    await session.commit()
 
 
 @router.post("", dependencies=[Ingesting])
