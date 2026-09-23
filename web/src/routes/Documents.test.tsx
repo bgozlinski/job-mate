@@ -1,9 +1,11 @@
+import type { QueryClient } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter } from 'react-router'
 import { expect, test } from 'vitest'
 
+import { sessionKey } from '../auth/session'
 import { Providers, createQueryClient } from '../providers'
 import { server } from '../test/server'
 import { Documents } from './Documents'
@@ -29,14 +31,29 @@ function posting(overrides: Partial<Stored> = {}): Stored {
   }
 }
 
-function show() {
-  return render(
-    <Providers client={createQueryClient()}>
+function show({ admin = false }: { admin?: boolean } = {}): QueryClient {
+  // The page reads the session to decide whether to offer deleting (FR-6).
+  server.use(
+    http.get('/api/auth/me', () =>
+      HttpResponse.json({
+        id: '01a0-user',
+        email: 'reader@example.com',
+        is_admin: admin,
+        created_at: '2026-09-01T12:00:00Z',
+      }),
+    ),
+  )
+  const client = createQueryClient()
+
+  render(
+    <Providers client={client}>
       <MemoryRouter>
         <Documents />
       </MemoryRouter>
     </Providers>,
   )
+
+  return client
 }
 
 function listing(...postings: Stored[]): void {
@@ -221,4 +238,101 @@ test('pasted text longer than the API accepts is refused before it is sent', asy
 
   expect(await screen.findByRole('alert')).toHaveTextContent('longer than 200,000')
   expect(screen.getByRole('button', { name: 'Store' })).toBeDisabled()
+})
+
+const TITLE = 'Python Developer — DCV Technologies'
+
+/** A listing that forgets the posting once a DELETE answers `status`. */
+function deletable(status: number, detail?: string): string[] {
+  const deleted: string[] = []
+  let postings = [posting()]
+  server.use(
+    http.get('/api/documents', () => HttpResponse.json(postings)),
+    http.delete('/api/documents/:id', ({ params }) => {
+      deleted.push(String(params.id))
+
+      if (status === 204) {
+        postings = []
+
+        return new HttpResponse(null, { status: 204 })
+      }
+
+      if (status === 404) {
+        postings = []
+      }
+
+      return HttpResponse.json({ detail: detail ?? 'Not found' }, { status })
+    }),
+  )
+
+  return deleted
+}
+
+test('someone who is not an administrator is not offered deleting', async () => {
+  listing(posting())
+
+  const client = show()
+
+  await screen.findByRole('heading', { name: TITLE })
+  await waitFor(() => {
+    expect(client.getQueryState(sessionKey)?.status).toBe('success')
+  })
+
+  expect(screen.queryByRole('button', { name: `Delete ${TITLE}` })).toBeNull()
+})
+
+test('deleting asks first and sends nothing until confirmed', async () => {
+  const deleted = deletable(204)
+
+  show({ admin: true })
+  await userEvent.click(await screen.findByRole('button', { name: `Delete ${TITLE}` }))
+
+  const confirm = screen.getByRole('group', { name: `Confirm deleting ${TITLE}` })
+  expect(confirm).toHaveTextContent('for good')
+  expect(deleted).toEqual([])
+})
+
+test('cancelling goes back without sending anything', async () => {
+  const deleted = deletable(204)
+
+  show({ admin: true })
+  await userEvent.click(await screen.findByRole('button', { name: `Delete ${TITLE}` }))
+  await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+  expect(screen.getByRole('button', { name: `Delete ${TITLE}` })).toBeInTheDocument()
+  expect(deleted).toEqual([])
+})
+
+test('a confirmed delete removes the posting from the listing', async () => {
+  const deleted = deletable(204)
+
+  show({ admin: true })
+  await userEvent.click(await screen.findByRole('button', { name: `Delete ${TITLE}` }))
+  await userEvent.click(screen.getByRole('button', { name: 'Delete for good' }))
+
+  expect(await screen.findByText('Nothing in the knowledge base yet.')).toBeInTheDocument()
+  expect(deleted).toEqual(['01a0-posting'])
+})
+
+test('a refusal says why and keeps the posting', async () => {
+  // Rights revoked after the page read the session: the API has the last word.
+  deletable(403, 'Administrator access required')
+
+  show({ admin: true })
+  await userEvent.click(await screen.findByRole('button', { name: `Delete ${TITLE}` }))
+  await userEvent.click(screen.getByRole('button', { name: 'Delete for good' }))
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Administrator access required')
+  expect(screen.getByRole('heading', { name: TITLE })).toBeInTheDocument()
+})
+
+test('a posting somebody else already deleted is simply gone', async () => {
+  deletable(404)
+
+  show({ admin: true })
+  await userEvent.click(await screen.findByRole('button', { name: `Delete ${TITLE}` }))
+  await userEvent.click(screen.getByRole('button', { name: 'Delete for good' }))
+
+  expect(await screen.findByText('Nothing in the knowledge base yet.')).toBeInTheDocument()
+  expect(screen.queryByRole('alert')).toBeNull()
 })
