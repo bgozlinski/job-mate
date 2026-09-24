@@ -7,6 +7,7 @@ import { detailOf } from './errors'
 import type { components } from './schema'
 
 export type Document = components['schemas']['DocumentRead']
+export type DocumentDetail = components['schemas']['DocumentDetail']
 
 export const PAGE_SIZE = 20
 export const MAX_PAGE_SIZE = 100
@@ -43,6 +44,26 @@ export function useDocuments(shown: number): UseQueryResult<Document[]> {
 
       if (!data) {
         throw new Error(detailOf(error) ?? 'Could not read the knowledge base')
+      }
+
+      return data
+    },
+  })
+}
+
+/** One posting in full, for its own page: the text and what it asks for. */
+export function useDocument(id: string): UseQueryResult<DocumentDetail> {
+  return useQuery({
+    queryKey: [...documentsKey, 'detail', id],
+    queryFn: async () => {
+      const { data, error, response } = await api.GET('/documents/{document_id}', {
+        params: { path: { document_id: id } },
+      })
+
+      if (!data) {
+        throw new Error(
+          detailOf(error) ?? `Could not read this posting (${String(response.status)})`,
+        )
       }
 
       return data
