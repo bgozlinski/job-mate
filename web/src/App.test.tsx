@@ -129,7 +129,7 @@ test('logging out returns to the login screen', async () => {
   })
 })
 
-test('the navigation offers three places', async () => {
+test('the navigation offers five places', async () => {
   signedIn()
 
   show('/documents')
@@ -138,7 +138,7 @@ test('the navigation offers three places', async () => {
   const places = within(nav)
     .getAllByRole('link')
     .map((link) => link.textContent)
-  expect(places).toEqual(['Postings', 'Resumes', 'History'])
+  expect(places).toEqual(['Postings', 'Resumes', 'Match', 'Interview', 'History'])
 })
 
 test('a match belongs to History in the navigation', async () => {
@@ -162,15 +162,16 @@ test('a match belongs to History in the navigation', async () => {
 })
 
 test.each([
-  ['/match', 'Postings'],
-  ['/interview', 'Postings'],
+  ['/match', 'Match'],
+  ['/interview', 'Interview'],
   ['/matches', 'History'],
   ['/interviews', 'History'],
-])('the old address %s lands on %s', async (from, place) => {
+])('the address %s is the %s place', async (from, place) => {
   signedIn()
   server.use(
     http.get('/api/matches', () => HttpResponse.json([])),
     http.get('/api/sessions', () => HttpResponse.json([])),
+    http.get('/api/resumes', () => HttpResponse.json([])),
   )
 
   show(from)
