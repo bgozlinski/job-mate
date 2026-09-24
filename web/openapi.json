@@ -143,6 +143,82 @@
         "title": "DocumentCreate",
         "type": "object"
       },
+      "DocumentDetail": {
+        "description": "One posting in full: what the list leaves out, for the posting's own page.",
+        "properties": {
+          "chunk_count": {
+            "title": "Chunk Count",
+            "type": "integer"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "requirements": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirements"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "source_url",
+          "metadata",
+          "chunk_count",
+          "created_at",
+          "content",
+          "requirements"
+        ],
+        "title": "DocumentDetail",
+        "type": "object"
+      },
       "DocumentFromUrl": {
         "description": "Payload for ingesting the posting published at an address (FR-1).",
         "properties": {
@@ -1496,6 +1572,53 @@
         "tags": [
           "documents"
         ]
+      },
+      "get": {
+        "description": "Return one posting with its text and requirements, or 404.\n\nOpen to every signed-in account, like the list: the knowledge base is shared.",
+        "operationId": "read_document_documents__document_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read Document",
+        "tags": [
+          "documents"
+        ]
       }
     },
     "/health": {
@@ -1552,7 +1675,7 @@
     },
     "/matches": {
       "get": {
-        "description": "List the caller's own matches, newest first.",
+        "description": "List the caller's own matches, newest first, optionally for one posting.\n\nAn unknown or deleted posting gives an empty list, not 404: document_id narrows\nthe caller's own rows and is not a resource to look up.",
         "operationId": "list_matches_matches_get",
         "parameters": [
           {
@@ -1576,6 +1699,23 @@
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "document_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Document Id"
             }
           }
         ],
@@ -2065,7 +2205,7 @@
     },
     "/sessions": {
       "get": {
-        "description": "List your interviews, newest first.",
+        "description": "List your interviews, newest first, optionally for one posting.\n\nAn unknown or deleted posting gives an empty list, not 404: document_id narrows\nyour own rows and is not a resource to look up.",
         "operationId": "list_sessions_sessions_get",
         "parameters": [
           {
@@ -2089,6 +2229,23 @@
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "document_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Document Id"
             }
           }
         ],

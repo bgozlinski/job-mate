@@ -182,13 +182,20 @@ async def get_session(
 
 
 async def list_sessions(
-    db: AsyncSession, user_id: uuid.UUID, limit: int = 20, offset: int = 0
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    limit: int = 20,
+    offset: int = 0,
+    document_id: uuid.UUID | None = None,
 ) -> list[InterviewSession]:
     """Return a page of the caller's sessions, newest first, without their messages."""
+    query = select(InterviewSession).where(InterviewSession.user_id == user_id)
+
+    if document_id is not None:
+        query = query.where(InterviewSession.document_id == document_id)
+
     sessions = await db.scalars(
-        select(InterviewSession)
-        .where(InterviewSession.user_id == user_id)
-        .order_by(InterviewSession.created_at.desc(), InterviewSession.id.desc())
+        query.order_by(InterviewSession.created_at.desc(), InterviewSession.id.desc())
         .limit(limit)
         .offset(offset)
     )

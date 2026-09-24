@@ -110,9 +110,15 @@ async def list_sessions(
     db: Session,
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
     offset: Annotated[int, Query(ge=0)] = 0,
+    document_id: uuid.UUID | None = None,
 ) -> list[SessionSummary]:
-    """List your interviews, newest first."""
-    sessions = await interview.list_sessions(db, user.id, limit, offset)
+    """
+    List your interviews, newest first, optionally for one posting.
+
+    An unknown or deleted posting gives an empty list, not 404: document_id narrows
+    your own rows and is not a resource to look up.
+    """
+    sessions = await interview.list_sessions(db, user.id, limit, offset, document_id)
 
     return [_summarise(session) for session in sessions]
 
