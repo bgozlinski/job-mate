@@ -169,6 +169,17 @@
             "title": "Metadata",
             "type": "object"
           },
+          "requirement_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirement Count"
+          },
           "requirements": {
             "anyOf": [
               {
@@ -212,6 +223,7 @@
           "source_url",
           "metadata",
           "chunk_count",
+          "requirement_count",
           "created_at",
           "content",
           "requirements"
@@ -263,6 +275,17 @@
             "title": "Metadata",
             "type": "object"
           },
+          "requirement_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirement Count"
+          },
           "source_url": {
             "anyOf": [
               {
@@ -292,6 +315,7 @@
           "source_url",
           "metadata",
           "chunk_count",
+          "requirement_count",
           "created_at"
         ],
         "title": "DocumentRead",

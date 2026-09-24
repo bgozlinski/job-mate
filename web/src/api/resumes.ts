@@ -22,9 +22,10 @@ export const resumesKey = ['resumes'] as const
  * text, which is why the page keeps that text collapsed rather than drawing
  * a hundred thousand characters per row.
  */
-export function useResumes(): UseQueryResult<Resume[]> {
+export function useResumes(enabled = true): UseQueryResult<Resume[]> {
   return useQuery({
     queryKey: resumesKey,
+    enabled,
     queryFn: async () => {
       const { data, error } = await api.GET('/resumes')
 

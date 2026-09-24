@@ -16,8 +16,9 @@ const POSTING: DocumentDetail = {
   source_url: 'https://justjoin.it/job-offer/dcv-python',
   metadata: {},
   chunk_count: 3,
+  requirement_count: 2,
   created_at: '2026-09-10T12:00:00Z',
-  content: 'We are looking for a Python developer to join our backend team.',
+  content:'We are looking for a Python developer to join our backend team.',
   requirements: ['python', 'docker'],
 }
 

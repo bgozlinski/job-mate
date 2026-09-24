@@ -19,6 +19,7 @@ interface Stored {
   source_url: string | null
   metadata: Record<string, unknown>
   chunk_count: number
+  requirement_count: number | null
   created_at: string
 }
 
@@ -29,13 +30,26 @@ function posting(overrides: Partial<Stored> = {}): Stored {
     source_url: 'https://justjoin.it/job-offer/dcv-python',
     metadata: { company: 'DCV Technologies' },
     chunk_count: 3,
+    requirement_count: 6,
     created_at: '2026-09-07T12:00:00Z',
     ...overrides,
   }
 }
 
-function show({ admin = false }: { admin?: boolean } = {}): QueryClient {
-  // The page reads the session to decide whether to offer deleting (FR-6).
+const RESUME = {
+  id: 'r1',
+  content: 'Ten years of Python.',
+  target_role: null,
+  original_filename: 'cv.pdf',
+  created_at: '2026-09-01T10:00:00Z',
+}
+
+function show({
+  admin = false,
+  resumes = [RESUME],
+}: { admin?: boolean; resumes?: unknown[] } = {}): QueryClient {
+  // The page reads the session to decide whether to offer deleting (FR-6),
+  // and the resumes to run Match and Practise from a row.
   server.use(
     http.get('/api/auth/me', () =>
       HttpResponse.json({
@@ -45,6 +59,7 @@ function show({ admin = false }: { admin?: boolean } = {}): QueryClient {
         created_at: '2026-09-01T12:00:00Z',
       }),
     ),
+    http.get('/api/resumes', () => HttpResponse.json(resumes)),
   )
   const client = createQueryClient()
 
@@ -54,12 +69,20 @@ function show({ admin = false }: { admin?: boolean } = {}): QueryClient {
         <Routes>
           <Route path="/documents" element={<Documents />} />
           <Route path="/documents/:documentId" element={<Opened />} />
+          <Route path="/matches/:id" element={<Landed what="Match" />} />
+          <Route path="/interviews/:id" element={<Landed what="Interview" />} />
         </Routes>
       </MemoryRouter>
     </Providers>,
   )
 
   return client
+}
+
+function Landed({ what }: { what: string }) {
+  const { id } = useParams()
+
+  return <p>{`${what} ${id ?? ''}`}</p>
 }
 
 /**
@@ -86,15 +109,115 @@ function listing(...postings: Stored[]): void {
   server.use(http.get('/api/documents', () => HttpResponse.json(postings)))
 }
 
-test('the knowledge base is listed', async () => {
-  listing(posting())
+test('each posting is a row saying where it came from and whether it was read', async () => {
+  listing(posting(), posting({ id: 'd2', title: 'Unread', requirement_count: null }))
 
   show()
 
+  expect(await screen.findByRole('heading', { name: TITLE })).toBeInTheDocument()
+  // The source's domain rather than the whole address, and requirements
+  // rather than chunks: what matters when choosing an offer.
+  // The line is split by its <time>, so it is matched as a whole paragraph.
+  const line = (pattern: RegExp) => (_: string, element: Element | null) =>
+    element?.tagName === 'P' && pattern.test(element.textContent)
+  expect(screen.getByText(line(/^justjoin\.it · .+ · 6 requirements$/))).toBeInTheDocument()
+  expect(screen.getByText(line(/requirements not read$/))).toBeInTheDocument()
+  expect(screen.queryByText(/chunks/)).not.toBeInTheDocument()
+})
+
+test('matching from a row uses the newest resume and opens the result', async () => {
+  const sent: { resume: string; document: string }[] = []
+  listing(posting())
+  server.use(
+    http.post('/api/resumes/:id/match', async ({ request, params }) => {
+      const body = (await request.json()) as { document_id: string }
+      sent.push({ resume: String(params.id), document: body.document_id })
+
+      return HttpResponse.json({ id: 'm1' })
+    }),
+  )
+
+  show({
+    resumes: [
+      { ...RESUME, id: 'r-old', created_at: '2026-08-01T10:00:00Z' },
+      { ...RESUME, id: 'r-new', created_at: '2026-09-01T10:00:00Z' },
+    ],
+  })
+  const matchButton = await screen.findByRole('button', {
+    name: `Match my CV with ${TITLE}`,
+  })
+  await waitFor(() => {
+    expect(matchButton).toBeEnabled()
+  })
+  await userEvent.click(matchButton)
+
+  expect(await screen.findByText('Match m1')).toBeInTheDocument()
+  expect(sent).toEqual([{ resume: 'r-new', document: '01a0-posting' }])
+})
+
+test('practising from a row starts an interview on the pair', async () => {
+  const sent: unknown[] = []
+  listing(posting())
+  server.use(
+    http.post('/api/sessions', async ({ request }) => {
+      sent.push(await request.json())
+      await delay(30)
+
+      return HttpResponse.json({ id: 's1' }, { status: 201 })
+    }),
+  )
+
+  show()
+  const practise = await screen.findByRole('button', {
+    name: `Practise an interview for ${TITLE}`,
+  })
+  await waitFor(() => {
+    expect(practise).toBeEnabled()
+  })
+  await userEvent.click(practise)
+
+  expect(await screen.findByText('Preparing questions…')).toBeInTheDocument()
+  expect(await screen.findByText('Interview s1')).toBeInTheDocument()
+  expect(sent).toEqual([{ resume_id: 'r1', document_id: '01a0-posting' }])
+})
+
+test('a posting nobody read cannot be practised on from its row', async () => {
+  listing(posting({ requirement_count: null }))
+
+  show()
+
+  const practise = await screen.findByRole('button', {
+    name: `Practise an interview for ${TITLE}`,
+  })
+  await waitFor(() => {
+    expect(
+      screen.getByRole('button', { name: `Match my CV with ${TITLE}` }),
+    ).toBeEnabled()
+  })
+  expect(practise).toBeDisabled()
+})
+
+test('without a resume the rows wait and say where to add one', async () => {
+  listing(posting())
+
+  show({ resumes: [] })
+
+  expect(await screen.findByRole('link', { name: 'Add a resume first' })).toBeInTheDocument()
   expect(
-    await screen.findByRole('heading', { name: 'Python Developer — DCV Technologies' }),
-  ).toBeInTheDocument()
-  expect(screen.getByText('3 chunks')).toBeInTheDocument()
+    screen.getByRole('button', { name: `Match my CV with ${TITLE}` }),
+  ).toBeDisabled()
+})
+
+test('adding sits behind a button while there are postings to list', async () => {
+  listing(posting())
+
+  show()
+  await screen.findByRole('heading', { name: TITLE })
+  expect(screen.queryByLabelText('Job posting URL')).not.toBeInTheDocument()
+
+  await userEvent.click(screen.getByRole('button', { name: 'Add posting' }))
+
+  expect(screen.getByLabelText('Job posting URL')).toBeInTheDocument()
 })
 
 test('an empty knowledge base says so and leads to adding the first posting', async () => {

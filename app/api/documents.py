@@ -92,6 +92,11 @@ def _describe(document: Document, chunk_count: int) -> DocumentRead:
         source_url=document.source_url,
         metadata=document.doc_metadata,
         chunk_count=chunk_count,
+        # A count rather than the list: a listing row only needs to know whether
+        # there is anything to interview on, and the list lives on the detail.
+        requirement_count=(
+            None if document.requirements is None else len(document.requirements)
+        ),
         created_at=document.created_at,
     )
 

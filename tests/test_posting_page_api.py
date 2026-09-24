@@ -215,3 +215,19 @@ async def test_an_unknown_posting_filters_to_nothing(client: AsyncClient) -> Non
     assert matches.status_code == sessions.status_code == status.HTTP_200_OK
     assert matches.json() == []
     assert sessions.json() == []
+
+
+async def test_the_list_counts_what_each_posting_asks_for(
+    client: AsyncClient, session_factory: Factory
+) -> None:
+    """A list row shows whether a posting was read, without fetching each one."""
+    headers = await account(client)
+    read = await posting(client, session_factory, headers, "Read posting.")
+    unread = await posting(
+        client, session_factory, headers, "Unread posting.", requirements=None
+    )
+
+    response = await client.get("/documents", headers=headers)
+
+    counts = {row["id"]: row["requirement_count"] for row in response.json()}
+    assert counts == {read: len(REQUIREMENTS), unread: None}
