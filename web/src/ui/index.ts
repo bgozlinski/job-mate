@@ -17,6 +17,6 @@
 
 export { Button, CONTROL, Field } from './controls'
 export { Chip, Meter } from './data'
-export { Alert, Status } from './feedback'
-export { Card, Muted, PageTitle } from './surfaces'
+export { Alert, EmptyState, Skeleton, Spinner, Status, Thinking } from './feedback'
+export { Card, Muted, PageHeader, PageTitle } from './surfaces'
 export { ThemeToggle } from './ThemeToggle'
