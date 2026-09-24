@@ -27,7 +27,8 @@ Rules:
 
 ## Project
 
-JobMate — an AI career assistant: store job postings, match a resume against one, get grounded suggestions.
+JobMate — an AI career assistant: store job postings, match a resume against one, get grounded suggestions,
+and practise a mock interview on it.
 The authoritative spec is `claude/wymagania-funkcjonalne.md` (Polish): FR-1…FR-6, NFR-1…NFR-5, the data model,
 the roadmap, and dated **"Zmiana"** entries that record every change of direction with its reason. **Read it
 before designing any feature**, and read §8 ("Pułapki, których nie widać z kodu") before touching scraping,
@@ -35,7 +36,7 @@ migrations, ingestion or tokens — that section is the only record of traps tha
 
 ### Current state (2026-09-24)
 
-- **Done:** stages 1–3 and 5.
+- **Done:** stages 1–5 — the whole MVP roadmap.
   - 1–3: auth (JWT via Bearer header or httpOnly cookies), resumes (text or file upload), job-posting
     ingestion (pasted text, PDF/DOCX/TXT upload, or URL from an allowlisted host), chunking + embeddings with
     a Redis cache, requirement-by-requirement matching with stored match history, a React client in `web/`,
@@ -43,11 +44,14 @@ migrations, ingestion or tokens — that section is the only record of traps tha
   - 5 (PRs #5–#12): FR-6 — admins delete postings (`DELETE /documents/{id}`, a button on the postings list),
     `scripts.grant_admin` grants the rights, `scripts.reindex` re-embeds after a model change. FR-5 — a stored
     resume exports as Markdown, Word or PDF, with download buttons on the Resumes page.
-- **Next:** stage 4 (mock interview, FR-4). The design is decided — don't reopen it: a session is tied to one
-  posting and one resume, questions are planned up front from the posting's `requirements` (gaps first), a
-  rubric judges each answer and Python computes the score, our `sessions`/`messages` tables are the state (no
-  LangGraph checkpointer), plain request–response HTTP. Decisions D-1…D-5 are at FR-4 in the spec; the full
-  design and task order are in `docs/superpowers/specs/2026-09-24-stage4-mock-interview-design.md` (§10).
+  - 4 (PRs #13–#20): FR-4 — a mock interview on one posting for one resume: questions planned up front from
+    the posting's `requirements` (gaps first), each answer judged by a rubric with a tip, a summary at the end,
+    and a history of sessions. API under `/sessions`, screens under `/interview` and `/interviews`. Decisions
+    D-1…D-5 are at FR-4 in the spec; the design is
+    `docs/superpowers/specs/2026-09-24-stage4-mock-interview-design.md`.
+- **Next:** nothing scheduled. Still open from stage 4: a manual browser check of a real interview (rebuild
+  the stack, run `scripts.seed_prompts`, needs an Anthropic key). Stage 6 (bonus: voice, salary trends) is
+  optional — ask before starting it.
 - **Removed:** FR-7 automated harvesting (Scrapy) — built and reverted on 2026-09-10; the spec says why.
   Don't reintroduce crawling: NFR-5 allows one fetch per explicit user action, nothing more.
 
@@ -56,7 +60,8 @@ migrations, ingestion or tokens — that section is the only record of traps tha
 - `app/` — FastAPI package (`app.main:app`). `api/` routers + `deps.py` (DI, auth, rate limits, ownership
   checks like `OwnedResume`), `auth/`, `core/` (config, db, redis, Langfuse, prompts), `models/`, `schemas/`,
   `services/` (chunking, embeddings, extraction, ingestion, jobposting, scraping, requirements, judging,
-  matching, rate_limit, reindexing, export), `assets/fonts/` (PT Sans + its OFL licence, for PDF export).
+  matching, rate_limit, reindexing, export; interview: `interview_graph` the LangGraph graph, `interviewing`
+  the model calls, `interview` the service that joins them to the database), `assets/fonts/` (PT Sans + its OFL licence, for PDF export).
 - `migrations/` — Alembic; the only source of truth for the schema (no `db/schema.sql`).
 - `web/` — React + TypeScript (Vite) client. Types in `web/src/api/schema.d.ts` are generated from
   `web/openapi.json`, which is generated from the app.
@@ -87,6 +92,7 @@ cd web && npm run lint && npm run typecheck && npm test
 # Admin tools run inside the api container; scripts/ is baked into the image, so --build after changing one
 docker compose exec api python -m scripts.grant_admin someone@example.com [--revoke]
 docker compose exec api python -m scripts.reindex --dry-run   # count + token estimate; drop the flag to pay
+docker compose exec api python -m scripts.seed_prompts        # TEMPLATES -> Langfuse production; overrides edits made there
 ```
 
 `.env` (from `.env.example`) configures the API; `Settings` uses `extra="forbid"`, so an unknown key in `.env`
@@ -117,6 +123,17 @@ Pydantic schema or route must regenerate `web/openapi.json` and `web/src/api/sch
   may only *add* matches, requirement by requirement, quoting the resume. Score and gaps are computed in Python
   from the verdicts. Suggestions must be grounded in the posting + resume — never invent employers, dates,
   technologies or achievements. Every match is stored in `matches` (a snapshot; FKs go NULL on delete).
+- **Mock interview (FR-4)** follows the same rule as matching: the model words questions and judges answers,
+  Python decides. The plan is fixed at the start (one question per requirement — a plan that doesn't echo
+  the requirements back in order is refused, not repaired); the evaluator returns yes/no verdicts per
+  criterion in `CRITERIA` and the score is the share met; the summary calls no model. The graph never
+  touches the database and has no checkpointer: `app/services/interview.py` rebuilds its state from
+  `sessions`/`messages` each turn, runs one turn and writes it in one transaction under a row lock, so a
+  model failure (→ 502) saves nothing. Progress is derived from the messages, not a counter; order is
+  `position`, not `created_at`. An answer names the question it answers (`question_id`), else a double
+  submit would be taken as the answer to the next question (→ 409). The planner's tokens and chunk ids ride
+  on the first question. Structured outputs reject objects with arbitrary keys, so the evaluator answers a
+  list that `to_rubric` turns into the dict the graph uses.
 - Embeddings + HNSW index are still written and maintained, but nothing reads them — stage 4 doesn't either
   (its questions come from `requirements`), so NFR-3 is suspended until some feature searches. Each chunk records
   `embedding_model` (NULL = older than the column = unknown). Re-indexing selects stale chunks with
