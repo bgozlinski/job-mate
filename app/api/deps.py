@@ -20,6 +20,7 @@ from app.core.prompts import PromptStore
 from app.models.resume import Resume
 from app.models.user import User
 from app.services.embeddings import EmbeddingModel
+from app.services.interview_graph import InterviewGraph
 from app.services.judging import RequirementJudge
 from app.services.matching import SuggestionWriter
 from app.services.rate_limit import RateLimit, consume
@@ -127,6 +128,13 @@ async def get_suggestion_writer(request: Request) -> SuggestionWriter:
     writer: SuggestionWriter | None = request.app.state.suggestion_writer
 
     return _configured(writer, "The language model")
+
+
+async def get_interview_graph(request: Request) -> InterviewGraph:
+    """Hand out the compiled interview graph, or refuse without a language model."""
+    graph: InterviewGraph | None = request.app.state.interview_graph
+
+    return _configured(graph, "The language model")
 
 
 def get_config() -> Settings:
