@@ -278,6 +278,7 @@ function Stored({ resume }: { resume: Resume }): ReactElement {
             <>
               <Button
                 type="button"
+                variant="danger"
                 disabled={remove.isPending}
                 onClick={() => {
                   remove.mutate(resume.id)
