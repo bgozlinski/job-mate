@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -8,6 +8,7 @@ import type { Interview as InterviewData, InterviewMessage } from '../api/interv
 import { Providers, createQueryClient } from '../providers'
 import { server } from '../test/server'
 import { Interview } from './Interview'
+import { InterviewHistory } from './InterviewHistory'
 import { InterviewSession } from './InterviewSession'
 
 const RESUME = {
@@ -101,6 +102,7 @@ function show(at = '/interview') {
       <MemoryRouter initialEntries={[at]}>
         <Routes>
           <Route path="/interview" element={<Interview />} />
+          <Route path="/interviews" element={<InterviewHistory />} />
           <Route path="/interviews/:sessionId" element={<InterviewSession />} />
         </Routes>
       </MemoryRouter>
@@ -306,6 +308,98 @@ test('a finished interview reads back with its summary', async () => {
   ).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'Strong answers' })).toBeInTheDocument()
   expect(screen.queryByLabelText('Your answer')).not.toBeInTheDocument()
+})
+
+function row(overrides: Record<string, unknown>) {
+  return {
+    id: 's1',
+    resume_id: 'r1',
+    document_id: 'd1',
+    document_title: 'Python Developer — DCV',
+    status: 'active',
+    score: null,
+    question_count: 2,
+    created_at: '2026-09-24T12:00:00Z',
+    finished_at: null,
+    ...overrides,
+  }
+}
+
+test('the history lists your interviews and opens one where it stopped', async () => {
+  server.use(
+    http.get('/api/sessions', () =>
+      HttpResponse.json([
+        row({ id: 's1' }),
+        row({
+          id: 's0',
+          document_title: 'Data Engineer',
+          status: 'finished',
+          score: 0.5,
+          finished_at: '2026-09-23T12:00:00Z',
+        }),
+      ]),
+    ),
+  )
+  stored(STARTED)
+
+  show('/interviews')
+
+  expect(
+    await screen.findByRole('link', { name: '50% · Data Engineer' }),
+  ).toBeInTheDocument()
+  await userEvent.click(
+    screen.getByRole('link', { name: 'In progress · Python Developer — DCV' }),
+  )
+
+  expect(await screen.findByText('How did you use Docker?')).toBeInTheDocument()
+  expect(screen.getByLabelText('Your answer')).toBeInTheDocument()
+})
+
+test('an interview finished before any answer says nothing was judged', async () => {
+  server.use(
+    http.get('/api/sessions', () =>
+      HttpResponse.json([row({ status: 'finished', finished_at: '2026-09-24T12:01:00Z' })]),
+    ),
+  )
+
+  show('/interviews')
+
+  expect(
+    await screen.findByRole('link', {
+      name: 'Finished, nothing judged · Python Developer — DCV',
+    }),
+  ).toBeInTheDocument()
+})
+
+test('an empty history says so rather than showing nothing', async () => {
+  server.use(http.get('/api/sessions', () => HttpResponse.json([])))
+
+  show('/interviews')
+
+  expect(await screen.findByText('No interviews yet.')).toBeInTheDocument()
+})
+
+test('the history pages from the top with a growing limit', async () => {
+  const limits: string[] = []
+  server.use(
+    http.get('/api/sessions', ({ request }) => {
+      const url = new URL(request.url)
+      limits.push(`${url.searchParams.get('limit') ?? ''}@${url.searchParams.get('offset') ?? ''}`)
+
+      return HttpResponse.json(
+        Array.from({ length: Number(url.searchParams.get('limit')) }, (_, index) =>
+          row({ id: `s${String(index)}` }),
+        ),
+      )
+    }),
+  )
+
+  show('/interviews')
+  await userEvent.click(await screen.findByRole('button', { name: 'Load more' }))
+
+  await waitFor(() => {
+    expect(limits).toEqual(['20@0', '40@0'])
+  })
 })
 
 test('an interview that is not yours reads as not found', async () => {
