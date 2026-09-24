@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ReactElement, SyntheticEvent } from 'react'
-import { FileTextIcon } from 'lucide-react'
+import { DownloadIcon, FileTextIcon, PlusIcon } from 'lucide-react'
 
 import { saveFile } from '../api/download'
 import type { ExportFormat, Resume } from '../api/resumes'
@@ -19,12 +19,12 @@ import {
   Card,
   EmptyState,
   Field,
-  Muted,
-  PageTitle,
+  PageHeader,
   Skeleton,
   Status,
   Thinking,
 } from '../ui'
+import { newest } from './Posting'
 
 const UPLOAD_TYPES = '.pdf,.docx,.txt,.md'
 
@@ -209,12 +209,21 @@ function AddByText(): ReactElement {
   )
 }
 
+
 /**
  * Take a resume away as a file (FR-5). The version downloaded is the one
  * stored: an improved resume is a version its owner wrote, and exporting only
  * converts it.
  */
-function Download({ resume, name }: { resume: Resume; name: string }): ReactElement {
+function Download({
+  resume,
+  name,
+  size,
+}: {
+  resume: Resume
+  name: string
+  size: 'sm' | 'md'
+}): ReactElement {
   const download = useExportResume()
 
   return (
@@ -224,12 +233,13 @@ function Download({ resume, name }: { resume: Resume; name: string }): ReactElem
         aria-label={`Download ${name}`}
         className="flex flex-wrap items-center gap-2"
       >
-        <span className="text-sm text-ink-faint">Download:</span>
         {EXPORTS.map(({ format, label }) => (
           <Button
             key={format}
             type="button"
             variant="secondary"
+            size={size}
+            icon={DownloadIcon}
             disabled={download.isPending}
             // The format alone would be three identical "PDF" buttons per
             // list to a screen reader, one for every resume on the page.
@@ -255,89 +265,107 @@ function Download({ resume, name }: { resume: Resume; name: string }): ReactElem
   )
 }
 
+/**
+ * One resume and everything that can be done with it. The main one -- the
+ * newest, which Match and Practise use -- gets the room; older versions are
+ * compact rows with the same actions, smaller.
+ */
 function Stored({
   resume,
+  main,
   onDeleted,
 }: {
   resume: Resume
+  main: boolean
   onDeleted: (name: string) => void
 }): ReactElement {
   const [confirming, setConfirming] = useState(false)
   const remove = useDeleteResume()
   const created = new Date(resume.created_at)
   const name = resume.original_filename ?? 'Pasted text'
+  const size = main ? 'md' : 'sm'
 
   return (
-    <li>
-      <Card className="flex flex-col gap-2">
-        <h3 className="font-medium">{name}</h3>
+    <div className={`flex flex-col ${main ? 'gap-3' : 'gap-2'}`}>
+      {main ? (
+        <p>
+          <span className="rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-bold text-accent-strong">
+            Main · used for matching
+          </span>
+        </p>
+      ) : null}
+      <div>
+        <h3 className={main ? 'text-lg font-extrabold' : 'font-bold'}>{name}</h3>
         <p className="text-sm text-ink-faint">
-          <time dateTime={resume.created_at}>{created.toLocaleString()}</time>
-          {' · '}
           <span>{resume.target_role ?? 'no target role'}</span>
           {' · '}
           <span>{resume.content.length.toLocaleString('en')} characters</span>
+          {' · '}
+          <time dateTime={resume.created_at}>{created.toLocaleString()}</time>
         </p>
+      </div>
 
-        {/* Behind a click on purpose: a resume can be a hundred thousand
-            characters, and drawing every one of them for every row makes the
-            page crawl by the third one. */}
-        <details>
-          <summary className={SUMMARY}>Show text</summary>
-          <pre className="mt-2 max-h-72 overflow-auto rounded-lg bg-surface p-3 font-mono text-xs whitespace-pre-wrap text-ink-soft">
-            {resume.content}
-          </pre>
-        </details>
+      <Download resume={resume} name={name} size={size} />
 
-        <Download resume={resume} name={name} />
+      {/* Behind a click on purpose: a resume can be a hundred thousand
+          characters, and drawing every one of them for every row makes the
+          page crawl by the third one. */}
+      <details>
+        <summary className={SUMMARY}>Show text</summary>
+        <pre className="mt-2 max-h-72 overflow-auto rounded-xl bg-sunken p-3 font-mono text-xs whitespace-pre-wrap text-ink-soft">
+          {resume.content}
+        </pre>
+      </details>
 
-        {/* Two presses rather than a native confirm(): deleting is the one
-            irreversible thing on this page, and window.confirm is a dialog
-            jsdom does not implement, so a guard built on it could not be
-            covered by a test. */}
-        <div className="flex gap-2">
-          {confirming ? (
-            <>
-              <Button
-                type="button"
-                variant="danger"
-                disabled={remove.isPending}
-                onClick={() => {
-                  remove.mutate(resume.id, {
-                    onSuccess: () => {
-                      onDeleted(name)
-                    },
-                  })
-                }}
-              >
-                {remove.isPending ? 'Deleting…' : `Really delete ${name}`}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  setConfirming(false)
-                }}
-              >
-                Cancel
-              </Button>
-            </>
-          ) : (
+      {/* Two presses rather than a native confirm(): deleting is the one
+          irreversible thing on this page, and window.confirm is a dialog
+          jsdom does not implement, so a guard built on it could not be
+          covered by a test. */}
+      <div className="flex flex-wrap gap-2">
+        {confirming ? (
+          <>
             <Button
               type="button"
-              variant="quiet"
+              variant="danger"
+              size={size}
+              disabled={remove.isPending}
               onClick={() => {
-                setConfirming(true)
+                remove.mutate(resume.id, {
+                  onSuccess: () => {
+                    onDeleted(name)
+                  },
+                })
               }}
             >
-              Delete {name}
+              {remove.isPending ? 'Deleting…' : `Really delete ${name}`}
             </Button>
-          )}
-        </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size={size}
+              onClick={() => {
+                setConfirming(false)
+              }}
+            >
+              Cancel
+            </Button>
+          </>
+        ) : (
+          <Button
+            type="button"
+            variant="quiet"
+            size="sm"
+            onClick={() => {
+              setConfirming(true)
+            }}
+          >
+            Delete {name}
+          </Button>
+        )}
+      </div>
 
-        {remove.error ? <Alert>{remove.error.message}</Alert> : null}
-      </Card>
-    </li>
+      {remove.error ? <Alert>{remove.error.message}</Alert> : null}
+    </div>
   )
 }
 
@@ -348,71 +376,106 @@ function focusUpload(): void {
     ?.focus()
 }
 
-/** The caller's own resumes, and the two ways to add one (FR-2). */
+/**
+ * The caller's own resumes (FR-2): the main one first and large, older
+ * versions folded away under it, adding behind a button -- open from the
+ * start while there is none.
+ */
 export function Resumes(): ReactElement {
   const resumes = useResumes()
-  // The last deletion, said once over the list: the row just disappears, and
-  // a row that vanishes without a word reads as a glitch. Replaced by the next.
+  // The last deletion, said once over the list: the resume just disappears,
+  // and one that vanishes without a word reads as a glitch. Replaced by the next.
   const [deleted, setDeleted] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
+
+  const stored = resumes.data ?? []
+  const main = newest(stored)
+  const older = stored
+    .filter((resume) => resume.id !== main?.id)
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+  const empty = resumes.isSuccess && stored.length === 0
+  const panelOpen = adding || empty
 
   return (
     <>
-      <section aria-labelledby="add-resume" className="flex flex-col gap-4">
-        <PageTitle>
-          <span id="add-resume">Add a resume</span>
-        </PageTitle>
-
-        <Card className="flex max-w-2xl flex-col gap-2">
-          <AddByFile />
-
-          <details className="border-t border-line pt-3">
-            <summary className={SUMMARY}>…or paste the text</summary>
-            <AddByText />
-          </details>
-        </Card>
-      </section>
-
-      <section aria-labelledby="your-resumes" className="flex flex-col gap-4">
-        <div>
-          <PageTitle>
-            <span id="your-resumes">Your resumes</span>
-          </PageTitle>
-          <Muted>Only yours: nobody else can read or delete them.</Muted>
-        </div>
-
-        {deleted ? <Status>Deleted {deleted}.</Status> : null}
-
-        {resumes.isPending ? <Skeleton lines={3} label="Loading your resumes…" /> : null}
-        {resumes.error ? (
-          <Alert
-            onRetry={() => {
-              void resumes.refetch()
+      <PageHeader
+        title="Resumes"
+        description="Only yours: nobody else can read or delete them."
+        actions={
+          <Button
+            type="button"
+            icon={PlusIcon}
+            aria-expanded={panelOpen}
+            aria-controls="add-resume"
+            onClick={() => {
+              setAdding((open) => !open)
             }}
           >
-            {resumes.error.message}
-          </Alert>
-        ) : null}
+            Add resume
+          </Button>
+        }
+      />
 
-        {resumes.data?.length === 0 ? (
-          <EmptyState
-            icon={FileTextIcon}
-            title="No resumes yet."
-            action={
-              <Button type="button" variant="secondary" size="sm" onClick={focusUpload}>
-                Add your first resume
-              </Button>
-            }
-          >
-            Upload a PDF, Word or text file, or paste the text.
-          </EmptyState>
-        ) : null}
+      {panelOpen ? (
+        <section id="add-resume" aria-label="Add a resume">
+          <Card className="flex max-w-2xl flex-col gap-2">
+            <AddByFile />
 
-        <ul className="flex flex-col gap-3">
-          {resumes.data?.map((resume) => (
-            <Stored key={resume.id} resume={resume} onDeleted={setDeleted} />
-          ))}
-        </ul>
-      </section>
+            <details className="border-t border-line pt-3">
+              <summary className={SUMMARY}>…or paste the text</summary>
+              <AddByText />
+            </details>
+          </Card>
+        </section>
+      ) : null}
+
+      {deleted ? <Status>Deleted {deleted}.</Status> : null}
+
+      {resumes.isPending ? <Skeleton lines={2} label="Loading your resumes…" /> : null}
+      {resumes.error ? (
+        <Alert
+          onRetry={() => {
+            void resumes.refetch()
+          }}
+        >
+          {resumes.error.message}
+        </Alert>
+      ) : null}
+
+      {empty ? (
+        <EmptyState
+          icon={FileTextIcon}
+          title="No resumes yet."
+          action={
+            <Button type="button" variant="secondary" size="sm" onClick={focusUpload}>
+              Add your first resume
+            </Button>
+          }
+        >
+          Upload a PDF, Word or text file, or paste the text.
+        </EmptyState>
+      ) : null}
+
+      {main ? (
+        <Card>
+          <Stored resume={main} main onDeleted={setDeleted} />
+        </Card>
+      ) : null}
+
+      {older.length > 0 ? (
+        <details className="flex flex-col gap-3">
+          <summary className={SUMMARY}>Older versions ({older.length})</summary>
+          <Card className="mt-3">
+            <ul className="flex flex-col divide-y divide-line">
+              {older.map((resume) => (
+                <li key={resume.id} className="py-3 first:pt-0 last:pb-0">
+                  <Stored resume={resume} main={false} onDeleted={setDeleted} />
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </details>
+      ) : null}
     </>
   )
 }
