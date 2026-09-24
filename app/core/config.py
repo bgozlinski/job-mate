@@ -32,8 +32,12 @@ class Settings(BaseSettings):
 
     match_rate_limit: int = 20
     ingest_rate_limit: int = 60
+    interview_rate_limit: int = 60
     rate_limit_window_seconds: int = 3600
-    """Per account, per hour, on the two routes that spend money (NFR-2)."""
+    """Per account, per hour, on the routes that spend money (NFR-2)."""
+
+    interview_questions: int = 5
+    """How many questions a mock interview plans, at most (FR-4)."""
 
     scraper_allowed_hosts: list[str] = ["justjoin.it"]
     """The only hosts a posting may be read from (NFR-5, NFR-1)."""

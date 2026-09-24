@@ -11,6 +11,7 @@ from app.api.health import router as health_router
 from app.api.matches import router as matches_router
 from app.api.matching import router as matching_router
 from app.api.resumes import router as resumes_router
+from app.api.sessions import router as sessions_router
 from app.core.config import get_settings
 from app.core.db import create_engine, create_session_factory
 from app.core.observability import create_tracer
@@ -21,6 +22,8 @@ from app.core.prompts import (
 )
 from app.core.redis import create_redis
 from app.services.embeddings import OpenAIEmbeddingModel
+from app.services.interview_graph import build_interview_graph
+from app.services.interviewing import AnthropicAnswerEvaluator, AnthropicQuestionPlanner
 from app.services.judging import AnthropicRequirementJudge
 from app.services.matching import AnthropicSuggestionWriter
 from app.services.requirements import AnthropicSkillExtractor
@@ -59,6 +62,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if settings.anthropic_api_key
         else None
     )
+    app.state.interview_graph = (
+        build_interview_graph(
+            AnthropicQuestionPlanner(settings, app.state.prompts),
+            AnthropicAnswerEvaluator(settings, app.state.prompts),
+            settings.interview_questions,
+        )
+        if settings.anthropic_api_key
+        else None
+    )
     try:
         yield
     finally:
@@ -77,6 +89,7 @@ app.include_router(resumes_router)
 app.include_router(documents_router)
 app.include_router(matching_router)
 app.include_router(matches_router)
+app.include_router(sessions_router)
 
 
 @app.get("/")

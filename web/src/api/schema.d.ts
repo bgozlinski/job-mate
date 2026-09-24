@@ -400,10 +400,107 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Sessions
+         * @description List your interviews, newest first.
+         */
+        get: operations["list_sessions_sessions_get"];
+        put?: never;
+        /**
+         * Start
+         * @description Plan an interview on a posting for one of your resumes, and ask question one.
+         */
+        post: operations["start_sessions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Session
+         * @description Return one of your interviews with every message, or 404.
+         */
+        get: operations["read_session_sessions__session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/answers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Answer
+         * @description Answer the open question; get it judged and the next one asked.
+         */
+        post: operations["answer_sessions__session_id__answers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish
+         * @description End the interview now and sum up the answers judged so far. Calls no model.
+         */
+        post: operations["finish_sessions__session_id__finish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AnswerCreate
+         * @description An answer, and the question it answers.
+         */
+        AnswerCreate: {
+            /** Content */
+            content: string;
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+        };
         /** Body_upload_document_documents_upload_post */
         Body_upload_document_documents_upload_post: {
             /** File */
@@ -485,6 +582,16 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * ImprovementRead
+         * @description A requirement answered weakly, and what would have helped.
+         */
+        ImprovementRead: {
+            /** Requirement */
+            requirement: string;
+            /** Tip */
+            tip: string;
         };
         /**
          * LoginRequest
@@ -580,6 +687,41 @@ export interface components {
             score: number;
         };
         /**
+         * MessageRead
+         * @description One question, answer or evaluation.
+         */
+        MessageRead: {
+            /** Content */
+            content: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Position */
+            position: number;
+            /** Requirement */
+            requirement: string | null;
+            /** Retrieved Chunk Ids */
+            retrieved_chunk_ids: string[];
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "interviewer" | "candidate" | "evaluator";
+            /** Score */
+            score: number | null;
+            /** Verdicts */
+            verdicts: {
+                [key: string]: components["schemas"]["VerdictRead"];
+            } | null;
+        };
+        /**
          * ResumeCreate
          * @description Payload for storing a new resume.
          */
@@ -620,6 +762,101 @@ export interface components {
             content?: string | null;
             /** Target Role */
             target_role?: string | null;
+        };
+        /**
+         * SessionCreate
+         * @description Which posting to be interviewed on, and with which of your resumes.
+         */
+        SessionCreate: {
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /**
+             * Resume Id
+             * Format: uuid
+             */
+            resume_id: string;
+        };
+        /**
+         * SessionRead
+         * @description One interview in full.
+         */
+        SessionRead: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Document Id */
+            document_id: string | null;
+            /** Document Title */
+            document_title: string | null;
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Messages */
+            messages: components["schemas"]["MessageRead"][];
+            /** Question Count */
+            question_count: number;
+            /** Resume Id */
+            resume_id: string | null;
+            /** Score */
+            score: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "finished";
+            summary: components["schemas"]["SummaryRead"] | null;
+        };
+        /**
+         * SessionSummary
+         * @description One row of the history: enough to choose which interview to open.
+         */
+        SessionSummary: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Document Id */
+            document_id: string | null;
+            /** Document Title */
+            document_title: string | null;
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Question Count */
+            question_count: number;
+            /** Resume Id */
+            resume_id: string | null;
+            /** Score */
+            score: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "finished";
+        };
+        /**
+         * SummaryRead
+         * @description How the interview went, put together from the evaluations.
+         */
+        SummaryRead: {
+            /** Improvements */
+            improvements: components["schemas"]["ImprovementRead"][];
+            /** Strengths */
+            strengths: string[];
         };
         /**
          * TokenResponse
@@ -682,6 +919,16 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /**
+         * VerdictRead
+         * @description Whether an answer met one criterion of the rubric, and why.
+         */
+        VerdictRead: {
+            /** Met */
+            met: boolean;
+            /** Reason */
+            reason: string;
         };
     };
     responses: never;
@@ -1341,6 +1588,168 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MatchRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_sessions_sessions_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_sessions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_session_sessions__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    answer_sessions__session_id__answers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnswerCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    finish_sessions__session_id__finish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionRead"];
                 };
             };
             /** @description Validation Error */
