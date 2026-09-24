@@ -1,5 +1,7 @@
 import type { ComponentPropsWithoutRef, ReactElement, ReactNode } from 'react'
 
+export { ThemeToggle } from './ThemeToggle'
+
 /**
  * The handful of shapes every screen is built from.
  *

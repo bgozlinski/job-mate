@@ -2,7 +2,7 @@ import type { ReactElement } from 'react'
 import { NavLink, Outlet } from 'react-router'
 
 import { useLogout, useSession } from '../auth/session'
-import { Button } from '../ui'
+import { Button, ThemeToggle } from '../ui'
 
 const TABS = [
   { to: '/documents', label: 'Job postings' },
@@ -49,7 +49,8 @@ export function Layout(): ReactElement {
             ))}
           </nav>
 
-          <p className="ml-auto flex items-center gap-2 text-sm text-ink-faint">
+          <div className="ml-auto flex items-center gap-3 text-sm text-ink-faint">
+            <ThemeToggle />
             <span className="hidden sm:inline">
               Signed in as {session.data?.email}
             </span>
@@ -63,7 +64,7 @@ export function Layout(): ReactElement {
             >
               Log out
             </Button>
-          </p>
+          </div>
         </div>
       </header>
 

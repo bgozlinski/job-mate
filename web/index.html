@@ -4,6 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>JobMate</title>
+    <!-- Sets the chosen theme before the first paint; without it a dark page
+         flashes white on every load. Mirrors storedTheme() and applyTheme()
+         in src/theme.ts -- the key and the two values must match. -->
+    <script>
+      try {
+        var theme = localStorage.getItem('jobmate-theme')
+        if (theme === 'light' || theme === 'dark') {
+          document.documentElement.setAttribute('data-theme', theme)
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
