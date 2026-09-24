@@ -1,64 +1,155 @@
 import { useState } from 'react'
 import type { ReactElement } from 'react'
-import { Link, useParams } from 'react-router'
+import { GitCompareArrowsIcon, HistoryIcon, MessagesSquareIcon } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router'
 
-import {
-  HISTORY_PAGE_SIZE,
-  MAX_HISTORY_PAGE_SIZE,
-  useMatchDetail,
-  useMatches,
-} from '../api/matching'
-import { Alert, Button, Card, Muted, PageTitle } from '../ui'
-import { MatchResult, percentage } from './MatchResult'
+import { useInterviews } from '../api/interview'
+import type { InterviewSummary } from '../api/interview'
+import { HISTORY_PAGE_SIZE, MAX_HISTORY_PAGE_SIZE, useMatches } from '../api/matching'
+import type { MatchSummary } from '../api/matching'
+import { Alert, Button, Card, EmptyState, PageHeader, Skeleton } from '../ui'
+import { percentage } from './MatchResult'
 
-/** The caller's own past matches, newest first (FR-2). */
+type Kind = 'all' | 'matches' | 'interviews'
+
+const FILTERS: { kind: Kind; label: string }[] = [
+  { kind: 'all', label: 'All' },
+  { kind: 'matches', label: 'Matches' },
+  { kind: 'interviews', label: 'Interviews' },
+]
+
+interface Row {
+  key: string
+  to: string
+  icon: LucideIcon
+  what: string
+  outcome: string
+  title: string
+  at: string
+}
+
+function fromMatch(match: MatchSummary): Row {
+  return {
+    key: `m-${match.id}`,
+    to: `/matches/${match.id}`,
+    icon: GitCompareArrowsIcon,
+    what: 'Match',
+    outcome: percentage(match.score),
+    title: match.document_title ?? 'Deleted posting',
+    at: match.created_at,
+  }
+}
+
+function fromInterview(interview: InterviewSummary): Row {
+  return {
+    key: `i-${interview.id}`,
+    to: `/interviews/${interview.id}`,
+    icon: MessagesSquareIcon,
+    what: 'Interview',
+    outcome:
+      interview.status === 'active'
+        ? 'In progress'
+        : interview.score === null
+          ? 'Finished, nothing judged'
+          : percentage(interview.score),
+    title: interview.document_title ?? 'Deleted posting',
+    at: interview.created_at,
+  }
+}
+
+function kindOf(value: string | null): Kind {
+  return value === 'matches' || value === 'interviews' ? value : 'all'
+}
+
+/**
+ * Everything you did, newest first: matches and interviews on one timeline.
+ *
+ * Two lists read from the top with the same growing limit, merged here. Each
+ * is fetched from offset 0, as the old histories were: a new row lands above
+ * the page, so paging by offset would show one row twice.
+ */
 export function History(): ReactElement {
+  const [params, setParams] = useSearchParams()
+  const kind = kindOf(params.get('kind'))
   const [shown, setShown] = useState(HISTORY_PAGE_SIZE)
   const matches = useMatches(shown)
+  const interviews = useInterviews(shown)
+
+  const rows = [
+    ...(kind === 'interviews' ? [] : (matches.data ?? []).map(fromMatch)),
+    ...(kind === 'matches' ? [] : (interviews.data ?? []).map(fromInterview)),
+  ].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
+
+  const pending =
+    (kind !== 'interviews' && matches.isPending) ||
+    (kind !== 'matches' && interviews.isPending)
+  const error = matches.error ?? interviews.error
+  // A full page from either list means that list may have more; the API gives
+  // no total, so a short page is how the end shows.
+  const more =
+    (kind !== 'interviews' && (matches.data?.length ?? 0) >= shown) ||
+    (kind !== 'matches' && (interviews.data?.length ?? 0) >= shown)
 
   return (
     <>
-      <div>
-        <PageTitle>Match history</PageTitle>
-        <Muted>Only yours: nobody else can read your matches.</Muted>
+      <PageHeader
+        title="History"
+        description="Your matches and interviews, newest first. Only yours: nobody else can read them."
+      />
+
+      <div role="group" aria-label="Show" className="flex flex-wrap gap-1">
+        {FILTERS.map((filter) => (
+          <Button
+            key={filter.kind}
+            type="button"
+            size="sm"
+            variant={kind === filter.kind ? 'primary' : 'secondary'}
+            aria-pressed={kind === filter.kind}
+            onClick={() => {
+              setParams(filter.kind === 'all' ? {} : { kind: filter.kind })
+            }}
+          >
+            {filter.label}
+          </Button>
+        ))}
       </div>
 
-      {matches.isPending ? <Muted>Loading…</Muted> : null}
-      {matches.error ? <Alert>{matches.error.message}</Alert> : null}
-      {matches.data?.length === 0 ? <Muted>No matches yet.</Muted> : null}
+      {pending ? <Skeleton lines={3} label="Loading your history…" /> : null}
+      {error ? <Alert>{error.message}</Alert> : null}
 
-      <ul className="flex flex-col gap-3">
-        {matches.data?.map((match) => (
-          <li key={match.id}>
-            <Card className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <Link
-                to={`/matches/${match.id}`}
-                className="text-base font-medium text-accent hover:underline"
-              >
-                {percentage(match.score)} ·{' '}
-                {match.document_title ?? 'Untitled posting'}
-              </Link>
-              <p className="text-sm text-ink-faint">
-                <time dateTime={match.created_at}>
-                  {new Date(match.created_at).toLocaleString()}
+      {!pending && !error && rows.length === 0 ? (
+        <EmptyState icon={HistoryIcon} title="Nothing here yet.">
+          Open a posting to match your CV against it or practise its interview.
+        </EmptyState>
+      ) : null}
+
+      {rows.length > 0 ? (
+        <ul className="flex flex-col gap-3">
+          {rows.map((row) => (
+            <li key={row.key}>
+              <Card className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <row.icon aria-hidden="true" className="size-5 shrink-0 text-ink-faint" />
+                <Link
+                  to={row.to}
+                  className="font-bold text-accent tabular-nums hover:underline"
+                >
+                  {row.what} · {row.outcome} · {row.title}
+                </Link>
+                <time dateTime={row.at} className="text-sm text-ink-faint">
+                  {new Date(row.at).toLocaleString()}
                 </time>
-                {' · '}
-                <span>
-                  {String(match.matched_count)} covered,{' '}
-                  {String(match.missing_count)} missing
-                </span>
-              </p>
-            </Card>
-          </li>
-        ))}
-      </ul>
+              </Card>
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
-      {/* A short page is the end of the listing: the route returns no total. */}
-      {matches.data && matches.data.length >= shown ? (
+      {more ? (
         shown >= MAX_HISTORY_PAGE_SIZE ? (
-          <Muted>
-            The history returns at most {MAX_HISTORY_PAGE_SIZE} matches.
-          </Muted>
+          <p className="text-sm text-ink-faint">
+            History shows at most {MAX_HISTORY_PAGE_SIZE} of each.
+          </p>
         ) : (
           <div className="flex">
             <Button
@@ -75,29 +166,6 @@ export function History(): ReactElement {
           </div>
         )
       ) : null}
-    </>
-  )
-}
-
-/** One stored match, shown exactly as a fresh one is. */
-export function MatchDetail(): ReactElement {
-  const { matchId } = useParams()
-  const match = useMatchDetail(matchId ?? '')
-
-  return (
-    <>
-      <p>
-        <Link
-          to="/matches"
-          className="text-sm text-ink-soft hover:text-accent"
-        >
-          ← Back to the history
-        </Link>
-      </p>
-
-      {match.isPending ? <Muted>Loading…</Muted> : null}
-      {match.error ? <Alert>{match.error.message}</Alert> : null}
-      {match.data ? <MatchResult match={match.data} /> : null}
     </>
   )
 }

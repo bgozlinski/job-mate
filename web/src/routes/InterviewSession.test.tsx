@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -7,26 +7,7 @@ import { expect, test } from 'vitest'
 import type { Interview as InterviewData, InterviewMessage } from '../api/interview'
 import { Providers, createQueryClient } from '../providers'
 import { server } from '../test/server'
-import { Interview } from './Interview'
-import { InterviewHistory } from './InterviewHistory'
 import { InterviewSession } from './InterviewSession'
-
-const RESUME = {
-  id: 'r1',
-  content: 'Five years of Python.',
-  target_role: 'Backend developer',
-  original_filename: 'cv.pdf',
-  created_at: '2026-09-24T10:00:00Z',
-}
-
-const POSTING = {
-  id: 'd1',
-  title: 'Python Developer — DCV',
-  source_url: null,
-  metadata: {},
-  chunk_count: 3,
-  created_at: '2026-09-24T11:00:00Z',
-}
 
 function message(
   id: string,
@@ -96,24 +77,16 @@ const FINISHED: InterviewData = {
   messages: ANSWERED.messages.slice(0, 3),
 }
 
-function show(at = '/interview') {
+function show(at = '/interviews/s1') {
   return render(
     <Providers client={createQueryClient()}>
       <MemoryRouter initialEntries={[at]}>
         <Routes>
-          <Route path="/interview" element={<Interview />} />
-          <Route path="/interviews" element={<InterviewHistory />} />
           <Route path="/interviews/:sessionId" element={<InterviewSession />} />
+          <Route path="/documents/:documentId" element={<p>The posting page</p>} />
         </Routes>
       </MemoryRouter>
     </Providers>,
-  )
-}
-
-function pickable(): void {
-  server.use(
-    http.get('/api/resumes', () => HttpResponse.json([RESUME])),
-    http.get('/api/documents', () => HttpResponse.json([POSTING])),
   )
 }
 
@@ -121,85 +94,10 @@ function stored(interview: InterviewData): void {
   server.use(http.get('/api/sessions/s1', () => HttpResponse.json(interview)))
 }
 
-async function choosePair(): Promise<void> {
-  await screen.findByRole('option', { name: /cv\.pdf/ })
-  await screen.findByRole('option', { name: 'Python Developer — DCV' })
-
-  await userEvent.selectOptions(screen.getByLabelText('Resume'), 'r1')
-  await userEvent.selectOptions(screen.getByLabelText('Job posting'), 'd1')
-  await userEvent.click(screen.getByRole('button', { name: 'Start the interview' }))
-}
-
 async function type(answer: string): Promise<void> {
   await userEvent.type(await screen.findByLabelText('Your answer'), answer)
   await userEvent.click(screen.getByRole('button', { name: 'Send answer' }))
 }
-
-test('starting an interview opens it on the first question', async () => {
-  const sent: unknown[] = []
-  pickable()
-  server.use(
-    http.post('/api/sessions', async ({ request }) => {
-      sent.push(await request.json())
-
-      return HttpResponse.json(STARTED, { status: 201 })
-    }),
-  )
-
-  show()
-  await choosePair()
-
-  expect(await screen.findByText('How did you use Docker?')).toBeInTheDocument()
-  expect(screen.getByText('Question 1 of 2')).toBeInTheDocument()
-  expect(sent).toEqual([{ resume_id: 'r1', document_id: 'd1' }])
-})
-
-test('a posting without requirements says why there is no interview', async () => {
-  pickable()
-  server.use(
-    http.post('/api/sessions', () =>
-      HttpResponse.json(
-        { detail: 'This posting has no requirements to build interview questions from' },
-        { status: 422 },
-      ),
-    ),
-  )
-
-  show()
-  await choosePair()
-
-  expect(await screen.findByRole('alert')).toHaveTextContent('no requirements')
-})
-
-test('the rate limit says how long to wait', async () => {
-  pickable()
-  server.use(
-    http.post('/api/sessions', () =>
-      HttpResponse.json(
-        { detail: 'Too many requests' },
-        { status: 429, headers: { 'Retry-After': '600' } },
-      ),
-    ),
-  )
-
-  show()
-  await choosePair()
-
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Too many requests. Try again in 10 minutes.',
-  )
-})
-
-test('having no resumes points at where to fix it', async () => {
-  server.use(
-    http.get('/api/resumes', () => HttpResponse.json([])),
-    http.get('/api/documents', () => HttpResponse.json([POSTING])),
-  )
-
-  show()
-
-  expect(await screen.findByRole('link', { name: 'Add one' })).toBeInTheDocument()
-})
 
 test('an answer comes back judged, with the reasons and the next question', async () => {
   const sent: unknown[] = []
@@ -310,98 +208,6 @@ test('a finished interview reads back with its summary', async () => {
   expect(screen.queryByLabelText('Your answer')).not.toBeInTheDocument()
 })
 
-function row(overrides: Record<string, unknown>) {
-  return {
-    id: 's1',
-    resume_id: 'r1',
-    document_id: 'd1',
-    document_title: 'Python Developer — DCV',
-    status: 'active',
-    score: null,
-    question_count: 2,
-    created_at: '2026-09-24T12:00:00Z',
-    finished_at: null,
-    ...overrides,
-  }
-}
-
-test('the history lists your interviews and opens one where it stopped', async () => {
-  server.use(
-    http.get('/api/sessions', () =>
-      HttpResponse.json([
-        row({ id: 's1' }),
-        row({
-          id: 's0',
-          document_title: 'Data Engineer',
-          status: 'finished',
-          score: 0.5,
-          finished_at: '2026-09-23T12:00:00Z',
-        }),
-      ]),
-    ),
-  )
-  stored(STARTED)
-
-  show('/interviews')
-
-  expect(
-    await screen.findByRole('link', { name: '50% · Data Engineer' }),
-  ).toBeInTheDocument()
-  await userEvent.click(
-    screen.getByRole('link', { name: 'In progress · Python Developer — DCV' }),
-  )
-
-  expect(await screen.findByText('How did you use Docker?')).toBeInTheDocument()
-  expect(screen.getByLabelText('Your answer')).toBeInTheDocument()
-})
-
-test('an interview finished before any answer says nothing was judged', async () => {
-  server.use(
-    http.get('/api/sessions', () =>
-      HttpResponse.json([row({ status: 'finished', finished_at: '2026-09-24T12:01:00Z' })]),
-    ),
-  )
-
-  show('/interviews')
-
-  expect(
-    await screen.findByRole('link', {
-      name: 'Finished, nothing judged · Python Developer — DCV',
-    }),
-  ).toBeInTheDocument()
-})
-
-test('an empty history says so rather than showing nothing', async () => {
-  server.use(http.get('/api/sessions', () => HttpResponse.json([])))
-
-  show('/interviews')
-
-  expect(await screen.findByText('No interviews yet.')).toBeInTheDocument()
-})
-
-test('the history pages from the top with a growing limit', async () => {
-  const limits: string[] = []
-  server.use(
-    http.get('/api/sessions', ({ request }) => {
-      const url = new URL(request.url)
-      limits.push(`${url.searchParams.get('limit') ?? ''}@${url.searchParams.get('offset') ?? ''}`)
-
-      return HttpResponse.json(
-        Array.from({ length: Number(url.searchParams.get('limit')) }, (_, index) =>
-          row({ id: `s${String(index)}` }),
-        ),
-      )
-    }),
-  )
-
-  show('/interviews')
-  await userEvent.click(await screen.findByRole('button', { name: 'Load more' }))
-
-  await waitFor(() => {
-    expect(limits).toEqual(['20@0', '40@0'])
-  })
-})
-
 test('an interview that is not yours reads as not found', async () => {
   server.use(
     http.get('/api/sessions/s1', () =>
@@ -412,4 +218,13 @@ test('an interview that is not yours reads as not found', async () => {
   show('/interviews/s1')
 
   expect(await screen.findByRole('alert')).toHaveTextContent('Interview not found')
+})
+
+test('the way back leads to the posting the interview was on', async () => {
+  stored(STARTED)
+
+  show()
+  await userEvent.click(await screen.findByRole('link', { name: 'Python Developer — DCV' }))
+
+  expect(await screen.findByText('The posting page')).toBeInTheDocument()
 })

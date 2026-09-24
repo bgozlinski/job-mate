@@ -1,23 +1,24 @@
 import type { ReactElement } from 'react'
-import {
-  BriefcaseIcon,
-  FileTextIcon,
-  GitCompareArrowsIcon,
-  HistoryIcon,
-  LogOutIcon,
-  MessagesSquareIcon,
-} from 'lucide-react'
-import { NavLink, Outlet } from 'react-router'
+import { BriefcaseIcon, FileTextIcon, HistoryIcon, LogOutIcon } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import { Link, Outlet, useLocation } from 'react-router'
 
 import { useLogout, useSession } from '../auth/session'
 import { Button, ThemeToggle } from '../ui'
 
-const TABS = [
-  { to: '/documents', label: 'Job postings', icon: BriefcaseIcon },
-  { to: '/resumes', label: 'Resumes', icon: FileTextIcon },
-  { to: '/match', label: 'Match', icon: GitCompareArrowsIcon },
-  { to: '/matches', label: 'History', icon: HistoryIcon },
-  { to: '/interview', label: 'Interview', icon: MessagesSquareIcon },
+/**
+ * Three places. `also` lists the pages that belong to a place without living
+ * under its address: a match or an interview is part of your history.
+ */
+const TABS: { to: string; label: string; icon: LucideIcon; also: string[] }[] = [
+  { to: '/documents', label: 'Postings', icon: BriefcaseIcon, also: [] },
+  { to: '/resumes', label: 'Resumes', icon: FileTextIcon, also: [] },
+  {
+    to: '/history',
+    label: 'History',
+    icon: HistoryIcon,
+    also: ['/matches/', '/interviews/'],
+  },
 ]
 
 /**
@@ -28,6 +29,7 @@ const TABS = [
 export function Layout(): ReactElement {
   const session = useSession()
   const logout = useLogout()
+  const { pathname } = useLocation()
 
   return (
     <div className="min-h-dvh">
@@ -38,24 +40,34 @@ export function Layout(): ReactElement {
           </h1>
 
           <nav aria-label="Main" className="flex flex-wrap gap-1">
-            {TABS.map(({ to, label, icon: Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                // The current tab is marked by weight and a filled background,
-                // not by colour alone. NavLink sets aria-current regardless,
-                // which is what a screen reader announces.
-                className={({ isActive }) =>
-                  'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors ' +
-                  (isActive
-                    ? 'bg-accent-soft font-bold text-accent-strong'
-                    : 'text-ink-soft hover:bg-sunken hover:text-accent')
-                }
-              >
-                <Icon aria-hidden="true" className="size-4" />
-                {label}
-              </NavLink>
-            ))}
+            {TABS.map(({ to, label, icon: Icon, also }) => {
+              const active =
+                pathname === to ||
+                pathname.startsWith(`${to}/`) ||
+                also.some((prefix) => pathname.startsWith(prefix))
+
+              return (
+                <Link
+                  key={to}
+                  to={to}
+                  // Worked out here rather than by NavLink, which only knows
+                  // its own address: a match is part of History without
+                  // living under /history. The current tab is marked by
+                  // weight and a filled background, not by colour alone, and
+                  // aria-current is what a screen reader announces.
+                  aria-current={active ? 'page' : undefined}
+                  className={
+                    'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors ' +
+                    (active
+                      ? 'bg-accent-soft font-bold text-accent-strong'
+                      : 'text-ink-soft hover:bg-sunken hover:text-accent')
+                  }
+                >
+                  <Icon aria-hidden="true" className="size-4" />
+                  {label}
+                </Link>
+              )
+            })}
           </nav>
 
           <div className="ml-auto flex items-center gap-3 text-sm text-ink-faint">

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter } from 'react-router'
@@ -126,5 +126,60 @@ test('logging out returns to the login screen', async () => {
 
   await waitFor(() => {
     expect(screen.getByLabelText('Email')).toBeInTheDocument()
+  })
+})
+
+test('the navigation offers three places', async () => {
+  signedIn()
+
+  show('/documents')
+
+  const nav = await screen.findByRole('navigation', { name: 'Main' })
+  const places = within(nav)
+    .getAllByRole('link')
+    .map((link) => link.textContent)
+  expect(places).toEqual(['Postings', 'Resumes', 'History'])
+})
+
+test('a match belongs to History in the navigation', async () => {
+  signedIn()
+  server.use(
+    http.get('/api/matches/m1', () =>
+      HttpResponse.json({ detail: 'Not found' }, { status: 404 }),
+    ),
+  )
+
+  show('/matches/m1')
+
+  const nav = within(await screen.findByRole('navigation', { name: 'Main' }))
+  expect(nav.getByRole('link', { name: 'History' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+  expect(nav.getByRole('link', { name: 'Postings' })).not.toHaveAttribute(
+    'aria-current',
+  )
+})
+
+test.each([
+  ['/match', 'Postings'],
+  ['/interview', 'Postings'],
+  ['/matches', 'History'],
+  ['/interviews', 'History'],
+])('the old address %s lands on %s', async (from, place) => {
+  signedIn()
+  server.use(
+    http.get('/api/matches', () => HttpResponse.json([])),
+    http.get('/api/sessions', () => HttpResponse.json([])),
+  )
+
+  show(from)
+
+  await waitFor(() => {
+    const nav = within(screen.getByRole('navigation', { name: 'Main' }))
+    expect(nav.getByRole('link', { name: place })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
   })
 })
