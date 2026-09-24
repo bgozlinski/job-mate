@@ -302,7 +302,8 @@ Przeglądarka                              Klient deweloperski
      ├── Serwis ingestion (LangChain) → chunking → Redis cache → API embeddingów → pgvector
      │      źródła: wklejony tekst | plik PDF/DOCX/TXT | URL ogłoszenia (allowlista, NFR-5)
      ├── Serwis generacji → API LLM (prompt = ogłoszenie + CV + prompt z Langfuse)
-     └── Mock interview (LangGraph) → plan pytań z wymagań ogłoszenia, ocena rubryką   [etap 4, jeszcze nie istnieje]
+     └── Mock interview (LangGraph, jedna tura na żądanie) → plan pytań z wymagań ogłoszenia, ocena rubryką
+            stan: tabele sessions / messages (bez checkpointera, FR-4 D-4)
                     ↓                ↘
               [PostgreSQL + pgvector]  [Langfuse — trace'y, koszty, ewaluacja]
 ```
