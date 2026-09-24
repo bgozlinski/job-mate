@@ -235,7 +235,15 @@ function YourMatches({ documentId }: { documentId: string }): ReactElement {
     <Card className="flex flex-col gap-3">
       <h3 className={HEADING}>Your matches</h3>
       {matches.isPending ? <Skeleton lines={1} label="Loading your matches…" /> : null}
-      {matches.error ? <Alert>{matches.error.message}</Alert> : null}
+      {matches.error ? (
+        <Alert
+          onRetry={() => {
+            void matches.refetch()
+          }}
+        >
+          {matches.error.message}
+        </Alert>
+      ) : null}
       {matches.data?.length === 0 ? (
         <EmptyState icon={GitCompareArrowsIcon} title="No matches yet.">
           Match your CV to see how it covers this posting.
@@ -279,7 +287,15 @@ function YourInterviews({ documentId }: { documentId: string }): ReactElement {
       {interviews.isPending ? (
         <Skeleton lines={1} label="Loading your interviews…" />
       ) : null}
-      {interviews.error ? <Alert>{interviews.error.message}</Alert> : null}
+      {interviews.error ? (
+        <Alert
+          onRetry={() => {
+            void interviews.refetch()
+          }}
+        >
+          {interviews.error.message}
+        </Alert>
+      ) : null}
       {interviews.data?.length === 0 ? (
         <EmptyState icon={MessagesSquareIcon} title="No interviews yet.">
           Practise the questions this posting is likely to bring.
@@ -337,7 +353,15 @@ export function Posting(): ReactElement {
       </p>
 
       {posting.isPending ? <Skeleton lines={3} label="Loading the posting…" /> : null}
-      {posting.error ? <Alert>{posting.error.message}</Alert> : null}
+      {posting.error ? (
+        <Alert
+          onRetry={() => {
+            void posting.refetch()
+          }}
+        >
+          {posting.error.message}
+        </Alert>
+      ) : null}
 
       {posting.data ? (
         <>

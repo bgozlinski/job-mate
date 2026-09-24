@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { HttpResponse, delay, http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { expect, test } from 'vitest'
 
@@ -227,4 +227,42 @@ test('the way back leads to the posting the interview was on', async () => {
   await userEvent.click(await screen.findByRole('link', { name: 'Python Developer — DCV' }))
 
   expect(await screen.findByText('The posting page')).toBeInTheDocument()
+})
+
+test('judging an answer says so while it takes', async () => {
+  stored(STARTED)
+  server.use(
+    http.post('/api/sessions/s1/answers', async () => {
+      await delay(50)
+
+      return HttpResponse.json(ANSWERED)
+    }),
+  )
+
+  show()
+  await type('I containerised our API.')
+
+  expect(await screen.findByText('Evaluating your answer…')).toBeInTheDocument()
+  expect(
+    await screen.findByText('Tell me about a Python service you ran.'),
+  ).toBeInTheDocument()
+})
+
+test('an interview that failed to load can be asked again', async () => {
+  let calls = 0
+  server.use(
+    http.get('/api/sessions/s1', () => {
+      calls += 1
+
+      return calls === 1
+        ? HttpResponse.json({ detail: 'Could not read this interview' }, { status: 500 })
+        : HttpResponse.json(STARTED)
+    }),
+  )
+
+  show()
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not read this interview')
+  await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+  expect(await screen.findByText('How did you use Docker?')).toBeInTheDocument()
 })

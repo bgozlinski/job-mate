@@ -306,3 +306,25 @@ test('an unknown posting says so', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent('Not found')
   expect(screen.getByRole('link', { name: 'All postings' })).toBeInTheDocument()
 })
+
+test('a posting that failed to load can be asked again', async () => {
+  let calls = 0
+  arrange()
+  server.use(
+    http.get('/api/documents/d1', () => {
+      calls += 1
+
+      return calls === 1
+        ? HttpResponse.json({ detail: 'Could not read this posting' }, { status: 500 })
+        : HttpResponse.json(POSTING)
+    }),
+  )
+
+  show()
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not read this posting')
+  await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+  expect(
+    await screen.findByRole('heading', { name: 'Python Developer — DCV' }),
+  ).toBeInTheDocument()
+})

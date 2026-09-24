@@ -178,6 +178,8 @@ test('having no resumes points at where to fix that instead', async () => {
   show('/interview')
 
   expect(await screen.findByRole('link', { name: 'Add one' })).toBeInTheDocument()
+  // A step to take first, not a failure: a notice, never a red alert.
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   await waitFor(() => {
     expect(screen.getByRole('button', { name: 'Start the interview' })).toBeDisabled()
   })

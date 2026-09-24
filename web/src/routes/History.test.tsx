@@ -175,3 +175,23 @@ test('loading more asks both lists for more, from the top', async () => {
     ])
   })
 })
+
+test('a history that failed to load can be asked again', async () => {
+  let calls = 0
+  server.use(
+    http.get('/api/matches', () => {
+      calls += 1
+
+      return calls === 1
+        ? HttpResponse.json({ detail: 'Could not read your match history' }, { status: 500 })
+        : HttpResponse.json([match('m1', '2026-09-22T12:00:00Z')])
+    }),
+    http.get('/api/sessions', () => HttpResponse.json([])),
+  )
+
+  show()
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not read your match history')
+  await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+  expect(await screen.findByRole('link', { name: /^Match · 56%/ })).toBeInTheDocument()
+})

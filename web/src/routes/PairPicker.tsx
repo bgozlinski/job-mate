@@ -6,7 +6,7 @@ import type { LucideIcon } from 'lucide-react'
 import { MAX_PAGE_SIZE, useDocuments } from '../api/documents'
 import type { Pairing } from '../api/matching'
 import { useResumes } from '../api/resumes'
-import { Alert, Button, Card, Field, PageHeader, Thinking } from '../ui'
+import { Alert, Button, Card, Field, Notice, PageHeader, Thinking } from '../ui'
 import { newest } from './Posting'
 
 const LINK = 'text-accent underline underline-offset-2'
@@ -67,24 +67,26 @@ export function PairPicker({
     <>
       <PageHeader title={title} description={description} actions={aside} />
 
+      {/* Notices, not alerts: an empty list is a step to take first, not
+          something that went wrong. */}
       {noResumes ? (
-        <Alert>
+        <Notice>
           No resumes yet.{' '}
           <Link to="/resumes" className={LINK}>
             Add one
           </Link>{' '}
           first.
-        </Alert>
+        </Notice>
       ) : null}
 
       {noDocuments ? (
-        <Alert>
+        <Notice>
           Nothing in the knowledge base yet.{' '}
           <Link to="/documents" className={LINK}>
             Add a job posting
           </Link>{' '}
           first.
-        </Alert>
+        </Notice>
       ) : null}
 
       <Card className="max-w-2xl">
