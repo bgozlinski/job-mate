@@ -441,3 +441,44 @@ test('a stale session is renewed and the download still arrives', async () => {
   })
   expect(calls).toEqual(['export', 'refresh', 'export'])
 })
+
+test('the newest resume is the main one, and older versions are folded away', async () => {
+  listing(
+    resume({ id: 'r-old', original_filename: 'old.pdf', created_at: '2026-08-01T10:00:00Z' }),
+    resume({ id: 'r-new', original_filename: 'new.pdf', created_at: '2026-09-01T10:00:00Z' }),
+    resume({ id: 'r-mid', original_filename: 'mid.pdf', created_at: '2026-08-15T10:00:00Z' }),
+  )
+
+  show()
+
+  const main = await screen.findByText('Main · used for matching')
+  // The badge sits with the newest resume, the one Match and Practise use.
+  expect(main.closest('div')?.parentElement).toHaveTextContent('new.pdf')
+  const older = screen.getByText('Older versions (2)')
+  expect(older.closest('details')).not.toHaveAttribute('open')
+  // Folded, not gone: each keeps its own downloads.
+  expect(
+    screen.getByRole('button', { name: 'Download old.pdf as PDF', hidden: true }),
+  ).toBeInTheDocument()
+})
+
+test('with a single resume there are no older versions to fold', async () => {
+  listing(resume())
+
+  show()
+
+  expect(await screen.findByText('Main · used for matching')).toBeInTheDocument()
+  expect(screen.queryByText(/Older versions/)).not.toBeInTheDocument()
+})
+
+test('adding sits behind a button once there is a resume', async () => {
+  listing(resume())
+
+  show()
+  await screen.findByRole('heading', { name: 'cv.pdf' })
+  expect(screen.queryByRole('form', { name: 'Upload a resume' })).not.toBeInTheDocument()
+
+  await userEvent.click(screen.getByRole('button', { name: 'Add resume' }))
+
+  expect(screen.getByRole('form', { name: 'Upload a resume' })).toBeInTheDocument()
+})
