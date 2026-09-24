@@ -91,6 +91,11 @@ class InterviewState(TypedDict, total=False):
     summary: dict[str, Any]
 
 
+type InterviewGraph = CompiledStateGraph[
+    InterviewState, None, InterviewState, InterviewState
+]
+
+
 def order_requirements(
     requirements: list[str], resume: str, skills: list[str] | None, limit: int
 ) -> list[str]:
@@ -254,7 +259,7 @@ def build_interview_graph(
     planner: QuestionPlanner,
     evaluator: AnswerEvaluator,
     questions: int = DEFAULT_QUESTIONS,
-) -> CompiledStateGraph[InterviewState, None, InterviewState, InterviewState]:
+) -> InterviewGraph:
     """Compile the graph once; each request runs one turn of it with ainvoke."""
     nodes = _Nodes(planner, evaluator, questions)
     graph = StateGraph(InterviewState)

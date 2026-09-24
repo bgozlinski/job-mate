@@ -138,7 +138,7 @@ Router `app/api/sessions.py`, prefiks `/sessions`, wszystko za `get_current_user
 | `POST /sessions` | `{resume_id, document_id}` | 201 — sesja z pierwszym pytaniem |
 | `GET /sessions` | — | 200 — twoje sesje, najnowsze pierwsze: id, tytuł, status, wynik, liczba pytań, `created_at` |
 | `GET /sessions/{id}` | — | 200 — sesja z wiadomościami w kolejności `position` |
-| `POST /sessions/{id}/answers` | `{content}` (1–5000 znaków) | 200 — nowe wiadomości + stan sesji |
+| `POST /sessions/{id}/answers` | `{question_id, content}` (treść 1–5000 znaków) | 200 — nowe wiadomości + stan sesji |
 | `POST /sessions/{id}/finish` | — | 200 — sesja z podsumowaniem |
 
 **Zasady:**
@@ -152,6 +152,11 @@ Router `app/api/sessions.py`, prefiks `/sessions`, wszystko za `get_current_user
 - **Sesja zakończona:** `/answers` i `/finish` → 409.
 - **Równoległe odpowiedzi:** obsługa `/answers` zaczyna od `SELECT … FOR UPDATE` na wierszu sesji; drugie żądanie
   czeka i widzi stan po pierwszym. `UNIQUE (session_id, position)` jest ostatnią barierą: `IntegrityError` → 409.
+- **Odpowiedź wskazuje pytanie (`question_id`)** — dopisane przy zadaniu 5. Sama blokada nie wystarcza: drugie z dwóch
+  identycznych żądań (podwójne kliknięcie) po zwolnieniu blokady zostałoby przyjęte jako odpowiedź na **następne**
+  pytanie. `question_id` inne niż ostatnia wiadomość `interviewer` bez odpowiedzi → 409.
+- **Usunięte CV:** odpowiedzi są oceniane względem CV, więc sesja, której CV usunięto, przyjmuje już tylko `/finish`;
+  `/answers` → 409.
 - **Awaria modelu:** odpowiedź, ocena i następne pytanie zapisują się w jednej transakcji; wyjątek dostawcy →
   502, nic nie zostaje zapisane, użytkownik wysyła ponownie.
 - **Brak klucza Anthropic:** 503, jak przy dopasowaniu.
