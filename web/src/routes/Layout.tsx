@@ -1,5 +1,12 @@
 import type { ReactElement } from 'react'
-import { BriefcaseIcon, FileTextIcon, HistoryIcon, LogOutIcon } from 'lucide-react'
+import {
+  BriefcaseIcon,
+  FileTextIcon,
+  GitCompareArrowsIcon,
+  HistoryIcon,
+  LogOutIcon,
+  MessagesSquareIcon,
+} from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Link, Outlet, useLocation } from 'react-router'
 
@@ -7,12 +14,14 @@ import { useLogout, useSession } from '../auth/session'
 import { Button, ThemeToggle } from '../ui'
 
 /**
- * Three places. `also` lists the pages that belong to a place without living
- * under its address: a match or an interview is part of your history.
+ * `also` lists the pages that belong to a place without living under its
+ * address: a match or an interview is part of your history.
  */
 const TABS: { to: string; label: string; icon: LucideIcon; also: string[] }[] = [
   { to: '/documents', label: 'Postings', icon: BriefcaseIcon, also: [] },
   { to: '/resumes', label: 'Resumes', icon: FileTextIcon, also: [] },
+  { to: '/match', label: 'Match', icon: GitCompareArrowsIcon, also: [] },
+  { to: '/interview', label: 'Interview', icon: MessagesSquareIcon, also: [] },
   {
     to: '/history',
     label: 'History',
@@ -34,7 +43,10 @@ export function Layout(): ReactElement {
   return (
     <div className="min-h-dvh">
       <header className="border-b border-line bg-raised">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-3">
+        {/* 6xl rather than 5xl so five places, the theme toggle and the account
+            fit on one line at laptop width; main matches it so the logo stays
+            aligned with the content under it. */}
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-3">
           <h1 className="text-xl font-extrabold tracking-tight">
             Job<span className="text-accent">Mate</span>
           </h1>
@@ -72,7 +84,12 @@ export function Layout(): ReactElement {
 
           <div className="ml-auto flex items-center gap-3 text-sm text-ink-faint">
             <ThemeToggle />
-            <span className="hidden sm:inline">
+            {/* Capped and cut short so a long address cannot push the header
+                onto a second line; the whole of it shows on hover. */}
+            <span
+              className="hidden max-w-56 truncate sm:inline-block"
+              title={session.data?.email}
+            >
               Signed in as {session.data?.email}
             </span>
             <Button
@@ -90,7 +107,7 @@ export function Layout(): ReactElement {
         </div>
       </header>
 
-      <main className="mx-auto flex max-w-5xl flex-col gap-10 px-6 py-8">
+      <main className="mx-auto flex max-w-6xl flex-col gap-10 px-6 py-8">
         <Outlet />
       </main>
     </div>

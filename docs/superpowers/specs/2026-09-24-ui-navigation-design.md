@@ -32,6 +32,14 @@ jest dostępna tylko przez link na stronie „Interview”, a ogłoszenie nie ma
 | N-4 | Które CV | **Najnowsze CV domyślnie**, z możliwością zmiany przy przyciskach | wybór CV przy każdej akcji | Użytkownik ma jedno główne CV; obowiązkowy wybór byłby zbędnym krokiem. |
 | N-5 | Dane, których API nie daje | **Małe rozszerzenie API** (sekcja 5) | obejście tylko we froncie | Bez niego strona ogłoszenia nie pokaże treści ani wymagań, a dopasowania i rozmowy trzeba by filtrować w przeglądarce z ostatnich 100, gubiąc starsze. |
 
+> **Zmiana 2026-09-24 (po wdrożeniu). N-1 zrewidowane: Match i Interview wracają.** Po zmergowaniu zadania 3
+> użytkownikowi brakowało w pasku ekranów startowych. Wróciły jako osobne miejsca — **obok** strony ogłoszenia,
+> nie zamiast niej: Postings, Resumes, Match, Interview, History. Strony wyboru pary są jednym komponentem
+> (`PairPicker`), domyślnie z najnowszym CV jak strona ogłoszenia, a „Match” otwiera wynik na jego własnej stronie
+> (link do ogłoszenia, „Practise interview”), zamiast pokazywać go pod formularzem. `/match` i `/interview` znów są
+> stronami, nie przekierowaniami. Pięć pozycji nie mieściło się w jednej linii przy `max-w-5xl`, więc nagłówek i
+> treść mają `max-w-6xl`, a adres e-mail w nagłówku jest ucinany.
+
 ## 3. Struktura i trasy
 
 **Nagłówek:** logo, **Postings**, **Resumes**, **History**; po prawej przełącznik motywu, adres e-mail (chowany na
