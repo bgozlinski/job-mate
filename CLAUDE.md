@@ -43,9 +43,11 @@ migrations, ingestion or tokens — that section is the only record of traps tha
   - 5 (PRs #5–#12): FR-6 — admins delete postings (`DELETE /documents/{id}`, a button on the postings list),
     `scripts.grant_admin` grants the rights, `scripts.reindex` re-embeds after a model change. FR-5 — a stored
     resume exports as Markdown, Word or PDF, with download buttons on the Resumes page.
-- **Next:** stage 4 (mock interview, FR-4), deferred until now. It starts with a **decision, not code**: where
-  interview questions come from now that the knowledge base holds only postings (from the posting and
-  resume, a restored question source, or a prompt). The options are recorded at FR-4 in the spec.
+- **Next:** stage 4 (mock interview, FR-4). The design is decided — don't reopen it: a session is tied to one
+  posting and one resume, questions are planned up front from the posting's `requirements` (gaps first), a
+  rubric judges each answer and Python computes the score, our `sessions`/`messages` tables are the state (no
+  LangGraph checkpointer), plain request–response HTTP. Decisions D-1…D-5 are at FR-4 in the spec; the full
+  design and task order are in `docs/superpowers/specs/2026-09-24-stage4-mock-interview-design.md` (§10).
 - **Removed:** FR-7 automated harvesting (Scrapy) — built and reverted on 2026-09-10; the spec says why.
   Don't reintroduce crawling: NFR-5 allows one fetch per explicit user action, nothing more.
 
@@ -115,7 +117,8 @@ Pydantic schema or route must regenerate `web/openapi.json` and `web/src/api/sch
   may only *add* matches, requirement by requirement, quoting the resume. Score and gaps are computed in Python
   from the verdicts. Suggestions must be grounded in the posting + resume — never invent employers, dates,
   technologies or achievements. Every match is stored in `matches` (a snapshot; FKs go NULL on delete).
-- Embeddings + HNSW index are still written and maintained; the reader returns with stage 4. Each chunk records
+- Embeddings + HNSW index are still written and maintained, but nothing reads them — stage 4 doesn't either
+  (its questions come from `requirements`), so NFR-3 is suspended until some feature searches. Each chunk records
   `embedding_model` (NULL = older than the column = unknown). Re-indexing selects stale chunks with
   `IS DISTINCT FROM`, never `!=` (which skips NULL), and updates vectors **in place** so chunk ids — and
   `retrieved_chunk_ids` pointing at them — survive; one commit per document, so a failed run just resumes.
