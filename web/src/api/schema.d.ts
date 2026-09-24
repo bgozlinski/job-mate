@@ -570,6 +570,8 @@ export interface components {
             metadata: {
                 [key: string]: unknown;
             };
+            /** Requirement Count */
+            requirement_count: number | null;
             /** Requirements */
             requirements: string[] | null;
             /** Source Url */
@@ -613,6 +615,8 @@ export interface components {
             metadata: {
                 [key: string]: unknown;
             };
+            /** Requirement Count */
+            requirement_count: number | null;
             /** Source Url */
             source_url: string | null;
             /** Title */

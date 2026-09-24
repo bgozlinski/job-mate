@@ -65,6 +65,8 @@ class DocumentRead(BaseModel):
     source_url: str | None
     metadata: dict[str, Any]
     chunk_count: int
+    requirement_count: int | None
+    """How many requirements an LLM read out of it, or null when nobody has."""
     created_at: datetime
 
 

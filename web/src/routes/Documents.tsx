@@ -1,6 +1,11 @@
 import { useState } from 'react'
 import type { ReactElement, SyntheticEvent } from 'react'
-import { BriefcaseIcon } from 'lucide-react'
+import {
+  BriefcaseIcon,
+  GitCompareArrowsIcon,
+  MessagesSquareIcon,
+  PlusIcon,
+} from 'lucide-react'
 import { Link, useNavigate } from 'react-router'
 
 import type { Document, Ingested } from '../api/documents'
@@ -13,7 +18,11 @@ import {
   useIngestText,
   useIngestUrl,
 } from '../api/documents'
+import { useStartInterview } from '../api/interview'
+import { useMatch } from '../api/matching'
+import { useResumes } from '../api/resumes'
 import { useSession } from '../auth/session'
+import { ago } from '../time'
 import {
   Alert,
   Button,
@@ -22,11 +31,12 @@ import {
   Field,
   Muted,
   Notice,
-  PageTitle,
+  PageHeader,
   Skeleton,
   Status,
   Thinking,
 } from '../ui'
+import { newest } from './Posting'
 import type { Arrival } from './Posting'
 
 const MAX_CONTENT_LENGTH = 200_000
@@ -37,10 +47,6 @@ const UPLOAD_TYPES = '.pdf,.docx,.txt,.md'
 
 const SUMMARY =
   'cursor-pointer text-sm font-medium text-ink-soft hover:text-accent'
-
-function chunks(count: number): string {
-  return count === 1 ? '1 chunk' : `${String(count)} chunks`
-}
 
 /**
  * Open the posting an ingestion stored, or the one it turned out to duplicate.
@@ -238,11 +244,12 @@ function DeletePosting({
 
   if (!confirming) {
     return (
-      <div className="flex flex-col gap-2 border-t border-line pt-2">
+      <div className="flex flex-col gap-2">
         <div className="flex">
           <Button
             type="button"
             variant="quiet"
+            size="sm"
             // Named after the posting: a list of identical "Delete" buttons
             // is one button to a screen reader, repeated.
             aria-label={`Delete ${name}`}
@@ -263,7 +270,7 @@ function DeletePosting({
     <div
       role="group"
       aria-label={`Confirm deleting ${name}`}
-      className="flex flex-col gap-2 border-t border-line pt-2"
+      className="flex flex-col gap-2 rounded-xl bg-sunken p-3"
     >
       <p className="text-sm">
         This removes the posting and its chunks for good. Matches already in
@@ -302,171 +309,317 @@ function DeletePosting({
   )
 }
 
-function Posting({
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host
+  } catch {
+    return url
+  }
+}
+
+function requirements(count: number | null): string {
+  if (count === null) {
+    return 'requirements not read'
+  }
+
+  return count === 1 ? '1 requirement' : `${String(count)} requirements`
+}
+
+/** What a row can start, and on which resume. */
+interface RowActions {
+  resumeId: string | undefined
+  busy: boolean
+  pending: 'match' | 'practise' | null
+  error: Error | null
+  onMatch: () => void
+  onPractise: () => void
+}
+
+/**
+ * One posting as a row: what it is, how old, whether it was read -- and the
+ * two things to do with it, right here, on the newest resume.
+ */
+function PostingRow({
   document,
   admin,
+  actions,
   onDeleted,
 }: {
   document: Document
   admin: boolean
+  actions: RowActions
   onDeleted: (name: string) => void
 }): ReactElement {
-  const stored = new Date(document.created_at)
+  const unread = !document.requirement_count
+  const name = document.title ?? 'Untitled'
 
   return (
-    <li>
-      <Card className="flex flex-col gap-1">
-        <h3 className="font-bold">
-          <Link
-            to={`/documents/${document.id}`}
-            className="hover:text-accent hover:underline"
-          >
-            {document.title ?? 'Untitled'}
-          </Link>
-        </h3>
-        <p className="text-sm text-ink-faint">
-          <time dateTime={document.created_at}>{stored.toLocaleString()}</time>
-          {' · '}
-          <span>{chunks(document.chunk_count)}</span>
-        </p>
-
-        {document.source_url ? (
-          <p className="truncate text-sm">
-            <a
-              href={document.source_url}
-              target="_blank"
-              rel="noreferrer"
-              className="text-accent hover:underline"
+    <li className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate font-bold">
+            <Link
+              to={`/documents/${document.id}`}
+              className="hover:text-accent hover:underline"
             >
-              {document.source_url}
-            </a>
+              {name}
+            </Link>
+          </h3>
+          <p className="text-sm text-ink-faint">
+            {document.source_url ? hostOf(document.source_url) : 'uploaded'}
+            {' · '}
+            <time
+              dateTime={document.created_at}
+              title={new Date(document.created_at).toLocaleString()}
+            >
+              {ago(document.created_at)}
+            </time>
+            {' · '}
+            {requirements(document.requirement_count)}
           </p>
-        ) : null}
+        </div>
 
-        {/* A posting with no chunks is in the database and invisible to
-            retrieval, which is worth saying rather than leaving as a zero --
-            as a notice, not an error: nothing the reader did failed. */}
-        {document.chunk_count === 0 ? (
-          <Notice>No chunks: nothing about this posting can be retrieved.</Notice>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            icon={GitCompareArrowsIcon}
+            aria-label={`Match my CV with ${name}`}
+            disabled={actions.busy || !actions.resumeId}
+            onClick={actions.onMatch}
+          >
+            Match
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            icon={MessagesSquareIcon}
+            aria-label={`Practise an interview for ${name}`}
+            title={unread ? 'Its requirements have not been read yet' : undefined}
+            disabled={actions.busy || !actions.resumeId || unread}
+            onClick={actions.onPractise}
+          >
+            Practise
+          </Button>
+        </div>
+      </div>
 
-        {admin ? <DeletePosting document={document} onDeleted={onDeleted} /> : null}
-      </Card>
+      {actions.pending === 'match' ? <Thinking>Matching your CV…</Thinking> : null}
+      {actions.pending === 'practise' ? (
+        <Thinking>Preparing questions…</Thinking>
+      ) : null}
+      {actions.error ? <Alert>{actions.error.message}</Alert> : null}
+
+      {/* A posting with no chunks is in the database and invisible to
+          retrieval, which is worth saying rather than leaving as a zero --
+          as a notice, not an error: nothing the reader did failed. */}
+      {document.chunk_count === 0 ? (
+        <Notice>No chunks: nothing about this posting can be retrieved.</Notice>
+      ) : null}
+
+      {admin ? <DeletePosting document={document} onDeleted={onDeleted} /> : null}
     </li>
   )
 }
 
-/** The knowledge base, and the three ways into it (FR-1). */
+/** The three ways a posting comes in (FR-1), the address first. */
+function AddPanel(): ReactElement {
+  return (
+    <Card className="flex max-w-2xl flex-col gap-2">
+      <AddByUrl />
+
+      <details className="border-t border-line pt-3">
+        <summary className={SUMMARY}>…or upload a file</summary>
+        <AddByFile />
+      </details>
+
+      <details className="border-t border-line pt-3">
+        <summary className={SUMMARY}>…or paste the text</summary>
+        <AddByText />
+      </details>
+    </Card>
+  )
+}
+
+/**
+ * The knowledge base as a list you work from: each posting a row with Match and
+ * Practise right in it, and adding one behind a button -- open from the start
+ * while there is nothing to list.
+ */
 export function Documents(): ReactElement {
   const [shown, setShown] = useState(PAGE_SIZE)
   const documents = useDocuments(shown)
+  const listed = documents.data ?? []
   // A convenience, not a guard: the API refuses a non-administrator anyway.
   const admin = useSession().data?.is_admin === true
-  // The last deletion, said once over the list: the card just disappears, and
-  // a card that vanishes without a word reads as a glitch. Replaced by the next.
+  // The last deletion, said once over the list: the row just disappears, and
+  // a row that vanishes without a word reads as a glitch. Replaced by the next.
   const [deleted, setDeleted] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
+  const empty = documents.isSuccess && listed.length === 0
+  const panelOpen = adding || empty
+
+  // Only asked for once there is a row to act on: an empty base has nothing
+  // to match, and the request would be one more thing to wait for.
+  const resumes = useResumes(listed.length > 0)
+  const resumeId = newest(resumes.data ?? [])?.id
+  const match = useMatch()
+  const start = useStartInterview()
+  const navigate = useNavigate()
+  const busy = match.isPending || start.isPending
+
+  function actionsFor(document: Document): RowActions {
+    const matchHere = match.variables?.documentId === document.id
+    const startHere = start.variables?.documentId === document.id
+
+    return {
+      resumeId,
+      busy,
+      pending:
+        match.isPending && matchHere
+          ? 'match'
+          : start.isPending && startHere
+            ? 'practise'
+            : null,
+      error: (matchHere ? match.error : null) ?? (startHere ? start.error : null),
+      onMatch: () => {
+        if (resumeId) {
+          start.reset()
+          match.mutate(
+            { resumeId, documentId: document.id },
+            {
+              onSuccess: (result) => {
+                void navigate(`/matches/${result.id}`)
+              },
+            },
+          )
+        }
+      },
+      onPractise: () => {
+        if (resumeId) {
+          match.reset()
+          start.mutate(
+            { resumeId, documentId: document.id },
+            {
+              onSuccess: (interview) => {
+                void navigate(`/interviews/${interview.id}`)
+              },
+            },
+          )
+        }
+      },
+    }
+  }
 
   return (
     <>
-      <section aria-labelledby="add" className="flex flex-col gap-4">
-        <PageTitle>
-          <span id="add">Add a job posting</span>
-        </PageTitle>
-
-        <Card className="flex max-w-2xl flex-col gap-2">
-          <AddByUrl />
-
-          <details className="border-t border-line pt-3">
-            <summary className={SUMMARY}>…or upload a file</summary>
-            <AddByFile />
-          </details>
-
-          <details className="border-t border-line pt-3">
-            <summary className={SUMMARY}>…or paste the text</summary>
-            <AddByText />
-          </details>
-        </Card>
-      </section>
-
-      <section aria-labelledby="base" className="flex flex-col gap-4">
-        <div>
-          <PageTitle>
-            <span id="base">Knowledge base</span>
-          </PageTitle>
-          <Muted>
-            Shared by every account: postings added by anyone are listed here.
-          </Muted>
-        </div>
-
-        {deleted ? <Status>Posting deleted: {deleted}.</Status> : null}
-
-        {documents.isPending ? (
-          <Skeleton lines={4} label="Loading the knowledge base…" />
-        ) : null}
-        {documents.error ? (
-          <Alert
-            onRetry={() => {
-              void documents.refetch()
+      <PageHeader
+        title="Postings"
+        description="Shared by every account: postings added by anyone are listed here."
+        actions={
+          <Button
+            type="button"
+            icon={PlusIcon}
+            aria-expanded={panelOpen}
+            aria-controls="add-posting"
+            onClick={() => {
+              setAdding((open) => !open)
             }}
           >
-            {documents.error.message}
-          </Alert>
-        ) : null}
+            Add posting
+          </Button>
+        }
+      />
 
-        {documents.data?.length === 0 ? (
-          <EmptyState
-            icon={BriefcaseIcon}
-            title="The knowledge base is empty."
-            action={
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  window.document.getElementById('posting-url')?.focus()
-                }}
-              >
-                Add the first posting
-              </Button>
-            }
-          >
-            Add a job posting by its address, a file or pasted text.
-          </EmptyState>
-        ) : null}
+      {panelOpen ? (
+        <section id="add-posting" aria-label="Add a job posting">
+          <AddPanel />
+        </section>
+      ) : null}
 
-        <ul className="grid gap-3 sm:grid-cols-2">
-          {documents.data?.map((document) => (
-            <Posting
-              key={document.id}
-              document={document}
-              admin={admin}
-              onDeleted={setDeleted}
-            />
-          ))}
-        </ul>
+      {deleted ? <Status>Posting deleted: {deleted}.</Status> : null}
 
-        {/* A short page is the end of the listing: the route returns no total,
-            so this is how a caller learns there is nothing more. */}
-        {documents.data && documents.data.length >= shown ? (
-          shown >= MAX_PAGE_SIZE ? (
-            <Muted>The listing returns at most {MAX_PAGE_SIZE} postings.</Muted>
-          ) : (
-            <div className="flex">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  setShown((current) =>
-                    Math.min(current + PAGE_SIZE, MAX_PAGE_SIZE),
-                  )
-                }}
-              >
-                Load more
-              </Button>
-            </div>
-          )
-        ) : null}
-      </section>
+      {resumes.isSuccess && resumes.data.length === 0 ? (
+        <Notice>
+          Matching and practising use your resume.{' '}
+          <Link to="/resumes" className="text-accent underline underline-offset-2">
+            Add a resume first
+          </Link>
+          .
+        </Notice>
+      ) : null}
+
+      {documents.isPending ? (
+        <Skeleton lines={4} label="Loading the knowledge base…" />
+      ) : null}
+      {documents.error ? (
+        <Alert
+          onRetry={() => {
+            void documents.refetch()
+          }}
+        >
+          {documents.error.message}
+        </Alert>
+      ) : null}
+
+      {empty ? (
+        <EmptyState
+          icon={BriefcaseIcon}
+          title="The knowledge base is empty."
+          action={
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                window.document.getElementById('posting-url')?.focus()
+              }}
+            >
+              Add the first posting
+            </Button>
+          }
+        >
+          Add a job posting by its address, a file or pasted text.
+        </EmptyState>
+      ) : null}
+
+      {listed.length > 0 ? (
+        <Card>
+          <ul aria-label="Postings" className="flex flex-col divide-y divide-line">
+            {listed.map((document) => (
+              <PostingRow
+                key={document.id}
+                document={document}
+                admin={admin}
+                actions={actionsFor(document)}
+                onDeleted={setDeleted}
+              />
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+
+      {/* A short page is the end of the listing: the route returns no total,
+          so this is how a caller learns there is nothing more. */}
+      {documents.data && documents.data.length >= shown ? (
+        shown >= MAX_PAGE_SIZE ? (
+          <Muted>The listing returns at most {MAX_PAGE_SIZE} postings.</Muted>
+        ) : (
+          <div className="flex">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setShown((current) => Math.min(current + PAGE_SIZE, MAX_PAGE_SIZE))
+              }}
+            >
+              Load more
+            </Button>
+          </div>
+        )
+      ) : null}
     </>
   )
 }
