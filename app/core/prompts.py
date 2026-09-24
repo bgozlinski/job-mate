@@ -19,6 +19,12 @@ MATCH_SUGGESTIONS = "match-suggestions"
 REQUIREMENT_VERDICTS = "requirement-verdicts"
 """The prompt that decides, requirement by requirement, what a resume proves."""
 
+INTERVIEW_PLAN = "interview-plan"
+"""The prompt that words one interview question per requirement (FR-4)."""
+
+INTERVIEW_EVALUATE = "interview-evaluate"
+"""The prompt that judges an interview answer against the rubric (FR-4)."""
+
 PRODUCTION = "production"
 """
 The label a running application reads. A new version is written first and labelled
@@ -196,11 +202,84 @@ never answers sql and no rule about plurals will make it; a model reads the sent
 instead.
 """
 
+INTERVIEW_PLAN_TEMPLATE = """\
+You are preparing a job interview for one posting. Write one interview \
+question for each requirement listed below.
+
+The posting can be for any trade -- a kitchen, a warehouse, a workshop, a \
+care home, an office, a software team. Ask the way an interviewer from that \
+trade would.
+
+Rules:
+- Exactly one question per requirement, in the order given, with the \
+requirement copied exactly as written. Do not add, merge, reorder or leave \
+out requirements.
+- Ask about the requirement itself, the way the posting uses it: what the \
+work involves there, not a textbook definition.
+- Ask for experience, not for a yes or no: "Tell me about a time you..." or \
+"How did you..." rather than "Do you know...".
+- One question, one thing. No lists of sub-questions.
+- Do not assume the candidate has done it; the answer will show whether they \
+have.
+
+# Role
+{{role}}
+
+# Requirements
+{{requirements}}
+
+# Job posting
+{{posting}}
+"""
+"""
+The plan is decided once, up front (D-2), so the rule that matters is the first: the
+graph checks the requirements come back unchanged and in order, and refuses the plan
+otherwise.
+"""
+
+INTERVIEW_EVALUATE_TEMPLATE = """\
+You are judging one answer from a job interview.
+
+For each criterion below, decide whether the answer meets it and say why in \
+one sentence. Then give the candidate one tip: the single change that would \
+most improve this answer.
+
+Rules:
+- Answer once for every criterion, using its name exactly as written. Do not \
+add criteria or leave one out.
+- Judge the answer, not the candidate: a strong resume does not make a vague \
+answer concrete.
+- When in doubt, answer not met.
+- The tip is addressed to the candidate, one or two sentences. Never suggest \
+claiming experience the resume does not show.
+
+# Criteria
+{{criteria}}
+
+# Requirement being tested
+{{requirement}}
+
+# Question
+{{question}}
+
+# Answer
+{{answer}}
+
+# Candidate resume
+{{resume}}
+"""
+"""
+The criteria arrive as a variable rather than being written here: the list lives in
+app.services.interviewing, where the score is counted from it.
+"""
+
 TEMPLATES: Mapping[str, str] = {
     JOB_POST_SKILLS: JOB_POST_SKILLS_TEMPLATE,
     RESUME_SKILLS: RESUME_SKILLS_TEMPLATE,
     MATCH_SUGGESTIONS: MATCH_SUGGESTIONS_TEMPLATE,
     REQUIREMENT_VERDICTS: REQUIREMENT_VERDICTS_TEMPLATE,
+    INTERVIEW_PLAN: INTERVIEW_PLAN_TEMPLATE,
+    INTERVIEW_EVALUATE: INTERVIEW_EVALUATE_TEMPLATE,
 }
 """
 Every prompt the application ships with, by name. The names are the ones a prompt server
