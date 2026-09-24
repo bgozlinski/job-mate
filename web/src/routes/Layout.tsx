@@ -9,6 +9,7 @@ const TABS = [
   { to: '/resumes', label: 'Resumes' },
   { to: '/match', label: 'Match' },
   { to: '/matches', label: 'History' },
+  { to: '/interview', label: 'Interview' },
 ]
 
 /**
