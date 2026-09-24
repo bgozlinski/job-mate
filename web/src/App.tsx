@@ -10,6 +10,7 @@ import { InterviewSession } from './routes/InterviewSession'
 import { Match } from './routes/Match'
 import { Layout } from './routes/Layout'
 import { Login } from './routes/Login'
+import { Posting } from './routes/Posting'
 import { Resumes } from './routes/Resumes'
 
 /**
@@ -29,6 +30,7 @@ export function App(): ReactElement {
               here. */}
           <Route index element={<Navigate to="/documents" replace />} />
           <Route path="/documents" element={<Documents />} />
+          <Route path="/documents/:documentId" element={<Posting />} />
           <Route path="/resumes" element={<Resumes />} />
           <Route path="/match" element={<Match />} />
           <Route path="/matches" element={<History />} />

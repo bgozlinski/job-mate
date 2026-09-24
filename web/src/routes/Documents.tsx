@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ReactElement, SyntheticEvent } from 'react'
+import { Link, useNavigate } from 'react-router'
 
 import type { Document, Ingested } from '../api/documents'
 import {
@@ -12,7 +13,8 @@ import {
   useIngestUrl,
 } from '../api/documents'
 import { useSession } from '../auth/session'
-import { Alert, Button, Card, Field, Muted, PageTitle, Status } from '../ui'
+import { Alert, Button, Card, Field, Muted, PageTitle } from '../ui'
+import type { Arrival } from './Posting'
 
 const MAX_CONTENT_LENGTH = 200_000
 /** Mirrors MAX_CONTENT_LENGTH in app/schemas/document.py, so a paste that
@@ -27,29 +29,25 @@ function chunks(count: number): string {
   return count === 1 ? '1 chunk' : `${String(count)} chunks`
 }
 
-/** What came of an ingestion: a new posting, or the one it duplicates. */
-function Outcome({
-  result,
-  error,
-}: {
-  result: Ingested | undefined
-  error: Error | null
-}): ReactElement | null {
-  if (error) {
-    return <Alert>{error.message}</Alert>
-  }
+/**
+ * Open the posting an ingestion stored, or the one it turned out to duplicate.
+ *
+ * The next step after adding a posting is nearly always matching a CV against
+ * it, and that happens on the posting's page. Whether it was already there
+ * (FR-1) goes along, so that page can say nothing new was stored.
+ */
+function useOpenPosting(): (result: Ingested) => void {
+  const navigate = useNavigate()
 
-  if (!result) {
-    return null
+  return (result: Ingested) => {
+    const arrival: Arrival = { duplicate: result.duplicate }
+    void navigate(`/documents/${result.document.id}`, { state: arrival })
   }
+}
 
-  return (
-    <Status>
-      {result.duplicate
-        ? `Already in the knowledge base as ${result.document.id}.`
-        : `Stored as ${result.document.id} (${chunks(result.document.chunk_count)}).`}
-    </Status>
-  )
+/** Why an ingestion failed, in the API's own words. */
+function Failure({ error }: { error: Error | null }): ReactElement | null {
+  return error ? <Alert>{error.message}</Alert> : null
 }
 
 /** The address of a posting: the one way in that asks nothing of the user
@@ -57,14 +55,11 @@ function Outcome({
 function AddByUrl(): ReactElement {
   const [url, setUrl] = useState('')
   const ingest = useIngestUrl()
+  const open = useOpenPosting()
 
   function onSubmit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>): void {
     event.preventDefault()
-    ingest.mutate(url.trim(), {
-      onSuccess: () => {
-        setUrl('')
-      },
-    })
+    ingest.mutate(url.trim(), { onSuccess: open })
   }
 
   return (
@@ -91,7 +86,7 @@ function AddByUrl(): ReactElement {
         </Button>
       </div>
 
-      <Outcome result={ingest.data} error={ingest.error} />
+      <Failure error={ingest.error} />
     </form>
   )
 }
@@ -102,6 +97,7 @@ function AddByFile(): ReactElement {
   const [generation, setGeneration] = useState(0)
   const [file, setFile] = useState<File | null>(null)
   const ingest = useIngestFile()
+  const open = useOpenPosting()
 
   function onSubmit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>): void {
     event.preventDefault()
@@ -111,9 +107,10 @@ function AddByFile(): ReactElement {
     }
 
     ingest.mutate(file, {
-      onSuccess: () => {
+      onSuccess: (result) => {
         setFile(null)
         setGeneration((current) => current + 1)
+        open(result)
       },
     })
   }
@@ -149,7 +146,7 @@ function AddByFile(): ReactElement {
         </Button>
       </div>
 
-      <Outcome result={ingest.data} error={ingest.error} />
+      <Failure error={ingest.error} />
     </form>
   )
 }
@@ -157,6 +154,7 @@ function AddByFile(): ReactElement {
 function AddByText(): ReactElement {
   const [content, setContent] = useState('')
   const ingest = useIngestText()
+  const open = useOpenPosting()
   const tooLong = content.length > MAX_CONTENT_LENGTH
 
   function onSubmit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>): void {
@@ -166,11 +164,7 @@ function AddByText(): ReactElement {
       return
     }
 
-    ingest.mutate(content, {
-      onSuccess: () => {
-        setContent('')
-      },
-    })
+    ingest.mutate(content, { onSuccess: open })
   }
 
   return (
@@ -203,7 +197,7 @@ function AddByText(): ReactElement {
         </Button>
       </div>
 
-      <Outcome result={ingest.data} error={ingest.error} />
+      <Failure error={ingest.error} />
     </form>
   )
 }
@@ -293,7 +287,14 @@ function Posting({
   return (
     <li>
       <Card className="flex flex-col gap-1">
-        <h3 className="font-medium">{document.title ?? 'Untitled'}</h3>
+        <h3 className="font-bold">
+          <Link
+            to={`/documents/${document.id}`}
+            className="hover:text-accent hover:underline"
+          >
+            {document.title ?? 'Untitled'}
+          </Link>
+        </h3>
         <p className="text-sm text-ink-faint">
           <time dateTime={document.created_at}>{stored.toLocaleString()}</time>
           {' · '}

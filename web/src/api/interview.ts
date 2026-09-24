@@ -72,6 +72,32 @@ export function useStartInterview(): UseMutationResult<Interview, Error, Pairing
 export const INTERVIEWS_PAGE_SIZE = 20
 export const MAX_INTERVIEWS_PAGE_SIZE = 100
 
+/**
+ * The caller's latest interviews on one posting, for that posting's page.
+ *
+ * Under the list key, so starting, answering and finishing -- which mark every
+ * list stale -- refresh this one too.
+ */
+export function usePostingInterviews(
+  documentId: string,
+  limit: number,
+): UseQueryResult<InterviewSummary[]> {
+  return useQuery({
+    queryKey: [...listsKey, 'posting', documentId],
+    queryFn: async () => {
+      const { data, error } = await api.GET('/sessions', {
+        params: { query: { limit, offset: 0, document_id: documentId } },
+      })
+
+      if (!data) {
+        throw new Error(detailOf(error) ?? 'Could not read your interviews')
+      }
+
+      return data
+    },
+  })
+}
+
 /** The caller's own interviews, newest first, without their messages. */
 export function useInterviews(shown: number): UseQueryResult<InterviewSummary[]> {
   return useQuery({

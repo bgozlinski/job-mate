@@ -2,13 +2,14 @@ import type { QueryClient } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
-import { MemoryRouter } from 'react-router'
+import { Link, MemoryRouter, Route, Routes, useLocation, useParams } from 'react-router'
 import { expect, test } from 'vitest'
 
 import { sessionKey } from '../auth/session'
 import { Providers, createQueryClient } from '../providers'
 import { server } from '../test/server'
 import { Documents } from './Documents'
+import type { Arrival } from './Posting'
 
 interface Stored {
   id: string
@@ -47,13 +48,36 @@ function show({ admin = false }: { admin?: boolean } = {}): QueryClient {
 
   render(
     <Providers client={client}>
-      <MemoryRouter>
-        <Documents />
+      <MemoryRouter initialEntries={['/documents']}>
+        <Routes>
+          <Route path="/documents" element={<Documents />} />
+          <Route path="/documents/:documentId" element={<Opened />} />
+        </Routes>
       </MemoryRouter>
     </Providers>,
   )
 
   return client
+}
+
+/**
+ * Stands in for the posting's page: it says which posting was opened and
+ * whether the ingestion reported it as already there. The page itself has
+ * its own tests.
+ */
+function Opened() {
+  const { documentId } = useParams()
+  const arrival = useLocation().state as Arrival | null
+
+  return (
+    <>
+      <p>
+        Opened {documentId}
+        {arrival?.duplicate ? ' (already there)' : ''}
+      </p>
+      <Link to="/documents">Back</Link>
+    </>
+  )
 }
 
 function listing(...postings: Stored[]): void {
@@ -89,7 +113,7 @@ test('a posting with no chunks is called out', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent('No chunks')
 })
 
-test('a posting is read from its address', async () => {
+test('a posting is read from its address and then opened', async () => {
   const asked: string[] = []
   listing()
   server.use(
@@ -108,7 +132,8 @@ test('a posting is read from its address', async () => {
   )
   await userEvent.click(screen.getByRole('button', { name: 'Read the posting' }))
 
-  expect(await screen.findByRole('status')).toHaveTextContent('Stored as 01a0-posting')
+  // Opened rather than reported: matching a CV against it happens on its page.
+  expect(await screen.findByText('Opened 01a0-posting')).toBeInTheDocument()
   expect(asked).toEqual(['https://justjoin.it/job-offer/dcv-python'])
 })
 
@@ -128,9 +153,11 @@ test('a posting already in the base is reported as such, not as a failure', asyn
   )
   await userEvent.click(screen.getByRole('button', { name: 'Read the posting' }))
 
-  expect(await screen.findByRole('status')).toHaveTextContent(
-    'Already in the knowledge base',
-  )
+  // The existing posting is opened, and told it was already there so its page
+  // can say that nothing new was stored.
+  expect(
+    await screen.findByText('Opened 01a0-posting (already there)'),
+  ).toBeInTheDocument()
 })
 
 test('a refused address says why, in the API’s own words', async () => {
@@ -159,7 +186,7 @@ test('a refused address says why, in the API’s own words', async () => {
   )
 })
 
-test('a stored posting appears in the listing without a reload', async () => {
+test('a stored posting is in the listing on the way back, without a reload', async () => {
   let stored = false
   server.use(
     http.get('/api/documents', () => HttpResponse.json(stored ? [posting()] : [])),
@@ -173,6 +200,7 @@ test('a stored posting appears in the listing without a reload', async () => {
   show()
   await userEvent.type(await screen.findByLabelText('Job posting URL'), 'https://x.test/1')
   await userEvent.click(screen.getByRole('button', { name: 'Read the posting' }))
+  await userEvent.click(await screen.findByRole('link', { name: 'Back' }))
 
   expect(
     await screen.findByRole('heading', { name: 'Python Developer — DCV Technologies' }),

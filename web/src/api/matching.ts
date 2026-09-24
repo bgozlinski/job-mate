@@ -71,6 +71,32 @@ export function useMatches(shown: number): UseQueryResult<MatchSummary[]> {
   })
 }
 
+/** How many of a posting's own results its page lists before "see all". */
+export const PER_POSTING = 5
+
+/**
+ * The caller's latest matches against one posting, for that posting's page.
+ *
+ * Under matchesKey, so a new match -- which invalidates the whole prefix --
+ * shows up here too.
+ */
+export function usePostingMatches(documentId: string): UseQueryResult<MatchSummary[]> {
+  return useQuery({
+    queryKey: [...matchesKey, 'posting', documentId],
+    queryFn: async () => {
+      const { data, error } = await api.GET('/matches', {
+        params: { query: { limit: PER_POSTING, offset: 0, document_id: documentId } },
+      })
+
+      if (!data) {
+        throw new Error(detailOf(error) ?? 'Could not read your matches')
+      }
+
+      return data
+    },
+  })
+}
+
 /** One stored match in full, including what the model was shown. */
 export function useMatchDetail(id: string): UseQueryResult<Match> {
   return useQuery({
