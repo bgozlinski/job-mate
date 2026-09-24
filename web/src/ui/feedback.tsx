@@ -2,6 +2,7 @@ import type { ReactElement, ReactNode } from 'react'
 import {
   CircleCheckIcon,
   InboxIcon,
+  InfoIcon,
   LoaderCircleIcon,
   TriangleAlertIcon,
 } from 'lucide-react'
@@ -12,14 +13,50 @@ import type { LucideIcon } from 'lucide-react'
  *
  * Red, but never only red: the icon and the sentence say it is an error too,
  * so it reads as one to someone who cannot tell the colour apart.
+ *
+ * onRetry is for a read that failed -- a list that did not load -- where the
+ * way out is asking again, not reloading the whole page. A failed action
+ * leaves it out: the person repeats the action itself.
  */
-export function Alert({ children }: { children: ReactNode }): ReactElement {
+export function Alert({
+  children,
+  onRetry,
+}: {
+  children: ReactNode
+  onRetry?: () => void
+}): ReactElement {
   return (
     <p
       role="alert"
       className="flex items-start gap-2 rounded-xl bg-danger-soft px-3 py-2.5 text-sm text-danger-ink"
     >
       <TriangleAlertIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+      <span className="flex-1">{children}</span>
+      {onRetry ? (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="shrink-0 font-semibold underline underline-offset-2 hover:no-underline"
+        >
+          Try again
+        </button>
+      ) : null}
+    </p>
+  )
+}
+
+/**
+ * Something worth knowing that is not a failure: a step to take first, a
+ * quirk of what is on screen.
+ *
+ * Neutral on purpose, because red has to keep meaning "this went wrong"; and
+ * no role="alert", because nothing here is urgent enough to interrupt a
+ * screen reader mid-sentence. ink-soft on sunken: 6.66:1 light, 11.13:1 dark.
+ */
+export function Notice({ children }: { children: ReactNode }): ReactElement {
+  return (
+    <p className="flex items-start gap-2 rounded-xl bg-sunken px-3 py-2.5 text-sm text-ink-soft">
+      <InfoIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
       <span>{children}</span>
     </p>
   )
