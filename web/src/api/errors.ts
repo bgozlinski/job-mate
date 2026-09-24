@@ -39,3 +39,27 @@ export function detailOf(error: unknown): string | null {
 
   return null
 }
+
+/**
+ * Say why a request that spends money did not happen, in terms the person can
+ * act on.
+ *
+ * The rate limit is the one failure worth adding to: the API says "Too many
+ * requests" and puts the wait in a header, and a message without it leaves
+ * the user pressing the button to find out.
+ */
+export function reasonFor(error: unknown, response: Response, fallback: string): string {
+  const detail = detailOf(error) ?? `${fallback} (${String(response.status)})`
+
+  if (response.status !== 429) {
+    return detail
+  }
+
+  const retryAfter = Number(response.headers.get('retry-after'))
+
+  if (!Number.isFinite(retryAfter) || retryAfter <= 0) {
+    return detail
+  }
+
+  return `${detail}. Try again in ${String(Math.ceil(retryAfter / 60))} minutes.`
+}

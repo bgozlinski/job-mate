@@ -4,6 +4,8 @@ import { Navigate, Route, Routes } from 'react-router'
 import { RequireAuth } from './auth/RequireAuth'
 import { Documents } from './routes/Documents'
 import { History, MatchDetail } from './routes/History'
+import { Interview } from './routes/Interview'
+import { InterviewSession } from './routes/InterviewSession'
 import { Match } from './routes/Match'
 import { Layout } from './routes/Layout'
 import { Login } from './routes/Login'
@@ -30,6 +32,8 @@ export function App(): ReactElement {
           <Route path="/match" element={<Match />} />
           <Route path="/matches" element={<History />} />
           <Route path="/matches/:matchId" element={<MatchDetail />} />
+          <Route path="/interview" element={<Interview />} />
+          <Route path="/interviews/:sessionId" element={<InterviewSession />} />
         </Route>
       </Route>
     </Routes>

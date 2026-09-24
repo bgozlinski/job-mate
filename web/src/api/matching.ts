@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
 
 import { api } from './client'
-import { detailOf } from './errors'
+import { detailOf, reasonFor } from './errors'
 import type { components } from './schema'
 
 export type Match = components['schemas']['MatchRead']
@@ -37,7 +37,7 @@ export function useMatch(): UseMutationResult<Match, Error, Pairing> {
       })
 
       if (!data) {
-        throw new Error(reasonFor(error, response))
+        throw new Error(reasonFor(error, response, 'Could not match'))
       }
 
       return data
@@ -48,29 +48,6 @@ export function useMatch(): UseMutationResult<Match, Error, Pairing> {
       await queryClient.invalidateQueries({ queryKey: matchesKey })
     },
   })
-}
-
-/**
- * Say why a match did not happen, in terms the person can act on.
- *
- * The rate limit is the one failure worth adding to: the API says "Too many
- * requests" and puts the wait in a header, and a message without it leaves
- * the user pressing the button to find out.
- */
-function reasonFor(error: unknown, response: Response): string {
-  const detail = detailOf(error) ?? `Could not match (${String(response.status)})`
-
-  if (response.status !== 429) {
-    return detail
-  }
-
-  const retryAfter = Number(response.headers.get('retry-after'))
-
-  if (!Number.isFinite(retryAfter) || retryAfter <= 0) {
-    return detail
-  }
-
-  return `${detail}. Try again in ${String(Math.ceil(retryAfter / 60))} minutes.`
 }
 
 /** The caller's own past matches, newest first (FR-2). */
