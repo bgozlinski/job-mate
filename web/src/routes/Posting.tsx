@@ -258,7 +258,10 @@ function YourMatches({ documentId }: { documentId: string }): ReactElement {
               </li>
             ))}
           </ul>
-          <Link to="/matches" className="text-xs text-ink-soft hover:text-accent">
+          <Link
+            to="/history?kind=matches"
+            className="text-xs text-ink-soft hover:text-accent"
+          >
             See all in History
           </Link>
         </>
@@ -303,7 +306,10 @@ function YourInterviews({ documentId }: { documentId: string }): ReactElement {
               </li>
             ))}
           </ul>
-          <Link to="/interviews" className="text-xs text-ink-soft hover:text-accent">
+          <Link
+            to="/history?kind=interviews"
+            className="text-xs text-ink-soft hover:text-accent"
+          >
             See all in History
           </Link>
         </>

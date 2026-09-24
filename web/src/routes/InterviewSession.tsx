@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ReactElement, SyntheticEvent } from 'react'
-import { Link, useParams } from 'react-router'
+import { useParams } from 'react-router'
 
 import {
   openQuestion,
@@ -10,6 +10,7 @@ import {
 } from '../api/interview'
 import type { Interview, InterviewMessage } from '../api/interview'
 import { Alert, Button, Card, Chip, Field, Meter, Muted } from '../ui'
+import { BackToPosting } from './MatchDetail'
 import { percentage } from './MatchResult'
 
 const CRITERIA: Record<string, string> = {
@@ -229,11 +230,10 @@ export function InterviewSession(): ReactElement {
 
   return (
     <>
-      <p>
-        <Link to="/interviews" className="text-sm text-ink-soft hover:text-accent">
-          ← Back to your interviews
-        </Link>
-      </p>
+      <BackToPosting
+        documentId={data?.document_id ?? null}
+        title={data?.document_title ?? null}
+      />
 
       {interview.isPending ? <Muted>Loading…</Muted> : null}
       {interview.error ? <Alert>{interview.error.message}</Alert> : null}
