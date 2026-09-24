@@ -1,5 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
+import type {
+  QueryClient,
+  UseMutationResult,
+  UseQueryResult,
+} from '@tanstack/react-query'
 
 import { api } from './client'
 import { detailOf, reasonFor } from './errors'
@@ -12,8 +16,22 @@ export type InterviewMessage = components['schemas']['MessageRead']
 
 export const interviewsKey = ['interviews'] as const
 
+const listsKey = [...interviewsKey, 'list'] as const
+
 function interviewKey(id: string): readonly string[] {
   return [...interviewsKey, 'detail', id]
+}
+
+/**
+ * Store what the API sent back for one interview, and mark every list stale.
+ *
+ * A list row carries the status and the score, so starting, answering the
+ * last question and finishing all change it. The interview itself is not read
+ * again: the response already is its new state.
+ */
+async function remember(queryClient: QueryClient, interview: Interview): Promise<void> {
+  queryClient.setQueryData(interviewKey(interview.id), interview)
+  await queryClient.invalidateQueries({ queryKey: listsKey })
 }
 
 /**
@@ -46,13 +64,30 @@ export function useStartInterview(): UseMutationResult<Interview, Error, Pairing
       return data
     },
     onSuccess: async (interview) => {
-      queryClient.setQueryData(interviewKey(interview.id), interview)
-      // Any list of interviews is now a row short; the one just stored is not
-      // out of date, so it is left alone rather than read again.
-      await queryClient.invalidateQueries({
-        queryKey: interviewsKey,
-        predicate: (query) => query.queryKey[1] !== 'detail',
+      await remember(queryClient, interview)
+    },
+  })
+}
+
+export const INTERVIEWS_PAGE_SIZE = 20
+export const MAX_INTERVIEWS_PAGE_SIZE = 100
+
+/** The caller's own interviews, newest first, without their messages. */
+export function useInterviews(shown: number): UseQueryResult<InterviewSummary[]> {
+  return useQuery({
+    queryKey: [...listsKey, shown],
+    queryFn: async () => {
+      const { data, error } = await api.GET('/sessions', {
+        // From the top with a growing limit, as the match history does: a new
+        // interview lands above the page, and offset paging would repeat a row.
+        params: { query: { limit: shown, offset: 0 } },
       })
+
+      if (!data) {
+        throw new Error(detailOf(error) ?? 'Could not read your interviews')
+      }
+
+      return data
     },
   })
 }
@@ -105,8 +140,8 @@ export function useAnswer(id: string): UseMutationResult<Interview, Error, Answe
 
       return data
     },
-    onSuccess: (interview) => {
-      queryClient.setQueryData(interviewKey(id), interview)
+    onSuccess: async (interview) => {
+      await remember(queryClient, interview)
     },
     // A conflict means the session moved on without this page -- answered
     // in another tab, or finished. Reading it again shows where it is now.
@@ -134,8 +169,8 @@ export function useFinishInterview(id: string): UseMutationResult<Interview, Err
 
       return data
     },
-    onSuccess: (interview) => {
-      queryClient.setQueryData(interviewKey(id), interview)
+    onSuccess: async (interview) => {
+      await remember(queryClient, interview)
     },
   })
 }

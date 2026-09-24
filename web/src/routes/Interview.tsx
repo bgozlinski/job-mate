@@ -44,12 +44,17 @@ export function Interview(): ReactElement {
 
   return (
     <>
-      <div>
-        <PageTitle>Practise an interview</PageTitle>
-        <Muted>
-          Questions come from the posting&apos;s requirements, the ones your resume
-          does not show first. Each answer is judged and gets one tip.
-        </Muted>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <PageTitle>Practise an interview</PageTitle>
+          <Muted>
+            Questions come from the posting&apos;s requirements, the ones your resume
+            does not show first. Each answer is judged and gets one tip.
+          </Muted>
+        </div>
+        <Link to="/interviews" className="text-sm text-accent hover:underline">
+          Your past interviews
+        </Link>
       </div>
 
       {noResumes ? (

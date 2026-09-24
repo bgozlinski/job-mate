@@ -230,8 +230,8 @@ export function InterviewSession(): ReactElement {
   return (
     <>
       <p>
-        <Link to="/interview" className="text-sm text-ink-soft hover:text-accent">
-          ← Start another interview
+        <Link to="/interviews" className="text-sm text-ink-soft hover:text-accent">
+          ← Back to your interviews
         </Link>
       </p>
 
