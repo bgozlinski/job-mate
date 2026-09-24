@@ -1,7 +1,40 @@
 import { render, screen } from '@testing-library/react'
-import { expect, test } from 'vitest'
+import userEvent from '@testing-library/user-event'
+import { expect, test, vi } from 'vitest'
 
-import { Button, EmptyState, PageHeader, Skeleton, Spinner, Thinking } from '.'
+import {
+  Alert,
+  Button,
+  EmptyState,
+  Notice,
+  PageHeader,
+  Skeleton,
+  Spinner,
+  Thinking,
+} from '.'
+
+test('a notice is read, not announced as an error', () => {
+  render(<Notice>No resumes yet — add one first.</Notice>)
+
+  expect(screen.getByText('No resumes yet — add one first.')).toBeInTheDocument()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+test('a failed read can be asked again from the alert', async () => {
+  const retry = vi.fn()
+
+  render(<Alert onRetry={retry}>Could not read the knowledge base</Alert>)
+  await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+  expect(screen.getByRole('alert')).toHaveTextContent('Could not read the knowledge base')
+  expect(retry).toHaveBeenCalledOnce()
+})
+
+test('a failed action offers no retry: the action itself is repeated', () => {
+  render(<Alert>The upload was refused</Alert>)
+
+  expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+})
 
 test('a page header names the page and carries its actions', () => {
   render(
