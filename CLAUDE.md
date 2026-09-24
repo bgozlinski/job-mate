@@ -49,9 +49,8 @@ migrations, ingestion or tokens — that section is the only record of traps tha
     and a history of sessions. API under `/sessions`, screens under `/interview` and `/interviews`. Decisions
     D-1…D-5 are at FR-4 in the spec; the design is
     `docs/superpowers/specs/2026-09-24-stage4-mock-interview-design.md`.
-- **Next:** nothing scheduled. Still open from stage 4: a manual browser check of a real interview (rebuild
-  the stack, run `scripts.seed_prompts`, needs an Anthropic key). Stage 6 (bonus: voice, salary trends) is
-  optional — ask before starting it.
+- **Next:** nothing scheduled. Stage 4 was checked by hand in the browser on 2026-09-24. Stage 6 (bonus:
+  voice, salary trends) is optional — ask before starting it.
 - **Removed:** FR-7 automated harvesting (Scrapy) — built and reverted on 2026-09-10; the spec says why.
   Don't reintroduce crawling: NFR-5 allows one fetch per explicit user action, nothing more.
 
