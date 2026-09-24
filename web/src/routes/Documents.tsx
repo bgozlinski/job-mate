@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ReactElement, SyntheticEvent } from 'react'
+import { BriefcaseIcon } from 'lucide-react'
 import { Link, useNavigate } from 'react-router'
 
 import type { Document, Ingested } from '../api/documents'
@@ -13,7 +14,19 @@ import {
   useIngestUrl,
 } from '../api/documents'
 import { useSession } from '../auth/session'
-import { Alert, Button, Card, Field, Muted, PageTitle } from '../ui'
+import {
+  Alert,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Muted,
+  Notice,
+  PageTitle,
+  Skeleton,
+  Status,
+  Thinking,
+} from '../ui'
 import type { Arrival } from './Posting'
 
 const MAX_CONTENT_LENGTH = 200_000
@@ -80,10 +93,13 @@ function AddByUrl(): ReactElement {
         )}
       </Field>
 
-      <div className="flex">
+      <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" disabled={ingest.isPending}>
-          {ingest.isPending ? 'Reading the posting…' : 'Read the posting'}
+          Read the posting
         </Button>
+        {/* Fetching the page, reading its requirements and embedding it
+            takes seconds: a sentence, not a changed label. */}
+        {ingest.isPending ? <Thinking>Reading the posting…</Thinking> : null}
       </div>
 
       <Failure error={ingest.error} />
@@ -140,10 +156,11 @@ function AddByFile(): ReactElement {
         )}
       </Field>
 
-      <div className="flex">
+      <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" disabled={ingest.isPending || !file}>
-          {ingest.isPending ? 'Reading the file…' : 'Upload'}
+          Upload
         </Button>
+        {ingest.isPending ? <Thinking>Reading the file…</Thinking> : null}
       </div>
 
       <Failure error={ingest.error} />
@@ -191,10 +208,11 @@ function AddByText(): ReactElement {
         </Alert>
       ) : null}
 
-      <div className="flex">
+      <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" disabled={ingest.isPending || tooLong}>
-          {ingest.isPending ? 'Storing…' : 'Store'}
+          Store
         </Button>
+        {ingest.isPending ? <Thinking>Storing the posting…</Thinking> : null}
       </div>
 
       <Failure error={ingest.error} />
@@ -207,7 +225,13 @@ function AddByText(): ReactElement {
  * than window.confirm: the second step says what is lost, and it can be
  * tested and styled like everything else on the page.
  */
-function DeletePosting({ document }: { document: Document }): ReactElement {
+function DeletePosting({
+  document,
+  onDeleted,
+}: {
+  document: Document
+  onDeleted: (name: string) => void
+}): ReactElement {
   const [confirming, setConfirming] = useState(false)
   const remove = useDeleteDocument()
   const name = document.title ?? 'Untitled'
@@ -252,6 +276,9 @@ function DeletePosting({ document }: { document: Document }): ReactElement {
           disabled={remove.isPending}
           onClick={() => {
             remove.mutate(document.id, {
+              onSuccess: () => {
+                onDeleted(name)
+              },
               onSettled: () => {
                 setConfirming(false)
               },
@@ -278,9 +305,11 @@ function DeletePosting({ document }: { document: Document }): ReactElement {
 function Posting({
   document,
   admin,
+  onDeleted,
 }: {
   document: Document
   admin: boolean
+  onDeleted: (name: string) => void
 }): ReactElement {
   const stored = new Date(document.created_at)
 
@@ -315,12 +344,13 @@ function Posting({
         ) : null}
 
         {/* A posting with no chunks is in the database and invisible to
-            retrieval, which is worth saying rather than leaving as a zero. */}
+            retrieval, which is worth saying rather than leaving as a zero --
+            as a notice, not an error: nothing the reader did failed. */}
         {document.chunk_count === 0 ? (
-          <Alert>No chunks: nothing about this posting can be retrieved.</Alert>
+          <Notice>No chunks: nothing about this posting can be retrieved.</Notice>
         ) : null}
 
-        {admin ? <DeletePosting document={document} /> : null}
+        {admin ? <DeletePosting document={document} onDeleted={onDeleted} /> : null}
       </Card>
     </li>
   )
@@ -332,6 +362,9 @@ export function Documents(): ReactElement {
   const documents = useDocuments(shown)
   // A convenience, not a guard: the API refuses a non-administrator anyway.
   const admin = useSession().data?.is_admin === true
+  // The last deletion, said once over the list: the card just disappears, and
+  // a card that vanishes without a word reads as a glitch. Replaced by the next.
+  const [deleted, setDeleted] = useState<string | null>(null)
 
   return (
     <>
@@ -365,16 +398,50 @@ export function Documents(): ReactElement {
           </Muted>
         </div>
 
-        {documents.isPending ? <Muted>Loading…</Muted> : null}
-        {documents.error ? <Alert>{documents.error.message}</Alert> : null}
+        {deleted ? <Status>Posting deleted: {deleted}.</Status> : null}
+
+        {documents.isPending ? (
+          <Skeleton lines={4} label="Loading the knowledge base…" />
+        ) : null}
+        {documents.error ? (
+          <Alert
+            onRetry={() => {
+              void documents.refetch()
+            }}
+          >
+            {documents.error.message}
+          </Alert>
+        ) : null}
 
         {documents.data?.length === 0 ? (
-          <Muted>Nothing in the knowledge base yet.</Muted>
+          <EmptyState
+            icon={BriefcaseIcon}
+            title="The knowledge base is empty."
+            action={
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  window.document.getElementById('posting-url')?.focus()
+                }}
+              >
+                Add the first posting
+              </Button>
+            }
+          >
+            Add a job posting by its address, a file or pasted text.
+          </EmptyState>
         ) : null}
 
         <ul className="grid gap-3 sm:grid-cols-2">
           {documents.data?.map((document) => (
-            <Posting key={document.id} document={document} admin={admin} />
+            <Posting
+              key={document.id}
+              document={document}
+              admin={admin}
+              onDeleted={setDeleted}
+            />
           ))}
         </ul>
 

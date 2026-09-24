@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ReactElement, SyntheticEvent } from 'react'
+import { FileTextIcon } from 'lucide-react'
 
 import { saveFile } from '../api/download'
 import type { ExportFormat, Resume } from '../api/resumes'
@@ -12,7 +13,18 @@ import {
   useResumes,
   useUploadResume,
 } from '../api/resumes'
-import { Alert, Button, Card, Field, Muted, PageTitle } from '../ui'
+import {
+  Alert,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Muted,
+  PageTitle,
+  Skeleton,
+  Status,
+  Thinking,
+} from '../ui'
 
 const UPLOAD_TYPES = '.pdf,.docx,.txt,.md'
 
@@ -117,10 +129,13 @@ function AddByFile(): ReactElement {
         onChange={setTargetRole}
       />
 
-      <div className="flex">
+      <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" disabled={upload.isPending || !file}>
-          {upload.isPending ? 'Reading the resume…' : 'Upload'}
+          Upload
         </Button>
+        {/* Reading a file and the skills in it takes a model call: seconds,
+            not a blink, so it gets a sentence rather than a changed label. */}
+        {upload.isPending ? <Thinking>Reading the resume…</Thinking> : null}
       </div>
 
       {upload.error ? <Alert>{upload.error.message}</Alert> : null}
@@ -182,10 +197,11 @@ function AddByText(): ReactElement {
         </Alert>
       ) : null}
 
-      <div className="flex">
+      <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" disabled={create.isPending || tooLong}>
-          {create.isPending ? 'Storing…' : 'Save'}
+          Save
         </Button>
+        {create.isPending ? <Thinking>Saving your resume…</Thinking> : null}
       </div>
 
       {create.error ? <Alert>{create.error.message}</Alert> : null}
@@ -239,7 +255,13 @@ function Download({ resume, name }: { resume: Resume; name: string }): ReactElem
   )
 }
 
-function Stored({ resume }: { resume: Resume }): ReactElement {
+function Stored({
+  resume,
+  onDeleted,
+}: {
+  resume: Resume
+  onDeleted: (name: string) => void
+}): ReactElement {
   const [confirming, setConfirming] = useState(false)
   const remove = useDeleteResume()
   const created = new Date(resume.created_at)
@@ -281,7 +303,11 @@ function Stored({ resume }: { resume: Resume }): ReactElement {
                 variant="danger"
                 disabled={remove.isPending}
                 onClick={() => {
-                  remove.mutate(resume.id)
+                  remove.mutate(resume.id, {
+                    onSuccess: () => {
+                      onDeleted(name)
+                    },
+                  })
                 }}
               >
                 {remove.isPending ? 'Deleting…' : `Really delete ${name}`}
@@ -315,9 +341,19 @@ function Stored({ resume }: { resume: Resume }): ReactElement {
   )
 }
 
+/** Put the cursor in the file picker: the first step of adding a resume. */
+function focusUpload(): void {
+  document
+    .querySelector<HTMLInputElement>('form[aria-label="Upload a resume"] input[type="file"]')
+    ?.focus()
+}
+
 /** The caller's own resumes, and the two ways to add one (FR-2). */
 export function Resumes(): ReactElement {
   const resumes = useResumes()
+  // The last deletion, said once over the list: the row just disappears, and
+  // a row that vanishes without a word reads as a glitch. Replaced by the next.
+  const [deleted, setDeleted] = useState<string | null>(null)
 
   return (
     <>
@@ -344,16 +380,36 @@ export function Resumes(): ReactElement {
           <Muted>Only yours: nobody else can read or delete them.</Muted>
         </div>
 
-        {resumes.isPending ? <Muted>Loading…</Muted> : null}
-        {resumes.error ? <Alert>{resumes.error.message}</Alert> : null}
+        {deleted ? <Status>Deleted {deleted}.</Status> : null}
+
+        {resumes.isPending ? <Skeleton lines={3} label="Loading your resumes…" /> : null}
+        {resumes.error ? (
+          <Alert
+            onRetry={() => {
+              void resumes.refetch()
+            }}
+          >
+            {resumes.error.message}
+          </Alert>
+        ) : null}
 
         {resumes.data?.length === 0 ? (
-          <Muted>No resumes stored yet.</Muted>
+          <EmptyState
+            icon={FileTextIcon}
+            title="No resumes yet."
+            action={
+              <Button type="button" variant="secondary" size="sm" onClick={focusUpload}>
+                Add your first resume
+              </Button>
+            }
+          >
+            Upload a PDF, Word or text file, or paste the text.
+          </EmptyState>
         ) : null}
 
         <ul className="flex flex-col gap-3">
           {resumes.data?.map((resume) => (
-            <Stored key={resume.id} resume={resume} />
+            <Stored key={resume.id} resume={resume} onDeleted={setDeleted} />
           ))}
         </ul>
       </section>
