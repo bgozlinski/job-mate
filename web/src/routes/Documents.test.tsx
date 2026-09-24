@@ -1,7 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { HttpResponse, delay, http } from 'msw'
 import { Link, MemoryRouter, Route, Routes, useLocation, useParams } from 'react-router'
 import { expect, test } from 'vitest'
 
@@ -10,6 +10,8 @@ import { Providers, createQueryClient } from '../providers'
 import { server } from '../test/server'
 import { Documents } from './Documents'
 import type { Arrival } from './Posting'
+
+const TITLE = 'Python Developer — DCV Technologies'
 
 interface Stored {
   id: string
@@ -95,22 +97,77 @@ test('the knowledge base is listed', async () => {
   expect(screen.getByText('3 chunks')).toBeInTheDocument()
 })
 
-test('an empty knowledge base says so rather than showing nothing', async () => {
+test('an empty knowledge base says so and leads to adding the first posting', async () => {
   listing()
 
   show()
+  expect(await screen.findByText('The knowledge base is empty.')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Add the first posting' }))
 
-  expect(await screen.findByText('Nothing in the knowledge base yet.')).toBeInTheDocument()
+  expect(screen.getByLabelText('Job posting URL')).toHaveFocus()
 })
 
-test('a posting with no chunks is called out', async () => {
+test('a posting with no chunks is called out as a notice, not an error', async () => {
   // It is in the database and invisible to retrieval, which a zero in a
-  // caption does not convey.
+  // caption does not convey -- but nothing failed, so it is not red.
   listing(posting({ chunk_count: 0 }))
 
   show()
 
-  expect(await screen.findByRole('alert')).toHaveTextContent('No chunks')
+  expect(await screen.findByText(/No chunks/)).toBeInTheDocument()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+test('the knowledge base shows its shape while it loads', async () => {
+  server.use(
+    http.get('/api/documents', async () => {
+      await delay(50)
+
+      return HttpResponse.json([posting()])
+    }),
+  )
+
+  show()
+
+  expect(screen.getByRole('status')).toHaveTextContent('Loading the knowledge base…')
+  expect(await screen.findByRole('heading', { name: TITLE })).toBeInTheDocument()
+})
+
+test('a knowledge base that failed to load can be asked again', async () => {
+  let calls = 0
+  server.use(
+    http.get('/api/documents', () => {
+      calls += 1
+
+      return calls === 1
+        ? HttpResponse.json({ detail: 'Could not read the knowledge base' }, { status: 500 })
+        : HttpResponse.json([posting()])
+    }),
+  )
+
+  show()
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not read the knowledge base')
+  await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+  expect(await screen.findByRole('heading', { name: TITLE })).toBeInTheDocument()
+})
+
+test('reading a posting says so while it takes', async () => {
+  listing()
+  server.use(
+    http.post('/api/documents/from-url', async () => {
+      await delay(50)
+
+      return HttpResponse.json(posting(), { status: 201 })
+    }),
+  )
+
+  show()
+  await userEvent.type(await screen.findByLabelText('Job posting URL'), 'https://x.test/1')
+  await userEvent.click(screen.getByRole('button', { name: 'Read the posting' }))
+
+  expect(await screen.findByText('Reading the posting…')).toBeInTheDocument()
+  expect(await screen.findByText('Opened 01a0-posting')).toBeInTheDocument()
 })
 
 test('a posting is read from its address and then opened', async () => {
@@ -268,8 +325,6 @@ test('pasted text longer than the API accepts is refused before it is sent', asy
   expect(screen.getByRole('button', { name: 'Store' })).toBeDisabled()
 })
 
-const TITLE = 'Python Developer — DCV Technologies'
-
 /** A listing that forgets the posting once a DELETE answers `status`. */
 function deletable(status: number, detail?: string): string[] {
   const deleted: string[] = []
@@ -331,14 +386,15 @@ test('cancelling goes back without sending anything', async () => {
   expect(deleted).toEqual([])
 })
 
-test('a confirmed delete removes the posting from the listing', async () => {
+test('a confirmed delete removes the posting and says so', async () => {
   const deleted = deletable(204)
 
   show({ admin: true })
   await userEvent.click(await screen.findByRole('button', { name: `Delete ${TITLE}` }))
   await userEvent.click(screen.getByRole('button', { name: 'Delete for good' }))
 
-  expect(await screen.findByText('Nothing in the knowledge base yet.')).toBeInTheDocument()
+  expect(await screen.findByText('The knowledge base is empty.')).toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent(`Posting deleted: ${TITLE}.`)
   expect(deleted).toEqual(['01a0-posting'])
 })
 
@@ -361,6 +417,6 @@ test('a posting somebody else already deleted is simply gone', async () => {
   await userEvent.click(await screen.findByRole('button', { name: `Delete ${TITLE}` }))
   await userEvent.click(screen.getByRole('button', { name: 'Delete for good' }))
 
-  expect(await screen.findByText('Nothing in the knowledge base yet.')).toBeInTheDocument()
+  expect(await screen.findByText('The knowledge base is empty.')).toBeInTheDocument()
   expect(screen.queryByRole('alert')).toBeNull()
 })

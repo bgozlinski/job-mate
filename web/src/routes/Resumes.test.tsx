@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse, http } from 'msw'
+import { HttpResponse, delay, http } from 'msw'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, expect, test, vi } from 'vitest'
 
@@ -79,12 +79,48 @@ test('the text is behind a click, not drawn for every row', async () => {
   expect(shown.closest('details')).not.toHaveAttribute('open')
 })
 
-test('an empty list says so rather than showing nothing', async () => {
+test('an empty list says so and leads to adding the first resume', async () => {
   listing()
 
   show()
+  expect(await screen.findByText('No resumes yet.')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Add your first resume' }))
 
-  expect(await screen.findByText('No resumes stored yet.')).toBeInTheDocument()
+  expect(screen.getByLabelText('Resume file (PDF, DOCX or text)')).toHaveFocus()
+})
+
+test('the list shows its shape while it loads', async () => {
+  server.use(
+    http.get('/api/resumes', async () => {
+      await delay(50)
+
+      return HttpResponse.json([resume()])
+    }),
+  )
+
+  show()
+
+  expect(screen.getByRole('status')).toHaveTextContent('Loading your resumes…')
+  expect(await screen.findByRole('heading', { name: 'cv.pdf' })).toBeInTheDocument()
+})
+
+test('a list that failed to load can be asked again', async () => {
+  let calls = 0
+  server.use(
+    http.get('/api/resumes', () => {
+      calls += 1
+
+      return calls === 1
+        ? HttpResponse.json({ detail: 'Could not read your resumes' }, { status: 500 })
+        : HttpResponse.json([resume()])
+    }),
+  )
+
+  show()
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not read your resumes')
+  await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+  expect(await screen.findByRole('heading', { name: 'cv.pdf' })).toBeInTheDocument()
 })
 
 test('a pasted resume is stored with its target role', async () => {
@@ -210,7 +246,7 @@ test('deleting asks first', async () => {
   expect(screen.getByRole('button', { name: 'Really delete cv.pdf' })).toBeInTheDocument()
 })
 
-test('a confirmed delete removes the resume from the list', async () => {
+test('a confirmed delete removes the resume and says so', async () => {
   let present = true
   server.use(
     http.get('/api/resumes', () => HttpResponse.json(present ? [resume()] : [])),
@@ -225,7 +261,28 @@ test('a confirmed delete removes the resume from the list', async () => {
   await userEvent.click(await screen.findByRole('button', { name: 'Delete cv.pdf' }))
   await userEvent.click(screen.getByRole('button', { name: 'Really delete cv.pdf' }))
 
-  expect(await screen.findByText('No resumes stored yet.')).toBeInTheDocument()
+  expect(await screen.findByText('No resumes yet.')).toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('Deleted cv.pdf.')
+})
+
+test('reading an uploaded resume says so while it takes', async () => {
+  listing()
+  server.use(
+    http.post('/api/resumes/upload', async () => {
+      await delay(50)
+
+      return HttpResponse.json(resume(), { status: 201 })
+    }),
+  )
+
+  show()
+  await userEvent.upload(
+    await screen.findByLabelText('Resume file (PDF, DOCX or text)'),
+    new File(['ten years of python'], 'cv.txt', { type: 'text/plain' }),
+  )
+  await userEvent.click(screen.getByRole('button', { name: 'Upload' }))
+
+  expect(await screen.findByText('Reading the resume…')).toBeInTheDocument()
 })
 
 test('a cancelled delete leaves the resume alone', async () => {
