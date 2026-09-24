@@ -39,12 +39,21 @@ async def list_matches(
     session: Session,
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
     offset: Annotated[int, Query(ge=0)] = 0,
+    document_id: uuid.UUID | None = None,
 ) -> list[MatchSummary]:
-    """List the caller's own matches, newest first."""
+    """
+    List the caller's own matches, newest first, optionally for one posting.
+
+    An unknown or deleted posting gives an empty list, not 404: document_id narrows
+    the caller's own rows and is not a resource to look up.
+    """
+    query = select(Match).where(Match.user_id == user.id)
+
+    if document_id is not None:
+        query = query.where(Match.document_id == document_id)
+
     rows = await session.scalars(
-        select(Match)
-        .where(Match.user_id == user.id)
-        .order_by(Match.created_at.desc(), Match.id.desc())
+        query.order_by(Match.created_at.desc(), Match.id.desc())
         .limit(limit)
         .offset(offset)
     )

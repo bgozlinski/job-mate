@@ -195,7 +195,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Read Document
+         * @description Return one posting with its text and requirements, or 404.
+         *
+         *     Open to every signed-in account, like the list: the knowledge base is shared.
+         */
+        get: operations["read_document_documents__document_id__get"];
         put?: never;
         post?: never;
         /**
@@ -257,7 +263,10 @@ export interface paths {
         };
         /**
          * List Matches
-         * @description List the caller's own matches, newest first.
+         * @description List the caller's own matches, newest first, optionally for one posting.
+         *
+         *     An unknown or deleted posting gives an empty list, not 404: document_id narrows
+         *     the caller's own rows and is not a resource to look up.
          */
         get: operations["list_matches_matches_get"];
         put?: never;
@@ -409,7 +418,10 @@ export interface paths {
         };
         /**
          * List Sessions
-         * @description List your interviews, newest first.
+         * @description List your interviews, newest first, optionally for one posting.
+         *
+         *     An unknown or deleted posting gives an empty list, not 404: document_id narrows
+         *     your own rows and is not a resource to look up.
          */
         get: operations["list_sessions_sessions_get"];
         put?: never;
@@ -534,6 +546,36 @@ export interface components {
             source_url?: string | null;
             /** Title */
             title?: string | null;
+        };
+        /**
+         * DocumentDetail
+         * @description One posting in full: what the list leaves out, for the posting's own page.
+         */
+        DocumentDetail: {
+            /** Chunk Count */
+            chunk_count: number;
+            /** Content */
+            content: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Metadata */
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** Requirements */
+            requirements: string[] | null;
+            /** Source Url */
+            source_url: string | null;
+            /** Title */
+            title: string | null;
         };
         /**
          * DocumentFromUrl
@@ -1214,6 +1256,37 @@ export interface operations {
             };
         };
     };
+    read_document_documents__document_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     delete_document_documents__document_id__delete: {
         parameters: {
             query?: never;
@@ -1292,6 +1365,7 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+                document_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -1606,6 +1680,7 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+                document_id?: string | null;
             };
             header?: never;
             path?: never;

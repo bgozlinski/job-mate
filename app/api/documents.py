@@ -40,6 +40,7 @@ from app.schemas.document import (
     MAX_CONTENT_LENGTH,
     MAX_TITLE_LENGTH,
     DocumentCreate,
+    DocumentDetail,
     DocumentFromUrl,
     DocumentRead,
     DocumentUpload,
@@ -123,6 +124,27 @@ async def list_documents(
     )
 
     return [_describe(document, chunk_count) for document, chunk_count in rows]
+
+
+@router.get("/{document_id}")
+async def read_document(document_id: uuid.UUID, session: Session) -> DocumentDetail:
+    """
+    Return one posting with its text and requirements, or 404.
+
+    Open to every signed-in account, like the list: the knowledge base is shared.
+    """
+    document = await session.get(Document, document_id)
+
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
+    summary = await _read(session, document)
+
+    return DocumentDetail(
+        **summary.model_dump(),
+        content=document.content,
+        requirements=document.requirements,
+    )
 
 
 @router.delete(

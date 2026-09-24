@@ -66,3 +66,11 @@ class DocumentRead(BaseModel):
     metadata: dict[str, Any]
     chunk_count: int
     created_at: datetime
+
+
+class DocumentDetail(DocumentRead):
+    """One posting in full: what the list leaves out, for the posting's own page."""
+
+    content: str
+    requirements: list[str] | None
+    """What an LLM read out of the posting, or null when nobody has."""
