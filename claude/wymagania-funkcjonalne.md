@@ -8,7 +8,7 @@
 
 ## 1. Opis projektu
 
-JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Generation). System pobiera ogłoszenia o pracę, a następnie pomaga użytkownikowi dopasować CV do docelowej roli i przygotować się do rozmowy rekrutacyjnej. Odpowiedzi są ugruntowane w zapisanych dokumentach i w CV kandydata, a nie generowane swobodnie przez LLM — co ogranicza halucynacje i pozwala zweryfikować sugestie. Od 2026-09-02 baza wiedzy zawiera wyłącznie ogłoszenia (FR-1), więc dopasowanie CV nie korzysta już z wyszukiwania wektorowego, a serwis retrievalu został usunięty; wyszukiwanie wróci wraz z etapem 4, jeśli pytania na mock interview mają pochodzić z bazy.
+JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Generation). System pobiera ogłoszenia o pracę, a następnie pomaga użytkownikowi dopasować CV do docelowej roli i przygotować się do rozmowy rekrutacyjnej. Odpowiedzi są ugruntowane w zapisanych dokumentach i w CV kandydata, a nie generowane swobodnie przez LLM — co ogranicza halucynacje i pozwala zweryfikować sugestie. Od 2026-09-02 baza wiedzy zawiera wyłącznie ogłoszenia (FR-1), więc dopasowanie CV nie korzysta już z wyszukiwania wektorowego, a serwis retrievalu został usunięty. Etap 4 go nie przywraca: pytania na mock interview powstają z wymagań jednego, wybranego ogłoszenia (FR-4, zmiana 2026-09-24).
 
 **Cele:**
 - Nauka i praktyczne zastosowanie pełnego pipeline'u RAG (ingestion → chunking → embedding → retrieval → generacja)
@@ -77,18 +77,45 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 > udziału w FR-3.
 
 ### FR-4. Symulacja rozmowy rekrutacyjnej (LangGraph)
-- System generuje pytania typowe dla docelowej roli, wyszukane w bazie wiedzy.
+- Użytkownik wybiera ogłoszenie oraz jedno ze swoich CV. System układa z góry plan pytań z wymagań ogłoszenia
+  (`documents.requirements`): najpierw te, których CV nie pokrywa, potem pozostałe; każde pytanie wskazuje
+  wymaganie, którego dotyczy.
 - Przebieg rozmowy zaimplementowany jako stanowy graf w LangGraph:
-  - węzły: `retrieve_questions` → `ask_question` → `collect_answer` → `evaluate_answer` → (pętla lub `summarize`),
-  - stan grafu: docelowa rola, zadane pytania, odpowiedzi, oceny cząstkowe,
-  - warunek zakończenia: limit pytań lub decyzja użytkownika.
-- Tryb konwersacyjny: pytanie → odpowiedź użytkownika → feedback od LLM.
+  - węzły: `retrieve_questions` (plan z wymagań — nie wyszukiwanie wektorowe) → `ask_question` → `collect_answer` → `evaluate_answer` → (pętla lub `summarize`),
+  - stan grafu: ogłoszenie i CV, plan pytań, liczba zadanych pytań, odpowiedzi, oceny cząstkowe,
+  - warunek zakończenia: koniec planu lub decyzja użytkownika.
+- Tryb konwersacyjny: pytanie → odpowiedź użytkownika → ocena według rubryki z jedną wskazówką. Wynik odpowiedzi
+  i podsumowanie sesji liczy Python, nie model.
 - Pełna historia sesji jest zapisywana; każde wywołanie LLM trace'owane w Langfuse.
 
-> **Do rozstrzygnięcia przed etapem 4 (2026-09-02).** Pytania miały pochodzić z wpisów `qa` w bazie wiedzy,
-> a tej kategorii już nie ma (FR-1). Do wyboru: wyprowadzać pytania z ogłoszenia i CV, przywrócić osobną
-> kategorię źródeł kolejną migracją, albo trzymać zestaw pytań w prompcie. Dopóki decyzji nie ma, pierwszy
-> punkt wyżej opisuje zamiar, nie stan.
+> **Do rozstrzygnięcia przed etapem 4 (2026-09-02) — rozstrzygnięte 2026-09-24, patrz zmiana niżej.**
+> Pytania miały pochodzić z wpisów `qa` w bazie wiedzy, a tej kategorii już nie ma (FR-1). Do wyboru:
+> wyprowadzać pytania z ogłoszenia i CV, przywrócić osobną kategorię źródeł kolejną migracją, albo trzymać
+> zestaw pytań w prompcie. Wybrana została pierwsza droga.
+
+> **Zmiana 2026-09-24. Decyzje etapu 4.** Pełny projekt: `docs/superpowers/specs/2026-09-24-stage4-mock-interview-design.md`.
+>
+> - **D-1. Sesja jest przywiązana do konkretnego ogłoszenia i CV**, nie do „roli ogólnie". Produkt porównuje
+>   CV z ofertą, a pytania mają z czego wynikać — są ugruntowane tak jak sugestie w FR-3. Tryb ogólny
+>   wymagałby banku pytań albo swobodnej generacji.
+> - **D-2. Plan pytań powstaje z góry**, jednym wywołaniem modelu: luki pierwsze, przycięte do
+>   `INTERVIEW_QUESTIONS` (domyślnie 5). Plan to lista — zapisywalna, pokazywalna i testowalna bez modelu.
+>   Pytania adaptacyjne i dopytania da się dołożyć później bez przebudowy.
+> - **D-3. Odpowiedź ocenia rubryka**: model zwraca werdykt tak/nie z uzasadnieniem dla stałych kryteriów
+>   (`on_topic`, `concrete_example`, `consistent_with_resume`) i jedną wskazówkę, a **wynik liczy Python**
+>   jako odsetek spełnionych kryteriów. Ten sam powód co w FR-3: liczba od modelu nie jest powtarzalna ani
+>   testowalna.
+> - **D-4. Źródłem prawdy są nasze tabele** (`sessions`, `messages`); graf wykonuje jedną turę na żądanie
+>   i nie dotyka bazy, stan jest odtwarzany z wierszy. Checkpointer LangGraph w Postgresie odrzucony, bo tworzy
+>   własne tabele poza Alembikiem (`alembic check` by je zakwestionował) i dublowałby stan; checkpointer
+>   w pamięci gubi rozmowy przy każdym restarcie.
+> - **D-5. HTTP żądanie–odpowiedź, bez strumieniowania.** Ocena to jedno wywołanie modelu, kilka sekund.
+>   Strumieniowanie można dołożyć bez zmiany modelu danych — to unieważnia przewidywanie ze zmiany
+>   2026-09-07 w §7, że FR-4 wymusi inny kształt warstwy HTTP.
+>
+> Konsekwencja dla wyszukiwania: pytania pochodzą z `requirements` jednego ogłoszenia, więc etap 4 **nie
+> przywraca** wyszukiwania wektorowego (patrz NFR-3). Chunki ogłoszenia są czytane wprost, a ich ID trafiają
+> do `messages.retrieved_chunk_ids`.
 
 ### FR-5. Eksport
 - Użytkownik może wyeksportować poprawione CV do formatu Markdown / PDF / DOCX.
@@ -176,9 +203,9 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 >
 > Ciasteczka są `Secure` sterowane przez `COOKIE_SECURE`: wymuszone na produkcji, wyłączone lokalnie —
 > `Secure` po `http://` powoduje, że przeglądarka po cichu odrzuca ciasteczko, co wygląda jak zepsute logowanie.
-- **NFR-2 Kontrola kosztów i observability:** każde wywołanie LLM i retrieval trace'owane w Langfuse (koszty tokenów, latencja, użyte chunki); rate limiting na endpointach LLM.
+- **NFR-2 Kontrola kosztów i observability:** każde wywołanie LLM trace'owane w Langfuse (koszty tokenów, latencja, chunki podane modelowi); rate limiting na endpointach LLM.
 - **NFR-2a Cache embeddingów:** przed wywołaniem API embeddingów system sprawdza Redis (klucz = hash treści chunka); trafienie w cache pomija wywołanie API — oszczędność kosztów przy re-indeksacji i duplikatach.
-- **NFR-3 Wydajność:** wyszukiwanie wektorowe poniżej 500 ms (indeks HNSW). *Od 2026-09-02 nic nie wykonuje wyszukiwania wektorowego — embeddingi i indeks HNSW są zapisywane i utrzymywane, ale czytelnik pojawi się dopiero z etapem 4. Wymaganie obowiązuje od tego momentu.*
+- **NFR-3 Wydajność:** wyszukiwanie wektorowe poniżej 500 ms (indeks HNSW). *Od 2026-09-02 nic nie wykonuje wyszukiwania wektorowego — embeddingi i indeks HNSW są zapisywane i utrzymywane, ale nie mają czytelnika. Etap 4 go nie przywraca (FR-4, zmiana 2026-09-24), a żaden inny etap roadmapy go nie planuje. Wymaganie jest zawieszone do chwili, gdy jakaś funkcja zacznie wyszukiwać.*
 - **NFR-4 Wdrożenie:** cały stack uruchamiany przez `docker-compose up` — z klientem w przeglądarce włącznie; CI uruchamia lint i testy przy każdym pushu, w dwóch jobach (Python i Node).
 
 > **Zmiana 2026-09-07.** Doszedł serwis `web`. W trybie deweloperskim jest to serwer Vite proxujący `/api`
@@ -241,8 +268,8 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 - `resumes` — wersje CV per użytkownik (surowy tekst, docelowa rola)
 - `documents` — ogłoszenia o pracę (od 2026-09-02 baza wiedzy nie zawiera niczego innego, więc nie ma kolumny rozróżniającej rodzaj źródła); deduplikacja po `content_hash`; `metadata JSONB` (rola, seniority) umożliwia filtrowane wyszukiwanie hybrydowe; `requirements JSONB` — wymagania odczytane przez LLM przy zapisie
 - `chunks` — fragmenty dokumentów z embeddingami `vector(1536)`; indeks HNSW z metryką kosinusową (Redis pełni rolę cache'a przed API embeddingów; Postgres pozostaje źródłem prawdy); `embedding_model` — model, który wyliczył wektor (migracja `49572ac20106`), `NULL` dla wierszy starszych niż ta kolumna, czyli „nie wiadomo"
-- `sessions` — sesje przeglądu CV lub mock interview per użytkownik
-- `messages` — kolejne wypowiedzi w sesji; przechowuje `retrieved_chunk_ids` do audytu tego, co model faktycznie widział, oraz koszt tokenów
+- `sessions` — sesje mock interview per użytkownik (FR-4, zmiana 2026-09-24): `user_id` (`CASCADE`); `resume_id` i `document_id` (`SET NULL` — sesja przeżywa usunięcie CV albo ogłoszenia) oraz kopia tytułu ogłoszenia, jak w `matches`; `status` (`active` / `finished`, ograniczenie `CHECK`, nie natywny enum — §8); `plan JSONB` — lista `{question, requirement}`; `score` i `summary JSONB` ustawiane przy podsumowaniu; `created_at`, `finished_at`
+- `messages` — kolejne wypowiedzi w sesji: `position` (`UNIQUE (session_id, position)` — jawna kolejność, bo `created_at` nie rozróżnia wierszy z jednej transakcji, §8); `role` (`interviewer` / `candidate` / `evaluator`, `CHECK`); `content`; `requirement`, którego dotyczy pytanie lub ocena; przy ocenie `verdicts JSONB` i `score` liczony w Pythonie; `retrieved_chunk_ids` — ID chunków ogłoszenia podanych modelowi, do audytu tego, co faktycznie widział; `input_tokens` / `output_tokens` przy wiadomościach wytworzonych przez model. Postęp sesji wynika z danych (liczba odpowiedzi `candidate`), bez osobnego licznika
 - `matches` — historia dopasowań per użytkownik (migracja `25dc29c14b4b`): score, listy trafień i luk, sugestie, notatki, cytaty z CV oraz `retrieved_chunk_ids`. Migawka, nie widok: kopiuje też tytuł ogłoszenia, a `resume_id` i `document_id` przechodzą w NULL, gdy to, na co wskazują, zostanie usunięte
 
 **Relacje:**
@@ -252,6 +279,7 @@ users 1—N matches
 users 1—N sessions 1—N messages
 documents 1—N chunks
 sessions N—1 resumes (opcjonalnie)
+sessions N—1 documents (opcjonalnie)
 ```
 
 Źródłem prawdy dla schematu jest Alembic (`migrations/versions/`); plik `db/schema.sql` nie istnieje i nie powstanie.
@@ -274,7 +302,7 @@ Przeglądarka                              Klient deweloperski
      ├── Serwis ingestion (LangChain) → chunking → Redis cache → API embeddingów → pgvector
      │      źródła: wklejony tekst | plik PDF/DOCX/TXT | URL ogłoszenia (allowlista, NFR-5)
      ├── Serwis generacji → API LLM (prompt = ogłoszenie + CV + prompt z Langfuse)
-     └── Mock interview (LangGraph) → stanowy graf rozmowy   [etap 4, jeszcze nie istnieje]
+     └── Mock interview (LangGraph) → plan pytań z wymagań ogłoszenia, ocena rubryką   [etap 4, jeszcze nie istnieje]
                     ↓                ↘
               [PostgreSQL + pgvector]  [Langfuse — trace'y, koszty, ewaluacja]
 ```
@@ -322,6 +350,11 @@ Przeglądarka                              Klient deweloperski
 >
 > Klient w przeglądarce nie zastępuje `ui/`. Streamlit zostaje jako narzędzie do ręcznego sprawdzania API —
 > nic nie kosztuje, a daje działający punkt odniesienia, gdy React jest w remoncie.
+
+> **Zmiana 2026-09-24. Etap 4 wraca.** Etapy 1–3 i 5 są zamknięte. Decyzja, która miała zapaść przed
+> pierwszą linijką kodu, zapadła: pytania powstają z wymagań wybranego ogłoszenia, pod konkretne CV
+> (FR-4, decyzje D-1…D-5). Dwie rzeczy przewidywane wyżej się nie sprawdzają: etap 4 nie przywraca
+> wyszukiwania wektorowego (NFR-3 pozostaje zawieszone) i nie wymaga strumieniowania (D-5).
 
 ## 8. Pułapki, których nie widać z kodu
 
