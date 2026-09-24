@@ -4,62 +4,161 @@
    tailwind.config.js and no PostCSS step. What @theme declares becomes both a
    custom property and a utility, so --color-accent below is usable as
    bg-accent, text-accent and border-accent without anything being registered
-   twice. */
-@theme {
-  --color-surface: #fcfcfb;
-  --color-raised: #ffffff;
-  --color-line: #e4e3df;
-  --color-ink: #1a1a19;
-  --color-ink-soft: #55544f;
-  /* 4.5:1 against both surfaces, measured. The obvious lighter grey for
-     captions came out at 3.65:1 -- legible to whoever picks it and not to
-     someone reading a laptop screen outdoors. */
-  --color-ink-faint: #6f6d65;
+   twice.
 
-  /* The accent is the same blue as the meter's fill on the match screen.
-     Deliberately one colour doing both jobs: the brand and the magnitude
-     encoding then cannot clash, and a reader never has to work out whether a
-     blue thing is decoration or data. Taken from a ramp that passes the
-     contrast and colour-vision checks against this surface. */
-  --color-accent: #256abf;
-  --color-accent-strong: #184f95;
-  --color-accent-soft: #cde2fb;
-  /* What goes on top of --color-accent. A token rather than a literal white,
-     because the accent is light in dark mode: white on it measures 2.5:1,
-     which is a button whose label you cannot read. */
-  --color-on-accent: #ffffff;
+   The colours are `inline` references to plain custom properties rather than
+   values, because the theme has to switch at runtime: a choice made in the
+   app sets data-theme on <html>, and only a variable can follow that. A value
+   baked into @theme would be fixed at build time. */
+@theme inline {
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-control: var(--control);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-ink: var(--danger-ink);
+  --color-on-danger: var(--on-danger);
 
-  --radius-card: 0.75rem;
-
-  --font-sans:
-    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --shadow-card: var(--card-shadow);
 }
 
-/* Dark steps are chosen against the dark surface rather than flipped from the
-   light ones. An automatic inversion produces an accent that is either
-   invisible or glaring, because lightness and chroma do not mirror. */
-@media (prefers-color-scheme: dark) {
-  @theme {
-    --color-surface: #1a1a19;
-    --color-raised: #232322;
-    --color-line: #383835;
-    --color-ink: #f2f1ee;
-    --color-ink-soft: #b5b3ab;
-    --color-ink-faint: #9a978e;
+@theme {
+  --radius-card: 1rem;
 
-    --color-accent: #6da7ec;
-    --color-accent-strong: #9ec5f4;
-    --color-accent-soft: #184f95;
-    /* Dark ink on the light accent: 6.96:1, against 2.50:1 for white. */
-    --color-on-accent: #1a1a19;
+  /* The variable build of Nunito Sans, bundled with the app (main.tsx), then
+     the system stack. The package splits the font by script and the browser
+     downloads only the ranges a page uses, so Polish letters in a resume come
+     from the latin-ext file rather than falling back to another typeface. */
+  --font-sans:
+    'Nunito Sans Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+    Roboto, sans-serif;
+}
+
+/* Every ratio below was measured (WCAG 2) against the backgrounds the token is
+   drawn on. Text needs 4.5:1; the border of a form control needs 3:1, which is
+   why --control exists beside --line: --line only separates cards, and at
+   about 1.3:1 it is too faint to show where a text field is. */
+
+/* Light. The warm direction: beige surfaces, a teal accent. */
+:root {
+  color-scheme: light;
+
+  --surface: #faf8f5;
+  --raised: #ffffff;
+  --sunken: #f3efe9;
+  --line: #e7e2da;
+  /* 3.54:1 on raised, 3.34:1 on surface. */
+  --control: #8f877d;
+
+  /* 15.17:1 on raised, 13.24:1 on sunken. */
+  --ink: #292524;
+  /* 7.63:1 on raised, 7.20:1 on surface. */
+  --ink-soft: #57534e;
+  /* 5.32:1 on raised, 4.65:1 on sunken. The mockup's #78716c came out at
+     4.19:1 on sunken, so it is a step darker. */
+  --ink-faint: #716a63;
+
+  /* The accent is also the fill of every meter, one colour doing both jobs:
+     the brand and the magnitude encoding cannot clash, and a reader never has
+     to work out whether a teal thing is decoration or data.
+     5.47:1 on raised, 5.16:1 on surface. */
+  --accent: #0f766e;
+  /* 6.73:1 on accent-soft, where chips and success messages are written. */
+  --accent-strong: #115e59;
+  --accent-soft: #ccfbf1;
+  /* 5.47:1 on accent. */
+  --on-accent: #ffffff;
+
+  /* An error has its own colour, but never only a colour: every use of it
+     carries an icon and a sentence as well. 6.47:1 on raised. */
+  --danger: #b91c1c;
+  --danger-soft: #fee2e2;
+  /* 8.20:1 on danger-soft. */
+  --danger-ink: #7f1d1d;
+  /* 6.47:1 on danger. */
+  --on-danger: #ffffff;
+
+  --card-shadow: 0 4px 14px rgb(41 37 36 / 0.08);
+}
+
+/* Dark. Its steps are chosen against the dark surface rather than flipped
+   from the light ones: an automatic inversion gives an accent that is either
+   invisible or glaring, because lightness and chroma do not mirror.
+
+   It applies when chosen in the app, and when the system asks for it unless
+   light was chosen in the app. The two blocks carry the same values; CSS has
+   no way to share a declaration block between a selector and a media query. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* 13.90:1 ink on raised; ink-faint 6.01:1 on raised, 6.57:1 on sunken. */
+  --surface: #1c1917;
+  --raised: #292524;
+  --sunken: #211e1c;
+  --line: #44403c;
+  /* 3.16:1 on raised, 3.65:1 on surface. */
+  --control: #78716c;
+  --ink: #f5f5f4;
+  --ink-soft: #d6d3d1;
+  --ink-faint: #a8a29e;
+
+  /* 8.15:1 on raised. */
+  --accent: #2dd4bf;
+  /* 6.41:1 on accent-soft. */
+  --accent-strong: #5eead4;
+  --accent-soft: #134e4a;
+  /* Dark ink on the light accent: 9.39:1, where white would be unreadable. */
+  --on-accent: #1c1917;
+
+  /* 5.48:1 on raised. */
+  --danger: #f87171;
+  --danger-soft: #450a0a;
+  /* 11.16:1 on danger-soft. */
+  --danger-ink: #fecaca;
+  /* 6.32:1 on danger. */
+  --on-danger: #1c1917;
+
+  /* A shadow barely shows on a dark surface, so a card is outlined instead. */
+  --card-shadow: 0 0 0 1px var(--line);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --surface: #1c1917;
+    --raised: #292524;
+    --sunken: #211e1c;
+    --line: #44403c;
+    --control: #78716c;
+    --ink: #f5f5f4;
+    --ink-soft: #d6d3d1;
+    --ink-faint: #a8a29e;
+
+    --accent: #2dd4bf;
+    --accent-strong: #5eead4;
+    --accent-soft: #134e4a;
+    --on-accent: #1c1917;
+
+    --danger: #f87171;
+    --danger-soft: #450a0a;
+    --danger-ink: #fecaca;
+    --on-danger: #1c1917;
+
+    --card-shadow: 0 0 0 1px var(--line);
   }
 }
 
 @layer base {
-  html {
-    color-scheme: light dark;
-  }
-
   body {
     @apply bg-surface text-ink font-sans antialiased;
   }

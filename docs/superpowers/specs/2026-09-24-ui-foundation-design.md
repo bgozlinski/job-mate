@@ -67,6 +67,12 @@ jasność — zasada zostaje.
 | `danger` *(nowy)* | `#b91c1c` | `#f87171` | przycisk usuwania, ikona błędu |
 | `danger-soft` *(nowy)* | `#fee2e2` | `#450a0a` | tło komunikatu o błędzie |
 | `danger-ink` *(nowy)* | `#7f1d1d` | `#fecaca` | tekst komunikatu o błędzie |
+| `on-danger` *(nowy)* | `#ffffff` | `#1c1917` | tekst na przycisku `danger` |
+| `control` *(nowy)* | `#8f877d` | `#78716c` | obramowanie pól formularza (≥ 3:1) |
+
+Dopisane przy zadaniu 1, po pomiarze: `ink-faint` w jasnym motywie to `#716a63` (makietowe `#78716c` miało
+4.19:1 na `sunken`); `control` istnieje, bo `line` ma ok. 1.3:1 i nie pokazuje, gdzie jest pole tekstowe —
+wystarcza do rozdzielania kart, nie do granic kontrolek.
 
 Kształty i cień: `--radius-card: 1rem`; przyciski i chipy w pełni zaokrąglone (`rounded-full`); nowy token
 `--shadow-card` (miękki cień z makiety, w ciemnym motywie zastąpiony subtelną ramką, bo cień tam słabo widać).
@@ -94,9 +100,10 @@ tekstem, nigdy sama.
 ## 5. Typografia i ikony
 
 **Czcionka.** `@fontsource-variable/nunito-sans`, import w `main.tsx`; plik czcionki trafia do buildu (bez zapytań
-do Google, działa offline). Jedna wersja variable na wszystkie grubości, podzbiór `latin` — interfejs jest po
-angielsku, a znaki spoza podzbioru w treściach użytkownika (polskie litery w CV, odpowiedziach) dostarczy czcionka
-systemowa ze stosu zapasowego. `--font-sans: 'Nunito Sans Variable', <obecny stos systemowy>`.
+do Google, działa offline). Jedna wersja variable na wszystkie grubości. Importowany jest cały pakiet: dzieli
+czcionkę na podzbiory z `unicode-range`, a przeglądarka pobiera tylko te, których strona używa — więc polskie
+litery w CV i odpowiedziach dostają Nunito z `latin-ext` zamiast czcionki zapasowej, bez kosztu dla reszty
+(zmiana względem pierwotnego „tylko `latin`”, przy zadaniu 1). `--font-sans: 'Nunito Sans Variable', <obecny stos systemowy>`.
 
 **Skala.**
 
