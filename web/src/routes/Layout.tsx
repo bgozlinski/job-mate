@@ -1,15 +1,23 @@
 import type { ReactElement } from 'react'
+import {
+  BriefcaseIcon,
+  FileTextIcon,
+  GitCompareArrowsIcon,
+  HistoryIcon,
+  LogOutIcon,
+  MessagesSquareIcon,
+} from 'lucide-react'
 import { NavLink, Outlet } from 'react-router'
 
 import { useLogout, useSession } from '../auth/session'
 import { Button, ThemeToggle } from '../ui'
 
 const TABS = [
-  { to: '/documents', label: 'Job postings' },
-  { to: '/resumes', label: 'Resumes' },
-  { to: '/match', label: 'Match' },
-  { to: '/matches', label: 'History' },
-  { to: '/interview', label: 'Interview' },
+  { to: '/documents', label: 'Job postings', icon: BriefcaseIcon },
+  { to: '/resumes', label: 'Resumes', icon: FileTextIcon },
+  { to: '/match', label: 'Match', icon: GitCompareArrowsIcon },
+  { to: '/matches', label: 'History', icon: HistoryIcon },
+  { to: '/interview', label: 'Interview', icon: MessagesSquareIcon },
 ]
 
 /**
@@ -25,26 +33,27 @@ export function Layout(): ReactElement {
     <div className="min-h-dvh">
       <header className="border-b border-line bg-raised">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-3">
-          <h1 className="text-lg font-bold tracking-tight">
+          <h1 className="text-xl font-extrabold tracking-tight">
             Job<span className="text-accent">Mate</span>
           </h1>
 
-          <nav aria-label="Main" className="flex gap-1">
-            {TABS.map((tab) => (
+          <nav aria-label="Main" className="flex flex-wrap gap-1">
+            {TABS.map(({ to, label, icon: Icon }) => (
               <NavLink
-                key={tab.to}
-                to={tab.to}
+                key={to}
+                to={to}
                 // The current tab is marked by weight and a filled background,
                 // not by colour alone. NavLink sets aria-current regardless,
                 // which is what a screen reader announces.
                 className={({ isActive }) =>
-                  'rounded-lg px-3 py-1.5 text-sm transition-colors ' +
+                  'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors ' +
                   (isActive
-                    ? 'bg-accent-soft font-semibold text-accent-strong'
-                    : 'text-ink-soft hover:text-accent')
+                    ? 'bg-accent-soft font-bold text-accent-strong'
+                    : 'text-ink-soft hover:bg-sunken hover:text-accent')
                 }
               >
-                {tab.label}
+                <Icon aria-hidden="true" className="size-4" />
+                {label}
               </NavLink>
             ))}
           </nav>
@@ -57,6 +66,7 @@ export function Layout(): ReactElement {
             <Button
               type="button"
               variant="quiet"
+              icon={LogOutIcon}
               disabled={logout.isPending}
               onClick={() => {
                 logout.mutate()
