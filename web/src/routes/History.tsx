@@ -116,7 +116,18 @@ export function History(): ReactElement {
       </div>
 
       {pending ? <Skeleton lines={3} label="Loading your history…" /> : null}
-      {error ? <Alert>{error.message}</Alert> : null}
+      {error ? (
+        <Alert
+          onRetry={() => {
+            // Both, whichever failed: asking the healthy one again costs a
+            // cheap read and keeps the timeline from mixing old and new rows.
+            void matches.refetch()
+            void interviews.refetch()
+          }}
+        >
+          {error.message}
+        </Alert>
+      ) : null}
 
       {!pending && !error && rows.length === 0 ? (
         <EmptyState icon={HistoryIcon} title="Nothing here yet.">

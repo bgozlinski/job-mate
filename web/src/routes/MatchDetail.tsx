@@ -96,7 +96,15 @@ export function MatchDetail(): ReactElement {
       )}
 
       {match.isPending ? <Skeleton lines={2} label="Loading the match…" /> : null}
-      {match.error ? <Alert>{match.error.message}</Alert> : null}
+      {match.error ? (
+        <Alert
+          onRetry={() => {
+            void match.refetch()
+          }}
+        >
+          {match.error.message}
+        </Alert>
+      ) : null}
       {match.data ? (
         <>
           <MatchResult match={match.data} />

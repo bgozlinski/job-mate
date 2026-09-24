@@ -117,3 +117,30 @@ test('with its resume deleted there is nothing to practise on', async () => {
   ).toBeDisabled()
   expect(screen.getByText(/has been deleted/)).toBeInTheDocument()
 })
+
+test('a match that failed to load can be asked again', async () => {
+  let calls = 0
+  server.use(
+    http.get('/api/matches/m1', () => {
+      calls += 1
+
+      return calls === 1
+        ? HttpResponse.json({ detail: 'Could not read this match' }, { status: 500 })
+        : HttpResponse.json(MATCH)
+    }),
+  )
+
+  render(
+    <Providers client={createQueryClient()}>
+      <MemoryRouter initialEntries={['/matches/m1']}>
+        <Routes>
+          <Route path="/matches/:matchId" element={<MatchDetail />} />
+        </Routes>
+      </MemoryRouter>
+    </Providers>,
+  )
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not read this match')
+  await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+  expect(await screen.findByRole('heading', { name: /75% match/ })).toBeInTheDocument()
+})

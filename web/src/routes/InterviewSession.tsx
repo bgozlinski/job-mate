@@ -9,7 +9,17 @@ import {
   useInterview,
 } from '../api/interview'
 import type { Interview, InterviewMessage } from '../api/interview'
-import { Alert, Button, Card, Chip, Field, Meter, Muted } from '../ui'
+import {
+  Alert,
+  Button,
+  Card,
+  Chip,
+  Field,
+  Meter,
+  Muted,
+  Skeleton,
+  Thinking,
+} from '../ui'
 import { BackToPosting } from './MatchDetail'
 import { percentage } from './MatchResult'
 
@@ -197,9 +207,9 @@ function AnswerForm({
           )}
         </Field>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button type="submit" disabled={busy || !draft.trim()}>
-            {answer.isPending ? 'Evaluating…' : 'Send answer'}
+            Send answer
           </Button>
           <Button
             type="button"
@@ -212,6 +222,10 @@ function AnswerForm({
             {finish.isPending ? 'Finishing…' : 'Finish the interview'}
           </Button>
         </div>
+
+        {/* Judging an answer is a model call of several seconds; without a
+            sentence the page looks stuck and "Send" gets pressed again. */}
+        {answer.isPending ? <Thinking>Evaluating your answer…</Thinking> : null}
       </form>
 
       {answer.error ? <Alert>{answer.error.message}</Alert> : null}
@@ -235,8 +249,18 @@ export function InterviewSession(): ReactElement {
         title={data?.document_title ?? null}
       />
 
-      {interview.isPending ? <Muted>Loading…</Muted> : null}
-      {interview.error ? <Alert>{interview.error.message}</Alert> : null}
+      {interview.isPending ? (
+        <Skeleton lines={3} label="Loading the interview…" />
+      ) : null}
+      {interview.error ? (
+        <Alert
+          onRetry={() => {
+            void interview.refetch()
+          }}
+        >
+          {interview.error.message}
+        </Alert>
+      ) : null}
 
       {data ? (
         <article aria-label="Interview" className="flex flex-col gap-6">
