@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactElement, SyntheticEvent } from 'react'
 import { useParams } from 'react-router'
 
@@ -172,11 +172,32 @@ function AnswerForm({
   const answer = useAnswer(interview.id)
   const finish = useFinishInterview(interview.id)
   const busy = answer.isPending || finish.isPending
+  const box = useRef<HTMLTextAreaElement>(null)
+  const refocus = useRef(false)
+
+  // The box is disabled while an answer is judged, which drops the cursor; once
+  // the next question is in, it goes back, so answering is typing, not hunting
+  // for the field with the mouse. A ref, not state: it only has to survive
+  // until the box is enabled again, and nothing renders from it.
+  //
+  // Keyed on the question as well as on busy: a quick answer can land in the
+  // same render that would have shown the box disabled, so busy never visibly
+  // changes -- but the question always does.
+  useEffect(() => {
+    if (refocus.current && !busy) {
+      box.current?.focus()
+      refocus.current = false
+    }
+  }, [busy, question.id])
 
   function onSubmit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>): void {
     event.preventDefault()
 
     if (draft.trim()) {
+      // Set on sending, not on success: the box is enabled again before the
+      // mutation's own callbacks run. It goes back after a failure too, which
+      // is where the person retries from.
+      refocus.current = true
       answer.mutate(
         { questionId: question.id, content: draft },
         {
@@ -194,6 +215,7 @@ function AnswerForm({
         <Field id="interview-answer" label="Your answer">
           {(className, id) => (
             <textarea
+              ref={box}
               id={id}
               rows={6}
               maxLength={5000}
@@ -241,6 +263,8 @@ export function InterviewSession(): ReactElement {
   const data = interview.data
   const question = data ? openQuestion(data) : null
   const asked = data?.messages.filter((m) => m.role === 'interviewer').length ?? 0
+  const answered = data?.messages.filter((m) => m.role === 'candidate').length ?? 0
+  const finished = data?.status === 'finished'
 
   return (
     <>
@@ -264,27 +288,46 @@ export function InterviewSession(): ReactElement {
 
       {data ? (
         <article aria-label="Interview" className="flex flex-col gap-6">
-          <div>
-            <h2 className="text-xl font-semibold tracking-tight">
+          <div className="flex flex-col gap-2">
+            <h2 className="text-2xl font-extrabold tracking-tight">
               Interview · {data.document_title ?? 'Untitled posting'}
             </h2>
             <Muted>
-              {data.status === 'active'
-                ? `Question ${String(asked)} of ${String(data.question_count)}`
-                : 'Finished'}
+              {finished
+                ? 'Finished'
+                : `Question ${String(asked)} of ${String(data.question_count)}`}
             </Muted>
+            {finished ? null : (
+              <Meter
+                value={data.question_count ? answered / data.question_count : 0}
+                label="Questions answered"
+              />
+            )}
           </div>
 
-          <ol aria-label="Conversation" className="flex flex-col gap-4">
-            {data.messages.map((message) => (
-              <li key={message.id} className="flex flex-col">
-                <Message message={message} />
-              </li>
-            ))}
-          </ol>
+          {/* Once it is over, how it went is what the page is for -- so the
+              summary comes first, not after every message of the exchange. */}
+          {finished ? <Summary interview={data} /> : null}
+
+          <section aria-labelledby="conversation" className="flex flex-col gap-4">
+            {finished ? (
+              <h3 id="conversation" className="text-lg font-bold">
+                The conversation
+              </h3>
+            ) : null}
+            <ol
+              aria-label="Conversation"
+              className="flex flex-col gap-4"
+            >
+              {data.messages.map((message) => (
+                <li key={message.id} className="flex flex-col">
+                  <Message message={message} />
+                </li>
+              ))}
+            </ol>
+          </section>
 
           {question ? <AnswerForm interview={data} question={question} /> : null}
-          {data.status === 'finished' ? <Summary interview={data} /> : null}
         </article>
       ) : null}
     </>
