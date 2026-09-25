@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, delay, http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -265,4 +265,48 @@ test('an interview that failed to load can be asked again', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
 
   expect(await screen.findByText('How did you use Docker?')).toBeInTheDocument()
+})
+
+test('the summary of a finished interview comes before the conversation', async () => {
+  stored(FINISHED)
+
+  show()
+
+  const summary = await screen.findByRole('heading', {
+    name: /67% of the rubric met overall/,
+  })
+  const conversation = screen.getByRole('heading', { name: 'The conversation' })
+  // DOCUMENT_POSITION_FOLLOWING: the conversation comes after the summary.
+  expect(
+    summary.compareDocumentPosition(conversation) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
+  // The progress bar goes once it is over; the summary keeps its own meter.
+  expect(
+    screen.queryByRole('meter', { name: 'Questions answered' }),
+  ).not.toBeInTheDocument()
+})
+
+test('progress shows how many questions have been answered', async () => {
+  stored(ANSWERED)
+
+  show()
+
+  const meter = await screen.findByRole('meter', { name: 'Questions answered' })
+  expect(meter).toHaveAttribute('aria-valuenow', '50')
+  expect(screen.getByText('Question 2 of 2')).toBeInTheDocument()
+})
+
+test('after an answer the cursor is back in the answer box', async () => {
+  stored(STARTED)
+  server.use(
+    http.post('/api/sessions/s1/answers', () => HttpResponse.json(ANSWERED)),
+  )
+
+  show()
+  await type('I containerised our API.')
+
+  await screen.findByText('Tell me about a Python service you ran.')
+  await waitFor(() => {
+    expect(screen.getByLabelText('Your answer')).toHaveFocus()
+  })
 })
