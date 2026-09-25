@@ -368,6 +368,13 @@ Przeglądarka                              Testy, curl, Swagger
 > odnowić tokenu. Tego klienta już nie ma, ale skrócenie czasu życia tokenu to osobna decyzja pod NFR-1,
 > nie część tej zmiany.
 
+> **Zmiana 2026-09-26 (później). `ACCESS_TOKEN_EXPIRE_MINUTES` z 1440 na 60** — zamyka otwartą kwestię
+> z wpisu wyżej. Token z odpowiedzi `/auth/login` (nagłówek Bearer) nie ma jak się odnowić, bo
+> `/auth/refresh` czyta tylko ciasteczko; po Streamlicie korzystają z niego już tylko testy, Swagger i curl.
+> Godzina wystarcza na sesję ręcznego sprawdzania API, a skradziony token traci ważność po godzinie,
+> nie po dobie. Nadal jest dłuższy niż ciasteczko (15 min), które przeglądarka odnawia sama — dwa
+> ustawienia zostają, bo dwa kanały dalej różnią się tym, czy umieją się odnowić.
+
 ## 8. Pułapki, których nie widać z kodu
 
 Zapis z 2026-09-10, przy czyszczeniu komentarzy z kodu, przycięty wieczorem po usunięciu FR-7. Każdy punkt
