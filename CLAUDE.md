@@ -73,7 +73,6 @@ migrations, ingestion or tokens — that section is the only record of traps tha
   `web/openapi.json`, which is generated from the app. `src/ui/` holds every shared component behind one
   `index.ts` (controls, surfaces, data, feedback, the theme toggle); `src/theme.ts` the theme choice;
   `src/time.ts` relative dates; `src/routes/` one file per screen (`PairPicker` backs Match and Interview).
-- `ui/` — Streamlit dev client for poking the API. Not part of the product; kept on purpose.
 - `scripts/` — a package, run as `python -m scripts.<name>`: `export_openapi`, `seed_prompts` (Langfuse),
   `eval_*` runners for `evals/`, `grant_admin` and `reindex` (FR-6).
 - `docs/superpowers/specs/` — per-stage design docs.
@@ -92,7 +91,6 @@ uv sync                                    # host venv (tests, linters, scripts)
 uv run alembic upgrade head                # apply migrations
 uv run alembic check                       # models match migrations (CI runs this)
 uv run pytest -q                           # all tests; single: uv run pytest tests/test_matching.py -k name
-uv run --group ui streamlit run ui/main.py # dev client
 
 cd web && npm run gen                      # regenerate openapi.json + schema.d.ts after any API schema change
 cd web && npm run lint && npm run typecheck && npm test

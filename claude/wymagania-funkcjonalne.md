@@ -29,7 +29,6 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 | Konteneryzacja | Docker + docker-compose | Powtarzalne środowisko deweloperskie |
 | CI/CD | GitHub Actions | Lint, testy, build |
 | Frontend | React + TypeScript (Vite) | Klient w przeglądarce; typy generowane z OpenAPI, więc zmiana schematu w Pythonie psuje build, a nie ekran |
-| Klient deweloperski | Streamlit | Narzędzie do ręcznego dziurawienia API; nie jest częścią produktu |
 
 ## 3. Wymagania funkcjonalne
 
@@ -287,7 +286,7 @@ sessions N—1 documents (opcjonalnie)
 ## 6. Architektura wysokopoziomowa
 
 ```
-Przeglądarka                              Klient deweloperski
+Przeglądarka                              Testy, curl, Swagger
      │                                          │
      ▼                                          │
 [nginx / Vite]                                  │
@@ -296,7 +295,7 @@ Przeglądarka                              Klient deweloperski
              httpOnly bez CORS-a)               │
              │                                  │
              └──────────→ [FastAPI] ←───────────┘
-                              │        Streamlit, nagłówek Bearer
+                              │        nagłówek Bearer
                               │
      ├── Auth (JWT: ciasteczko httpOnly albo nagłówek Bearer)
      ├── Serwis ingestion (LangChain) → chunking → Redis cache → API embeddingów → pgvector
@@ -356,6 +355,18 @@ Przeglądarka                              Klient deweloperski
 > pierwszą linijką kodu, zapadła: pytania powstają z wymagań wybranego ogłoszenia, pod konkretne CV
 > (FR-4, decyzje D-1…D-5). Dwie rzeczy przewidywane wyżej się nie sprawdzają: etap 4 nie przywraca
 > wyszukiwania wektorowego (NFR-3 pozostaje zawieszone) i nie wymaga strumieniowania (D-5).
+
+> **Zmiana 2026-09-26. Klient Streamlit (`ui/`) usunięty; jedynym frontendem jest React (`web/`).**
+> Wpis z 2026-09-07 zostawiał Streamlit jako punkt odniesienia na czas remontu Reacta. Remont się skończył
+> (przeprojektowanie w czterech częściach, PR #24–#40), a klient w przeglądarce robi wszystko, co robił Streamlit (konta, CV, ogłoszenia), i dużo więcej, więc
+> drugi klient był już tylko kodem do utrzymania, zależnością w locku i osobną grupą w CI.
+>
+> **Co zostaje.** Uwierzytelnianie nagłówkiem `Authorization: Bearer` zostaje bez zmian — używają go testy,
+> Swagger i curl. Do ręcznego sprawdzania API służy teraz `/docs`.
+>
+> **Otwarta kwestia.** Długi `ACCESS_TOKEN_EXPIRE_MINUTES` (1440) uzasadniał Streamlit, który nie umiał
+> odnowić tokenu. Tego klienta już nie ma, ale skrócenie czasu życia tokenu to osobna decyzja pod NFR-1,
+> nie część tej zmiany.
 
 ## 8. Pułapki, których nie widać z kodu
 
