@@ -57,8 +57,12 @@ class Settings(BaseSettings):
 
     jwt_secret_key: SecretStr
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 1440
-    """How long the token handed back in the login response stays valid."""
+    access_token_expire_minutes: int = 60
+    """
+    How long the token handed back in the login response stays valid. Nothing can renew
+    it (/auth/refresh reads only the cookie), so it outlives the cookie by enough for a
+    session of poking the API in /docs or curl, and no more.
+    """
     refresh_token_expire_days: int = 7
     """
     How long a browser session survives without the password being typed again. This is
@@ -69,7 +73,7 @@ class Settings(BaseSettings):
     cookie_access_expire_minutes: int = 15
     """
     The same credential as access_token_expire_minutes, over a channel that can renew
-    itself, so it is short instead of long.
+    itself, so it is the shorter of the two.
     """
     cookie_path_prefix: str = ""
     """The path prefix the browser reaches this API under, if any."""
