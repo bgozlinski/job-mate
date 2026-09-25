@@ -221,3 +221,6 @@ __marimo__/
 .streamlit/secrets.toml
 
 .idea/
+
+# Mockups from brainstorming sessions (superpowers visual companion)
+.superpowers/
