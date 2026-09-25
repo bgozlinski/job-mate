@@ -75,7 +75,7 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        run: uv sync --frozen --group ui
+        run: uv sync --frozen
 
       - name: Cache pre-commit environments
         uses: actions/cache@v6

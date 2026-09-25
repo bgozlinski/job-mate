@@ -160,7 +160,7 @@ async def test_a_cookie_authenticates_the_rest_of_the_api_too(
 async def test_the_header_still_works_and_wins_over_the_cookie(
     client: AsyncClient,
 ) -> None:
-    """Streamlit and 270 existing tests depend on this path being untouched."""
+    """Most tests, curl and Swagger depend on this path being untouched."""
     token = await register_and_log_in(client)
     client.cookies.set(ACCESS_COOKIE, "not-a-token")
 
