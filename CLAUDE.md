@@ -34,7 +34,7 @@ the roadmap, and dated **"Zmiana"** entries that record every change of directio
 before designing any feature**, and read §8 ("Pułapki, których nie widać z kodu") before touching scraping,
 migrations, ingestion or tokens — that section is the only record of traps that were stripped from code comments.
 
-### Current state (2026-09-24)
+### Current state (2026-09-25)
 
 - **Done:** stages 1–5 — the whole MVP roadmap.
   - 1–3: auth (JWT via Bearer header or httpOnly cookies), resumes (text or file upload), job-posting
@@ -46,11 +46,18 @@ migrations, ingestion or tokens — that section is the only record of traps tha
     resume exports as Markdown, Word or PDF, with download buttons on the Resumes page.
   - 4 (PRs #13–#20): FR-4 — a mock interview on one posting for one resume: questions planned up front from
     the posting's `requirements` (gaps first), each answer judged by a rubric with a tip, a summary at the end,
-    and a history of sessions. API under `/sessions`, screens under `/interview` and `/interviews`. Decisions
-    D-1…D-5 are at FR-4 in the spec; the design is
+    and a history of sessions. API under `/sessions`; started from a posting's page, a posting row, or
+    `/interview`. Decisions D-1…D-5 are at FR-4 in the spec; the design is
     `docs/superpowers/specs/2026-09-24-stage4-mock-interview-design.md`.
-- **Next:** nothing scheduled. Stage 4 was checked by hand in the browser on 2026-09-24. Stage 6 (bonus:
-  voice, salary trends) is optional — ask before starting it.
+  - Frontend redesign (PRs #24–#40), aimed at everyday use, in four parts with a design doc each
+    (`docs/superpowers/specs/2026-09-24-ui-*-design.md`): **foundation** (warm palette, light/system/dark
+    toggle, Nunito Sans, lucide icons, restyled `ui/`), **navigation** (a page per posting at
+    `/documents/:id` as the centre of the work, one `/history` for matches and interviews, API
+    `GET /documents/{id}` and a `document_id` filter), **states** (skeletons, empty states, "Try again",
+    `Thinking` for model waits, neutral `Notice`), **hierarchy** (postings as rows with Match/Practise,
+    the main resume first, interview progress and summary on top). The nav is Postings, Resumes, Match,
+    Interview, History — Match and Interview were removed in part 2 and brought back on request.
+- **Next:** nothing scheduled. Stage 6 (bonus: voice, salary trends) is optional — ask before starting it.
 - **Removed:** FR-7 automated harvesting (Scrapy) — built and reverted on 2026-09-10; the spec says why.
   Don't reintroduce crawling: NFR-5 allows one fetch per explicit user action, nothing more.
 
@@ -63,7 +70,9 @@ migrations, ingestion or tokens — that section is the only record of traps tha
   the model calls, `interview` the service that joins them to the database), `assets/fonts/` (PT Sans + its OFL licence, for PDF export).
 - `migrations/` — Alembic; the only source of truth for the schema (no `db/schema.sql`).
 - `web/` — React + TypeScript (Vite) client. Types in `web/src/api/schema.d.ts` are generated from
-  `web/openapi.json`, which is generated from the app.
+  `web/openapi.json`, which is generated from the app. `src/ui/` holds every shared component behind one
+  `index.ts` (controls, surfaces, data, feedback, the theme toggle); `src/theme.ts` the theme choice;
+  `src/time.ts` relative dates; `src/routes/` one file per screen (`PairPicker` backs Match and Interview).
 - `ui/` — Streamlit dev client for poking the API. Not part of the product; kept on purpose.
 - `scripts/` — a package, run as `python -m scripts.<name>`: `export_openapi`, `seed_prompts` (Langfuse),
   `eval_*` runners for `evals/`, `grant_admin` and `reindex` (FR-6).
@@ -151,6 +160,14 @@ Pydantic schema or route must regenerate `web/openapi.json` and `web/src/api/sch
   `SCRAPER_ALLOWED_HOSTS` (exact match, redirects validated per hop, body capped after decompression).
 - **Browser and API share one origin** (Vite/nginx proxy `/api`). Cookie auth relies on `SameSite=Lax` —
   splitting origins needs a real CSRF answer, not looser cookies. `COOKIE_PATH_PREFIX` must match the proxy.
+- **Web client conventions.** Colours are CSS variables in `styles.css` (`:root`, `[data-theme="dark"]` and
+  the system media query) that `@theme inline` points Tailwind at; every text/background pair has its
+  measured contrast in a comment, and a new colour is measured before it lands (text 4.5:1, control borders
+  3:1 via `--control`). The theme is applied before first paint by a few lines in `index.html` that mirror
+  `theme.ts` — change one, change both. States follow one vocabulary: `Skeleton` while loading, `EmptyState`
+  with a way forward, `Alert` only for what failed (with `onRetry` for failed reads), `Notice` for hints,
+  `Thinking` for waits of seconds, `Status` for a success. Tests find elements by role and label; a restyle
+  that breaks one changed behaviour. "Main resume" means the newest (`newest()` in `routes/Posting.tsx`).
 
 ## Constraints
 
