@@ -27,6 +27,6 @@ export {
   Thinking,
 } from './feedback'
 export { Muted, PageHeader, PageTitle, Sheet } from './surfaces'
-export { StageRail } from './stages'
+export { StageRail, reachedOf } from './stages'
 export type { Reached } from './stages'
 export { ThemeToggle } from './ThemeToggle'

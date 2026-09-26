@@ -7,6 +7,7 @@ import type {
 
 import { api } from './client'
 import { dashboardKey } from './dashboard'
+import { documentsKey } from './documents'
 import { detailOf, reasonFor } from './errors'
 import type { Pairing } from './matching'
 import type { components } from './schema'
@@ -69,7 +70,12 @@ export function useStartInterview(): UseMutationResult<Interview, Error, Pairing
       return data
     },
     onSuccess: async (interview) => {
-      await remember(queryClient, interview)
+      // Starting is what moves a posting to the interview stage; answering
+      // and finishing do not, so only this one marks the postings stale.
+      await Promise.all([
+        remember(queryClient, interview),
+        queryClient.invalidateQueries({ queryKey: documentsKey }),
+      ])
     },
   })
 }

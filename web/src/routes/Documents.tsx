@@ -31,10 +31,13 @@ import {
   Muted,
   Notice,
   PageHeader,
+  Score,
   Sheet,
   Skeleton,
+  StageRail,
   Status,
   Thinking,
+  reachedOf,
 } from '../ui'
 import { newest } from './Posting'
 import type { Arrival } from './Posting'
@@ -337,8 +340,13 @@ interface RowActions {
 }
 
 /**
- * One posting as a row: what it is, how old, whether it was read -- and the
- * two things to do with it, right here, on the newest resume.
+ * One posting as a row: what it is, how old, whether it was read, how far you
+ * got with it -- and the two things to do with it, right here, on the newest
+ * resume.
+ *
+ * From md the row is a grid, so stages and scores stand in columns and can be
+ * compared down the list; below it the parts wrap, with room kept for the
+ * title.
  */
 function PostingRow({
   document,
@@ -356,8 +364,8 @@ function PostingRow({
 
   return (
     <li className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="min-w-0 flex-1">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 md:grid md:grid-cols-[minmax(0,1fr)_auto_4rem_auto]">
+        <div className="min-w-48 flex-1">
           <h3 className="truncate font-bold">
             <Link
               to={`/documents/${document.id}`}
@@ -368,17 +376,31 @@ function PostingRow({
           </h3>
           <p className="text-sm text-ink-faint">
             {document.source_url ? hostOf(document.source_url) : 'uploaded'}
-            {' · '}
+            {', '}
             <time
               dateTime={document.created_at}
               title={new Date(document.created_at).toLocaleString()}
             >
               {ago(document.created_at)}
             </time>
-            {' · '}
+            {', '}
             {requirements(document.requirement_count)}
           </p>
         </div>
+
+        <StageRail reached={reachedOf(document.stage)} compact />
+        <span className="w-16 text-right">
+          {document.best_score === null ? (
+            <>
+              <span aria-hidden="true" className="text-ink-faint">
+                —
+              </span>
+              <span className="sr-only">Not matched yet</span>
+            </>
+          ) : (
+            <Score value={document.best_score} size="sm" />
+          )}
+        </span>
 
         <div className="flex flex-wrap items-center gap-2">
           <Button

@@ -5,6 +5,16 @@ import { percentage } from './data'
 /** Where a posting stands for you: 1 added, 2 matched, 3 interviewed. */
 export type Reached = 1 | 2 | 3
 
+/**
+ * A stage from the API as one the rail can draw.
+ *
+ * The API sends a plain number, and a later project adds 4 for Applied; until
+ * the rail can show that, anything outside 1-3 is clamped rather than cast.
+ */
+export function reachedOf(stage: number): Reached {
+  return stage >= 3 ? 3 : stage <= 1 ? 1 : 2
+}
+
 const STEPS = ['Posting', 'Match', 'Interview', 'Applied'] as const
 
 /**

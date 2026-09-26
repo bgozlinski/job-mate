@@ -3,6 +3,7 @@ import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
 
 import { api } from './client'
 import { dashboardKey } from './dashboard'
+import { documentsKey } from './documents'
 import { detailOf, reasonFor } from './errors'
 import type { components } from './schema'
 
@@ -45,10 +46,12 @@ export function useMatch(): UseMutationResult<Match, Error, Pairing> {
     },
     onSuccess: async () => {
       // Every match is stored, so the history on the other screen is now one
-      // row out of date (FR-2), and the dashboard's steps with it.
+      // row out of date (FR-2), and the dashboard's steps with it -- and the
+      // postings, which carry your stage and best score at each.
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: matchesKey }),
         queryClient.invalidateQueries({ queryKey: dashboardKey }),
+        queryClient.invalidateQueries({ queryKey: documentsKey }),
       ])
     },
   })

@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react'
 import { expect, test } from 'vitest'
 
-import { Chip, Score, StageRail } from '.'
+import { Chip, Score, StageRail, reachedOf } from '.'
 
 function steps() {
   return within(screen.getByRole('list', { name: 'Stage' })).getAllByRole('listitem')
@@ -69,4 +69,8 @@ test('a score reads as a percentage', () => {
   render(<Score value={0.72} size="lg" />)
 
   expect(screen.getByText('72%')).toBeInTheDocument()
+})
+
+test('a stage outside what the rail can draw is clamped, not cast', () => {
+  expect([0, 1, 2, 3, 4].map(reachedOf)).toEqual([1, 1, 2, 3, 3])
 })
