@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react'
 
 import type { Match } from '../api/matching'
-import { Chip, Meter, Muted, Sheet, percentage } from '../ui'
+import { Chip, Meter, Muted, Score, Sheet } from '../ui'
 
 function Terms({
   title,
@@ -20,7 +20,7 @@ function Terms({
 
   return (
     <section className="flex flex-col gap-3">
-      <h3 className="text-sm font-semibold tracking-wide text-ink-soft uppercase">
+      <h3 className="text-base font-bold">
         {title} ({terms.length})
       </h3>
       <ul className="flex flex-wrap gap-2">
@@ -72,12 +72,10 @@ export function MatchResult({ match }: { match: Match }): ReactElement {
             navigating by headings hears "75% match, Python Developer", not
             a bare "75%". */}
         <h2 className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="text-5xl font-bold tracking-tight text-accent">
-            {percentage(match.score)}
-          </span>{' '}
+          <Score value={match.score} size="lg" />{' '}
           <span className="text-lg font-medium">
             match
-            {match.document_title ? ` · ${match.document_title}` : null}
+            {match.document_title ? ` with ${match.document_title}` : null}
           </span>
         </h2>
 
@@ -102,9 +100,7 @@ export function MatchResult({ match }: { match: Match }): ReactElement {
 
       {match.suggestions.length > 0 ? (
         <section className="flex flex-col gap-3">
-          <h3 className="text-sm font-semibold tracking-wide text-ink-soft uppercase">
-            Suggested bullet points
-          </h3>
+          <h3 className="text-base font-bold">Suggested bullet points</h3>
           <ul className="flex flex-col gap-2">
             {match.suggestions.map((suggestion) => (
               <li key={suggestion}>
@@ -117,9 +113,7 @@ export function MatchResult({ match }: { match: Match }): ReactElement {
 
       {match.notes.length > 0 ? (
         <section className="flex flex-col gap-3">
-          <h3 className="text-sm font-semibold tracking-wide text-ink-soft uppercase">
-            Notes on the resume
-          </h3>
+          <h3 className="text-base font-bold">Notes on the resume</h3>
           <ul className="flex max-w-prose list-disc flex-col gap-1 pl-5 text-sm text-ink-soft">
             {match.notes.map((note) => (
               <li key={note}>{note}</li>

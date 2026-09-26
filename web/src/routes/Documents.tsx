@@ -406,6 +406,7 @@ function PostingRow({
           <Button
             type="button"
             size="sm"
+            variant="secondary"
             icon={GitCompareArrowsIcon}
             aria-label={`Match my CV with ${name}`}
             disabled={actions.busy || !actions.resumeId}

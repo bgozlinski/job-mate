@@ -6,20 +6,18 @@ import {
   PlusIcon,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { Link, useNavigate } from 'react-router'
+import { useNavigate } from 'react-router'
 
 import { useDashboard } from '../api/dashboard'
 import type { Step } from '../api/dashboard'
 import { useInterviews, useStartInterview } from '../api/interview'
 import { useMatch, useMatches } from '../api/matching'
 import type { Pairing } from '../api/matching'
-import { ago } from '../time'
 import {
   Alert,
   Button,
   ButtonLink,
   Chip,
-  Score,
   Sheet,
   Skeleton,
   StageRail,
@@ -27,6 +25,7 @@ import {
   percentage,
 } from '../ui'
 import type { Reached } from '../ui'
+import { TimelineItem } from './TimelineItem'
 import { newestFirst } from './timeline'
 
 /** How much of your history the dashboard shows; the rest is on History. */
@@ -422,29 +421,7 @@ function Recently(): ReactElement | null {
         <Sheet>
           <ul className="flex flex-col divide-y divide-line">
             {rows.map((row) => (
-              <li
-                key={row.key}
-                className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 first:pt-0 last:pb-0"
-              >
-                <row.icon aria-hidden="true" className="size-4 shrink-0 text-ink-faint" />
-                <Link to={row.to} className="min-w-0 flex-1 hover:text-accent hover:underline">
-                  {row.what}{' '}
-                  {row.score === null ? (
-                    <span className="font-semibold">{row.outcome}</span>
-                  ) : (
-                    <Score value={row.score} size="sm" />
-                  )}
-                  {' — '}
-                  {row.title}
-                </Link>
-                <time
-                  dateTime={row.at}
-                  title={new Date(row.at).toLocaleString()}
-                  className="text-sm text-ink-faint"
-                >
-                  {ago(row.at)}
-                </time>
-              </li>
+              <TimelineItem key={row.key} row={row} />
             ))}
           </ul>
         </Sheet>

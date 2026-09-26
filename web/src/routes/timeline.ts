@@ -42,9 +42,9 @@ export function fromInterview(interview: InterviewSummary): Row {
     what: 'Interview',
     outcome:
       interview.status === 'active'
-        ? 'In progress'
+        ? 'in progress'
         : interview.score === null
-          ? 'Finished, nothing judged'
+          ? 'finished, nothing judged'
           : percentage(interview.score),
     score:
       interview.status === 'finished' && interview.score !== null

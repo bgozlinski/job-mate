@@ -13,6 +13,7 @@ import {
   useResumes,
   useUploadResume,
 } from '../api/resumes'
+import { ago } from '../time'
 import {
   Alert,
   Button,
@@ -290,7 +291,7 @@ function Stored({
       {main ? (
         <p>
           <span className="rounded-control bg-accent-soft px-2.5 py-0.5 text-xs font-bold text-accent-strong">
-            Main · used for matching
+            Main, used for matching
           </span>
         </p>
       ) : null}
@@ -298,10 +299,12 @@ function Stored({
         <h3 className={main ? 'text-lg font-extrabold' : 'font-bold'}>{name}</h3>
         <p className="text-sm text-ink-faint">
           <span>{resume.target_role ?? 'no target role'}</span>
-          {' · '}
+          {', '}
           <span>{resume.content.length.toLocaleString('en')} characters</span>
-          {' · '}
-          <time dateTime={resume.created_at}>{created.toLocaleString()}</time>
+          {', added '}
+          <time dateTime={resume.created_at} title={created.toLocaleString()}>
+            {ago(resume.created_at)}
+          </time>
         </p>
       </div>
 

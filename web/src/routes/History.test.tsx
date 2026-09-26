@@ -74,9 +74,9 @@ test('matches and interviews share one timeline, newest first', async () => {
   await screen.findAllByRole('link')
 
   expect(rowNames()).toEqual([
-    'Match · 56% · Python Developer — DCV',
-    'Interview · 50% · Python Developer — DCV',
-    'Match · 56% · Python Developer — DCV',
+    'Match 56% — Python Developer — DCV',
+    'Interview 50% — Python Developer — DCV',
+    'Match 56% — Python Developer — DCV',
   ])
   expect(screen.getAllByRole('link')[0]).toHaveAttribute('href', '/matches/m-new')
 })
@@ -94,12 +94,12 @@ test('an interview in progress and one never judged say so', async () => {
 
   expect(
     await screen.findByRole('link', {
-      name: 'Interview · In progress · Python Developer — DCV',
+      name: 'Interview in progress — Python Developer — DCV',
     }),
   ).toBeInTheDocument()
   expect(
     screen.getByRole('link', {
-      name: 'Interview · Finished, nothing judged · Python Developer — DCV',
+      name: 'Interview finished, nothing judged — Python Developer — DCV',
     }),
   ).toBeInTheDocument()
 })
@@ -140,7 +140,7 @@ test('a deleted posting is named as deleted, not left blank', async () => {
   show()
 
   expect(
-    await screen.findByRole('link', { name: 'Match · 56% · Deleted posting' }),
+    await screen.findByRole('link', { name: 'Match 56% — Deleted posting' }),
   ).toBeInTheDocument()
 })
 
@@ -193,5 +193,5 @@ test('a history that failed to load can be asked again', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent('Could not read your match history')
   await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
 
-  expect(await screen.findByRole('link', { name: /^Match · 56%/ })).toBeInTheDocument()
+  expect(await screen.findByRole('link', { name: /^Match 56% —/ })).toBeInTheDocument()
 })
