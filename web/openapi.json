@@ -1,6 +1,45 @@
 {
   "components": {
     "schemas": {
+      "AddAnotherPostingStep": {
+        "description": "Everything there is to do has been done.",
+        "properties": {
+          "kind": {
+            "const": "add_another_posting",
+            "default": "add_another_posting",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "title": "AddAnotherPostingStep",
+        "type": "object"
+      },
+      "AddPostingStep": {
+        "description": "There are no postings to match a resume against.",
+        "properties": {
+          "kind": {
+            "const": "add_posting",
+            "default": "add_posting",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "title": "AddPostingStep",
+        "type": "object"
+      },
+      "AddResumeStep": {
+        "description": "You have no resume, and nothing else works without one.",
+        "properties": {
+          "kind": {
+            "const": "add_resume",
+            "default": "add_resume",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "title": "AddResumeStep",
+        "type": "object"
+      },
       "AnswerCreate": {
         "description": "An answer, and the question it answers.",
         "properties": {
@@ -94,6 +133,102 @@
           "file"
         ],
         "title": "Body_upload_resume_resumes_upload_post",
+        "type": "object"
+      },
+      "ContinueInterviewStep": {
+        "description": "An interview of yours that is still waiting for answers.",
+        "properties": {
+          "answered": {
+            "title": "Answered",
+            "type": "integer"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Title"
+          },
+          "kind": {
+            "const": "continue_interview",
+            "default": "continue_interview",
+            "title": "Kind",
+            "type": "string"
+          },
+          "question_count": {
+            "title": "Question Count",
+            "type": "integer"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "document_id",
+          "document_title",
+          "answered",
+          "question_count"
+        ],
+        "title": "ContinueInterviewStep",
+        "type": "object"
+      },
+      "Dashboard": {
+        "description": "What to do next, most important first. Never empty.",
+        "properties": {
+          "steps": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "add_another_posting": "#/components/schemas/AddAnotherPostingStep",
+                  "add_posting": "#/components/schemas/AddPostingStep",
+                  "add_resume": "#/components/schemas/AddResumeStep",
+                  "continue_interview": "#/components/schemas/ContinueInterviewStep",
+                  "match": "#/components/schemas/MatchStep",
+                  "practise": "#/components/schemas/PractiseStep"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/AddResumeStep"
+                },
+                {
+                  "$ref": "#/components/schemas/AddPostingStep"
+                },
+                {
+                  "$ref": "#/components/schemas/ContinueInterviewStep"
+                },
+                {
+                  "$ref": "#/components/schemas/MatchStep"
+                },
+                {
+                  "$ref": "#/components/schemas/PractiseStep"
+                },
+                {
+                  "$ref": "#/components/schemas/AddAnotherPostingStep"
+                }
+              ]
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "steps"
+        ],
+        "title": "Dashboard",
         "type": "object"
       },
       "DocumentCreate": {
@@ -508,6 +643,45 @@
         "title": "MatchRead",
         "type": "object"
       },
+      "MatchStep": {
+        "description": "A posting you have not matched any resume against.",
+        "properties": {
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Title"
+          },
+          "kind": {
+            "const": "match",
+            "default": "match",
+            "title": "Kind",
+            "type": "string"
+          },
+          "resume_id": {
+            "format": "uuid",
+            "title": "Resume Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "document_title",
+          "resume_id"
+        ],
+        "title": "MatchStep",
+        "type": "object"
+      },
       "MatchSummary": {
         "description": "One row of the history: enough to choose which match to open.",
         "properties": {
@@ -669,6 +843,50 @@
           "created_at"
         ],
         "title": "MessageRead",
+        "type": "object"
+      },
+      "PractiseStep": {
+        "description": "A posting you matched well and have not been interviewed on.",
+        "properties": {
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Title"
+          },
+          "kind": {
+            "const": "practise",
+            "default": "practise",
+            "title": "Kind",
+            "type": "string"
+          },
+          "resume_id": {
+            "format": "uuid",
+            "title": "Resume Id",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "document_id",
+          "document_title",
+          "resume_id",
+          "score"
+        ],
+        "title": "PractiseStep",
         "type": "object"
       },
       "ResumeCreate": {
@@ -1348,6 +1566,33 @@
         "summary": "Register",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/dashboard": {
+      "get": {
+        "description": "List what to do next, most important first. Never empty.",
+        "operationId": "read_dashboard_dashboard_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dashboard"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read Dashboard",
+        "tags": [
+          "dashboard"
         ]
       }
     },

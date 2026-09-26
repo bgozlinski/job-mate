@@ -124,6 +124,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Dashboard
+         * @description List what to do next, most important first. Never empty.
+         */
+        get: operations["read_dashboard_dashboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents": {
         parameters: {
             query?: never;
@@ -501,6 +521,39 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * AddAnotherPostingStep
+         * @description Everything there is to do has been done.
+         */
+        AddAnotherPostingStep: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "add_another_posting";
+        };
+        /**
+         * AddPostingStep
+         * @description There are no postings to match a resume against.
+         */
+        AddPostingStep: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "add_posting";
+        };
+        /**
+         * AddResumeStep
+         * @description You have no resume, and nothing else works without one.
+         */
+        AddResumeStep: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "add_resume";
+        };
+        /**
          * AnswerCreate
          * @description An answer, and the question it answers.
          */
@@ -530,6 +583,41 @@ export interface components {
             file: string;
             /** Target Role */
             target_role?: string | null;
+        };
+        /**
+         * ContinueInterviewStep
+         * @description An interview of yours that is still waiting for answers.
+         */
+        ContinueInterviewStep: {
+            /** Answered */
+            answered: number;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Document Title */
+            document_title: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "continue_interview";
+            /** Question Count */
+            question_count: number;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+        };
+        /**
+         * Dashboard
+         * @description What to do next, most important first. Never empty.
+         */
+        Dashboard: {
+            /** Steps */
+            steps: (components["schemas"]["AddResumeStep"] | components["schemas"]["AddPostingStep"] | components["schemas"]["ContinueInterviewStep"] | components["schemas"]["MatchStep"] | components["schemas"]["PractiseStep"] | components["schemas"]["AddAnotherPostingStep"])[];
         };
         /**
          * DocumentCreate
@@ -705,6 +793,29 @@ export interface components {
             suggestions: string[];
         };
         /**
+         * MatchStep
+         * @description A posting you have not matched any resume against.
+         */
+        MatchStep: {
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Document Title */
+            document_title: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "match";
+            /**
+             * Resume Id
+             * Format: uuid
+             */
+            resume_id: string;
+        };
+        /**
          * MatchSummary
          * @description One row of the history: enough to choose which match to open.
          */
@@ -766,6 +877,31 @@ export interface components {
             verdicts: {
                 [key: string]: components["schemas"]["VerdictRead"];
             } | null;
+        };
+        /**
+         * PractiseStep
+         * @description A posting you matched well and have not been interviewed on.
+         */
+        PractiseStep: {
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Document Title */
+            document_title: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "practise";
+            /**
+             * Resume Id
+             * Format: uuid
+             */
+            resume_id: string;
+            /** Score */
+            score: number;
         };
         /**
          * ResumeCreate
@@ -1125,6 +1261,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_dashboard_dashboard_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Dashboard"];
                 };
             };
         };

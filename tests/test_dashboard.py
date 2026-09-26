@@ -1,6 +1,8 @@
 import uuid
 from dataclasses import dataclass
 
+from fastapi import status
+from httpx import AsyncClient
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -17,6 +19,7 @@ from app.schemas.dashboard import (
     Step,
 )
 from app.services.dashboard import STEPS_PER_KIND, next_steps
+from tests.test_documents import account
 
 Factory = async_sessionmaker[AsyncSession]
 
@@ -382,3 +385,20 @@ async def test_another_accounts_resume_does_not_count_as_yours(
     steps = await steps_for(session_factory, owner)
 
     assert kinds(steps) == ["add_resume"]
+
+
+async def test_the_dashboard_needs_a_token(client: AsyncClient) -> None:
+    response = await client.get("/dashboard")
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+async def test_a_new_account_is_told_what_to_add_first(client: AsyncClient) -> None:
+    headers = await account(client)
+
+    response = await client.get("/dashboard", headers=headers)
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == {
+        "steps": [{"kind": "add_resume"}, {"kind": "add_posting"}]
+    }
