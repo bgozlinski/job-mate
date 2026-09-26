@@ -6,6 +6,7 @@ import type {
 } from '@tanstack/react-query'
 
 import { api } from './client'
+import { dashboardKey } from './dashboard'
 import { detailOf, reasonFor } from './errors'
 import type { Pairing } from './matching'
 import type { components } from './schema'
@@ -26,12 +27,16 @@ function interviewKey(id: string): readonly string[] {
  * Store what the API sent back for one interview, and mark every list stale.
  *
  * A list row carries the status and the score, so starting, answering the
- * last question and finishing all change it. The interview itself is not read
- * again: the response already is its new state.
+ * last question and finishing all change it; so does the dashboard, which
+ * counts the answers. The interview itself is not read again: the response
+ * already is its new state.
  */
 async function remember(queryClient: QueryClient, interview: Interview): Promise<void> {
   queryClient.setQueryData(interviewKey(interview.id), interview)
-  await queryClient.invalidateQueries({ queryKey: listsKey })
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: listsKey }),
+    queryClient.invalidateQueries({ queryKey: dashboardKey }),
+  ])
 }
 
 /**

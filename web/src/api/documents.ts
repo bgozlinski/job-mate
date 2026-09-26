@@ -3,6 +3,7 @@ import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
 
 import { sessionKey } from '../auth/session'
 import { api } from './client'
+import { dashboardKey } from './dashboard'
 import { detailOf } from './errors'
 import type { components } from './schema'
 
@@ -102,8 +103,11 @@ function useIngestion<Input>(
     onSuccess: async () => {
       // Every page of the listing, whatever its size: the key is a prefix, so
       // this invalidates the one on screen without knowing how far the reader
-      // has scrolled.
-      await queryClient.invalidateQueries({ queryKey: documentsKey })
+      // has scrolled. A new posting is also a new step on the dashboard.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: documentsKey }),
+        queryClient.invalidateQueries({ queryKey: dashboardKey }),
+      ])
     },
   })
 }
@@ -192,7 +196,10 @@ export function useDeleteDocument(): UseMutationResult<undefined, Error, string>
       )
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: documentsKey })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: documentsKey }),
+        queryClient.invalidateQueries({ queryKey: dashboardKey }),
+      ])
     },
   })
 }

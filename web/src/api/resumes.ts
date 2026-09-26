@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
 
 import { api } from './client'
+import { dashboardKey } from './dashboard'
 import { detailOf } from './errors'
 import type { components } from './schema'
 
@@ -46,7 +47,11 @@ function useResumeMutation<Input, Result>(
   return useMutation({
     mutationFn: send,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: resumesKey })
+      // The newest resume is the one the dashboard offers to match with.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: resumesKey }),
+        queryClient.invalidateQueries({ queryKey: dashboardKey }),
+      ])
     },
   })
 }

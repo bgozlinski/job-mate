@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
 
 import { api } from './client'
+import { dashboardKey } from './dashboard'
 import { detailOf, reasonFor } from './errors'
 import type { components } from './schema'
 
@@ -44,8 +45,11 @@ export function useMatch(): UseMutationResult<Match, Error, Pairing> {
     },
     onSuccess: async () => {
       // Every match is stored, so the history on the other screen is now one
-      // row out of date (FR-2).
-      await queryClient.invalidateQueries({ queryKey: matchesKey })
+      // row out of date (FR-2), and the dashboard's steps with it.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: matchesKey }),
+        queryClient.invalidateQueries({ queryKey: dashboardKey }),
+      ])
     },
   })
 }
