@@ -21,7 +21,7 @@ export function Chip({
   return (
     <span
       className={
-        'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm ' +
+        'inline-flex items-center gap-1.5 rounded-control px-3 py-1 text-sm ' +
         (present
           ? 'bg-accent-soft font-semibold text-accent-strong'
           : 'border-[1.5px] border-dashed border-control text-ink-soft')
@@ -50,10 +50,10 @@ export function Meter({ value, label }: { value: number; label: string }): React
       aria-valuenow={percent}
       aria-valuemin={0}
       aria-valuemax={100}
-      className="h-2.5 w-full overflow-hidden rounded-full bg-sunken"
+      className="h-2.5 w-full overflow-hidden rounded-control bg-sunken"
     >
       <div
-        className="h-full rounded-full bg-accent"
+        className="h-full rounded-control bg-accent"
         style={{ width: `${String(percent)}%` }}
       />
     </div>

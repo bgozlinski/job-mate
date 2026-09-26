@@ -28,7 +28,7 @@ export function Alert({
   return (
     <p
       role="alert"
-      className="flex items-start gap-2 rounded-xl bg-danger-soft px-3 py-2.5 text-sm text-danger-ink"
+      className="flex items-start gap-2 rounded-control bg-danger-soft px-3 py-2.5 text-sm text-danger-ink"
     >
       <TriangleAlertIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
       <span className="flex-1">{children}</span>
@@ -55,7 +55,7 @@ export function Alert({
  */
 export function Notice({ children }: { children: ReactNode }): ReactElement {
   return (
-    <p className="flex items-start gap-2 rounded-xl bg-sunken px-3 py-2.5 text-sm text-ink-soft">
+    <p className="flex items-start gap-2 rounded-control bg-sunken px-3 py-2.5 text-sm text-ink-soft">
       <InfoIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
       <span>{children}</span>
     </p>
@@ -67,7 +67,7 @@ export function Status({ children }: { children: ReactNode }): ReactElement {
   return (
     <p
       role="status"
-      className="flex items-start gap-2 rounded-xl bg-accent-soft px-3 py-2.5 text-sm text-accent-strong"
+      className="flex items-start gap-2 rounded-control bg-accent-soft px-3 py-2.5 text-sm text-accent-strong"
     >
       <CircleCheckIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
       <span>{children}</span>
@@ -93,7 +93,7 @@ export function EmptyState({
 }): ReactElement {
   return (
     <div className="flex flex-col items-center gap-3 rounded-card border-[1.5px] border-dashed border-line px-6 py-10 text-center">
-      <span className="rounded-full bg-sunken p-3 text-ink-faint">
+      <span className="rounded-control bg-sunken p-3 text-ink-faint">
         <Icon aria-hidden="true" className="size-6" />
       </span>
       <p className="font-bold">{title}</p>
@@ -162,7 +162,7 @@ export function Thinking({ children }: { children: ReactNode }): ReactElement {
   return (
     <p
       role="status"
-      className="inline-flex items-center gap-2 rounded-full bg-accent-soft px-4 py-2 text-sm font-semibold text-accent-strong"
+      className="inline-flex items-center gap-2 rounded-control bg-accent-soft px-4 py-2 text-sm font-semibold text-accent-strong"
     >
       <Spin />
       <span>{children}</span>

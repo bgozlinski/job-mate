@@ -115,7 +115,7 @@ function AddByFile(): ReactElement {
             // Deliberately not `required`: the button below is disabled without
             // a file, and jsdom's constraint validation does not see files set
             // by a test, so the attribute would make this path untestable.
-            className={`${className} file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-sm file:text-accent-strong`}
+            className={`${className} file:mr-3 file:rounded-control file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-sm file:text-accent-strong`}
             onChange={(event) => {
               setFile(event.target.files?.[0] ?? null)
             }}
@@ -289,7 +289,7 @@ function Stored({
     <div className={`flex flex-col ${main ? 'gap-3' : 'gap-2'}`}>
       {main ? (
         <p>
-          <span className="rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-bold text-accent-strong">
+          <span className="rounded-control bg-accent-soft px-2.5 py-0.5 text-xs font-bold text-accent-strong">
             Main · used for matching
           </span>
         </p>
@@ -312,7 +312,7 @@ function Stored({
           page crawl by the third one. */}
       <details>
         <summary className={SUMMARY}>Show text</summary>
-        <pre className="mt-2 max-h-72 overflow-auto rounded-xl bg-sunken p-3 font-mono text-xs whitespace-pre-wrap text-ink-soft">
+        <pre className="mt-2 max-h-72 overflow-auto rounded-control bg-sunken p-3 font-mono text-xs whitespace-pre-wrap text-ink-soft">
           {resume.content}
         </pre>
       </details>

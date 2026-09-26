@@ -189,7 +189,7 @@ function Details({ posting }: { posting: DocumentDetail }): ReactElement {
             {requirements.map((requirement) => (
               <li
                 key={requirement}
-                className="rounded-full bg-sunken px-3 py-1 text-sm text-ink"
+                className="rounded-control bg-sunken px-3 py-1 text-sm text-ink"
               >
                 {requirement}
               </li>

@@ -28,7 +28,7 @@ export function ThemeToggle(): ReactElement {
     <div
       role="group"
       aria-label="Colour theme"
-      className="inline-flex rounded-full bg-sunken p-0.5"
+      className="inline-flex rounded-control bg-sunken p-0.5"
     >
       {THEMES.map((option) => {
         const { label, icon: Icon } = CHOICES[option]
@@ -45,9 +45,9 @@ export function ThemeToggle(): ReactElement {
               setTheme(option)
             }}
             className={
-              'rounded-full p-1.5 transition-colors ' +
+              'rounded-control p-1.5 transition-colors ' +
               (theme === option
-                ? 'bg-raised text-accent shadow-card'
+                ? 'bg-raised text-accent ring-1 ring-line'
                 : 'text-ink-faint hover:text-accent')
             }
           >

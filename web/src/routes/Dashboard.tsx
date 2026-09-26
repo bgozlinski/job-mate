@@ -240,7 +240,7 @@ function NextStep({ step, running }: { step: Step; running: Running }): ReactEle
   return (
     <section
       aria-labelledby="next-step"
-      className="flex flex-col items-start gap-4 rounded-card border-l-4 border-accent bg-raised p-6 shadow-card"
+      className="flex flex-col items-start gap-4 rounded-card border border-l-4 border-line border-l-accent bg-raised p-6"
     >
       <div className="flex max-w-prose flex-col gap-1">
         <h2 id="next-step" className="text-[1.75rem] leading-tight font-extrabold tracking-tight">

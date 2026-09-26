@@ -50,7 +50,7 @@ export function Layout(): ReactElement {
             aligned with the content under it. */}
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-3">
           <h1 className="text-xl font-extrabold tracking-tight">
-            <Link to="/" className="rounded-md transition-colors hover:text-accent">
+            <Link to="/" className="rounded-control transition-colors hover:text-accent">
               Job<span className="text-accent">Mate</span>
             </Link>
           </h1>
@@ -77,7 +77,7 @@ export function Layout(): ReactElement {
                   // aria-current is what a screen reader announces.
                   aria-current={active ? 'page' : undefined}
                   className={
-                    'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors ' +
+                    'inline-flex items-center gap-1.5 rounded-control px-3 py-1.5 text-sm transition-colors ' +
                     (active
                       ? 'bg-accent-soft font-bold text-accent-strong'
                       : 'text-ink-soft hover:bg-sunken hover:text-accent')

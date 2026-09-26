@@ -154,7 +154,7 @@ function AddByFile(): ReactElement {
             // guarantee -- and jsdom's constraint validation does not see files
             // set by a test, so with it the form silently never submits and the
             // upload path cannot be covered at all.
-            className={`${className} file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-sm file:text-accent-strong`}
+            className={`${className} file:mr-3 file:rounded-control file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-sm file:text-accent-strong`}
             onChange={(event) => {
               setFile(event.target.files?.[0] ?? null)
             }}
@@ -270,7 +270,7 @@ function DeletePosting({
     <div
       role="group"
       aria-label={`Confirm deleting ${name}`}
-      className="flex flex-col gap-2 rounded-xl bg-sunken p-3"
+      className="flex flex-col gap-2 rounded-control bg-sunken p-3"
     >
       <p className="text-sm">
         This removes the posting and its chunks for good. Matches already in
