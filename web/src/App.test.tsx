@@ -64,7 +64,9 @@ test('a returning visitor is not shown the login screen', async () => {
 
   show('/')
 
-  expect(await screen.findByText(`Signed in as ${USER.email}`)).toBeInTheDocument()
+  expect(await screen.findByRole('button', { name: 'Log out' })).toHaveAccessibleDescription(
+    `Signed in as ${USER.email}`,
+  )
   expect(screen.queryByLabelText('Email')).not.toBeInTheDocument()
 })
 
@@ -89,7 +91,9 @@ test('logging in replaces the form with the application', async () => {
   await userEvent.type(screen.getByLabelText('Password'), 'secret123')
   await userEvent.click(screen.getByRole('button', { name: 'Log in' }))
 
-  expect(await screen.findByText(`Signed in as ${USER.email}`)).toBeInTheDocument()
+  expect(await screen.findByRole('button', { name: 'Log out' })).toHaveAccessibleDescription(
+    `Signed in as ${USER.email}`,
+  )
 })
 
 test('a rejected login says why, in the API’s own words', async () => {

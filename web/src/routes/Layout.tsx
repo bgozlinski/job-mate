@@ -92,18 +92,15 @@ export function Layout(): ReactElement {
 
           <div className="ml-auto flex items-center gap-3 text-sm text-ink-faint">
             <ThemeToggle />
-            {/* Capped and cut short so a long address cannot push the header
-                onto a second line; the whole of it shows on hover. */}
-            <span
-              className="hidden max-w-56 truncate sm:inline-block"
-              title={session.data?.email}
-            >
-              Signed in as {session.data?.email}
-            </span>
+            {/* The address is on the way out rather than beside it: six places,
+                the toggle and an address do not fit one line in 6xl, and who is
+                signed in matters mostly when leaving. The title shows on hover
+                and a screen reader reads it as the button's description. */}
             <Button
               type="button"
               variant="quiet"
               icon={LogOutIcon}
+              title={session.data ? `Signed in as ${session.data.email}` : undefined}
               disabled={logout.isPending}
               onClick={() => {
                 logout.mutate()
