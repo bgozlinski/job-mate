@@ -1,15 +1,12 @@
 import { useState } from 'react'
 import type { ReactElement } from 'react'
-import { GitCompareArrowsIcon, HistoryIcon, MessagesSquareIcon } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
+import { HistoryIcon } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router'
 
 import { useInterviews } from '../api/interview'
-import type { InterviewSummary } from '../api/interview'
 import { HISTORY_PAGE_SIZE, MAX_HISTORY_PAGE_SIZE, useMatches } from '../api/matching'
-import type { MatchSummary } from '../api/matching'
 import { Alert, Button, Card, EmptyState, PageHeader, Skeleton } from '../ui'
-import { percentage } from './MatchResult'
+import { newestFirst } from './timeline'
 
 type Kind = 'all' | 'matches' | 'interviews'
 
@@ -18,45 +15,6 @@ const FILTERS: { kind: Kind; label: string }[] = [
   { kind: 'matches', label: 'Matches' },
   { kind: 'interviews', label: 'Interviews' },
 ]
-
-interface Row {
-  key: string
-  to: string
-  icon: LucideIcon
-  what: string
-  outcome: string
-  title: string
-  at: string
-}
-
-function fromMatch(match: MatchSummary): Row {
-  return {
-    key: `m-${match.id}`,
-    to: `/matches/${match.id}`,
-    icon: GitCompareArrowsIcon,
-    what: 'Match',
-    outcome: percentage(match.score),
-    title: match.document_title ?? 'Deleted posting',
-    at: match.created_at,
-  }
-}
-
-function fromInterview(interview: InterviewSummary): Row {
-  return {
-    key: `i-${interview.id}`,
-    to: `/interviews/${interview.id}`,
-    icon: MessagesSquareIcon,
-    what: 'Interview',
-    outcome:
-      interview.status === 'active'
-        ? 'In progress'
-        : interview.score === null
-          ? 'Finished, nothing judged'
-          : percentage(interview.score),
-    title: interview.document_title ?? 'Deleted posting',
-    at: interview.created_at,
-  }
-}
 
 function kindOf(value: string | null): Kind {
   return value === 'matches' || value === 'interviews' ? value : 'all'
@@ -76,10 +34,10 @@ export function History(): ReactElement {
   const matches = useMatches(shown)
   const interviews = useInterviews(shown)
 
-  const rows = [
-    ...(kind === 'interviews' ? [] : (matches.data ?? []).map(fromMatch)),
-    ...(kind === 'matches' ? [] : (interviews.data ?? []).map(fromInterview)),
-  ].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
+  const rows = newestFirst(
+    kind === 'interviews' ? [] : (matches.data ?? []),
+    kind === 'matches' ? [] : (interviews.data ?? []),
+  )
 
   const pending =
     (kind !== 'interviews' && matches.isPending) ||

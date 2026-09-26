@@ -15,7 +15,7 @@
  * feedback, plus the theme toggle.
  */
 
-export { Button, CONTROL, Field } from './controls'
+export { Button, ButtonLink, CONTROL, Field } from './controls'
 export { Chip, Meter } from './data'
 export {
   Alert,

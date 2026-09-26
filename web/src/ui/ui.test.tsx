@@ -1,10 +1,12 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router'
 import { expect, test, vi } from 'vitest'
 
 import {
   Alert,
   Button,
+  ButtonLink,
   EmptyState,
   Notice,
   PageHeader,
@@ -83,4 +85,17 @@ test('waiting on the model is announced in words', () => {
   render(<Thinking>Evaluating your answer…</Thinking>)
 
   expect(screen.getByRole('status')).toHaveTextContent('Evaluating your answer…')
+})
+
+test('a link drawn as a button is still a link', () => {
+  render(
+    <MemoryRouter>
+      <ButtonLink to="/resumes">Add resume</ButtonLink>
+    </MemoryRouter>,
+  )
+
+  expect(screen.getByRole('link', { name: 'Add resume' })).toHaveAttribute(
+    'href',
+    '/resumes',
+  )
 })

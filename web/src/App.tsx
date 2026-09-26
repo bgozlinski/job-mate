@@ -2,6 +2,7 @@ import type { ReactElement } from 'react'
 import { Navigate, Route, Routes } from 'react-router'
 
 import { RequireAuth } from './auth/RequireAuth'
+import { Dashboard } from './routes/Dashboard'
 import { Documents } from './routes/Documents'
 import { History } from './routes/History'
 import { Interview } from './routes/Interview'
@@ -18,10 +19,11 @@ import { Resumes } from './routes/Resumes'
  * one in main.tsx and a test gets a memory router, so the same tree can be
  * rendered at any URL without a real address bar.
  *
- * The work revolves around a posting, and its page can match and practise on
- * it directly. Match and Interview are also places of their own, for starting
- * from a resume and a posting picked there. The old history lists redirect to
- * the shared one, so a bookmark still lands somewhere sensible.
+ * Home is the dashboard: what to do next, with the action right there. The
+ * work itself revolves around a posting, and its page can match and practise
+ * on it directly. Match and Interview are also places of their own, for
+ * starting from a resume and a posting picked there. The old history lists
+ * redirect to the shared one, so a bookmark still lands somewhere sensible.
  */
 export function App(): ReactElement {
   return (
@@ -30,7 +32,7 @@ export function App(): ReactElement {
 
       <Route element={<RequireAuth />}>
         <Route element={<Layout />}>
-          <Route index element={<Navigate to="/documents" replace />} />
+          <Route index element={<Dashboard />} />
           <Route path="/documents" element={<Documents />} />
           <Route path="/documents/:documentId" element={<Posting />} />
           <Route path="/resumes" element={<Resumes />} />

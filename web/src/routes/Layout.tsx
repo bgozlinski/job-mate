@@ -4,6 +4,7 @@ import {
   FileTextIcon,
   GitCompareArrowsIcon,
   HistoryIcon,
+  HouseIcon,
   LogOutIcon,
   MessagesSquareIcon,
 } from 'lucide-react'
@@ -18,6 +19,7 @@ import { Button, ThemeToggle } from '../ui'
  * address: a match or an interview is part of your history.
  */
 const TABS: { to: string; label: string; icon: LucideIcon; also: string[] }[] = [
+  { to: '/', label: 'Home', icon: HouseIcon, also: [] },
   { to: '/documents', label: 'Postings', icon: BriefcaseIcon, also: [] },
   { to: '/resumes', label: 'Resumes', icon: FileTextIcon, also: [] },
   { to: '/match', label: 'Match', icon: GitCompareArrowsIcon, also: [] },
@@ -43,20 +45,26 @@ export function Layout(): ReactElement {
   return (
     <div className="min-h-dvh">
       <header className="border-b border-line bg-raised">
-        {/* 6xl rather than 5xl so five places, the theme toggle and the account
+        {/* 6xl rather than 5xl so the places, the theme toggle and the account
             fit on one line at laptop width; main matches it so the logo stays
             aligned with the content under it. */}
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-3">
           <h1 className="text-xl font-extrabold tracking-tight">
-            Job<span className="text-accent">Mate</span>
+            <Link to="/" className="rounded-md transition-colors hover:text-accent">
+              Job<span className="text-accent">Mate</span>
+            </Link>
           </h1>
 
           <nav aria-label="Main" className="flex flex-wrap gap-1">
             {TABS.map(({ to, label, icon: Icon, also }) => {
+              // Home only at its own address: every other page is "under" /,
+              // so a prefix test would mark it current everywhere.
               const active =
-                pathname === to ||
-                pathname.startsWith(`${to}/`) ||
-                also.some((prefix) => pathname.startsWith(prefix))
+                to === '/'
+                  ? pathname === '/'
+                  : pathname === to ||
+                    pathname.startsWith(`${to}/`) ||
+                    also.some((prefix) => pathname.startsWith(prefix))
 
               return (
                 <Link
@@ -84,18 +92,15 @@ export function Layout(): ReactElement {
 
           <div className="ml-auto flex items-center gap-3 text-sm text-ink-faint">
             <ThemeToggle />
-            {/* Capped and cut short so a long address cannot push the header
-                onto a second line; the whole of it shows on hover. */}
-            <span
-              className="hidden max-w-56 truncate sm:inline-block"
-              title={session.data?.email}
-            >
-              Signed in as {session.data?.email}
-            </span>
+            {/* The address is on the way out rather than beside it: six places,
+                the toggle and an address do not fit one line in 6xl, and who is
+                signed in matters mostly when leaving. The title shows on hover
+                and a screen reader reads it as the button's description. */}
             <Button
               type="button"
               variant="quiet"
               icon={LogOutIcon}
+              title={session.data ? `Signed in as ${session.data.email}` : undefined}
               disabled={logout.isPending}
               onClick={() => {
                 logout.mutate()

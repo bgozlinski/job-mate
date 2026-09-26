@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.auth import router as auth_router
+from app.api.dashboard import router as dashboard_router
 from app.api.documents import router as documents_router
 from app.api.health import router as health_router
 from app.api.matches import router as matches_router
@@ -90,6 +91,7 @@ app.include_router(documents_router)
 app.include_router(matching_router)
 app.include_router(matches_router)
 app.include_router(sessions_router)
+app.include_router(dashboard_router)
 
 
 @app.get("/")
