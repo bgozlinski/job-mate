@@ -6,7 +6,7 @@
 **Rezultat:** aplikacja z charakterem wziętym z rekrutacji — ogłoszenie jako teczka z zakładką, etapy jako
 ścieżka, luki jak pieczątka — zamiast generycznego ciepłego wyglądu
 **Poprzedni dokument:** `2026-09-24-ui-foundation-design.md` (decyzje U-1…U-4, które ten dokument zmienia)
-**Status:** projekt zatwierdzony w rozmowie 2026-09-26; kod jeszcze nie istnieje
+**Status:** zrealizowany 2026-09-26 (PR #46); odstępstwa od projektu wpisane w tekst
 
 ---
 

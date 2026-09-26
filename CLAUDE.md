@@ -56,13 +56,20 @@ migrations, ingestion or tokens — that section is the only record of traps tha
     `GET /documents/{id}` and a `document_id` filter), **states** (skeletons, empty states, "Try again",
     `Thinking` for model waits, neutral `Notice`), **hierarchy** (postings as rows with Match/Practise,
     the main resume first, interview progress and summary on top). Match and Interview were removed from
-    the nav in part 2 and brought back on request.
+    the nav in part 2 and brought back on request. The look of part 1 was replaced by the visual identity
+    below; parts 2–4 stand.
   - Dashboard (PR #45): the home page `/` answers "what next" — one step in a sentence with its action
     (add a resume or posting, continue an interview, match, practise), the other steps under it, and recent
     work. Steps come from `GET /dashboard`. Decisions DB-1…DB-6 are in
     `docs/superpowers/specs/2026-09-26-dashboard-design.md`. The nav is Home, Postings, Resumes, Match,
     Interview, History.
-- **Next:** nothing scheduled. Stage 6 (bonus: voice, salary trends) is optional — ask before starting it.
+  - Visual identity "recruitment file" (PR #46): Public Sans, cool paper and navy ink, a stamp red kept for
+    gaps; a posting is drawn as a file with a tab, and how far you got with it as a path of four stages
+    (Posting, Match, Interview, Applied — the last dashed until it exists). API: `stage` and `best_score` on
+    each posting, for the caller. Decisions V-1…V-7 in `docs/superpowers/specs/2026-09-26-ui-identity-design.md`.
+- **Next:** nothing scheduled. Two candidates, ask before starting either: tracking sent applications
+  ("Applied" — a per-user table, since postings are shared; its stage slot is already drawn), and stage 6
+  (bonus: voice, salary trends).
 - **Removed:** FR-7 automated harvesting (Scrapy) — built and reverted on 2026-09-10; the spec says why.
   Don't reintroduce crawling: NFR-5 allows one fetch per explicit user action, nothing more.
 
@@ -71,15 +78,16 @@ migrations, ingestion or tokens — that section is the only record of traps tha
 - `app/` — FastAPI package (`app.main:app`). `api/` routers + `deps.py` (DI, auth, rate limits, ownership
   checks like `OwnedResume`), `auth/`, `core/` (config, db, redis, Langfuse, prompts), `models/`, `schemas/`,
   `services/` (chunking, embeddings, extraction, ingestion, jobposting, scraping, requirements, judging,
-  matching, rate_limit, reindexing, export, dashboard; interview: `interview_graph` the LangGraph graph, `interviewing`
+  matching, rate_limit, reindexing, export, dashboard, stages; interview: `interview_graph` the LangGraph graph, `interviewing`
   the model calls, `interview` the service that joins them to the database), `assets/fonts/` (PT Sans + its OFL licence, for PDF export).
 - `migrations/` — Alembic; the only source of truth for the schema (no `db/schema.sql`).
 - `web/` — React + TypeScript (Vite) client. Types in `web/src/api/schema.d.ts` are generated from
   `web/openapi.json`, which is generated from the app. `src/ui/` holds every shared component behind one
-  `index.ts` (controls incl. `ButtonLink` for a link drawn as a button, surfaces, data, feedback, the theme
-  toggle); `src/theme.ts` the theme choice; `src/time.ts` relative dates; `src/routes/` one file per screen
-  (`Dashboard` is `/`; `PairPicker` backs Match and Interview; `timeline.ts` holds the history rows History
-  and the dashboard share).
+  `index.ts` (controls incl. `ButtonLink` for a link drawn as a button; surfaces incl. `Sheet`, with an
+  optional file `tab`; data incl. `Chip`, `Score`, `percentage`; `StageRail` and `reachedOf`; feedback; the
+  theme toggle); `src/theme.ts` the theme choice; `src/time.ts` relative dates; `src/routes/` one file per
+  screen (`Dashboard` is `/`; `PairPicker` backs Match and Interview; `timeline.ts` and `TimelineItem.tsx`
+  are the history rows History and the dashboard share).
 - `scripts/` — a package, run as `python -m scripts.<name>`: `export_openapi`, `seed_prompts` (Langfuse),
   `eval_*` runners for `evals/`, `grant_admin` and `reindex` (FR-6).
 - `docs/superpowers/specs/` — per-stage design docs.
@@ -179,6 +187,14 @@ Pydantic schema or route must regenerate `web/openapi.json` and `web/src/api/sch
   with a way forward, `Alert` only for what failed (with `onRetry` for failed reads), `Notice` for hints,
   `Thinking` for waits of seconds, `Status` for a success. Tests find elements by role and label; a restyle
   that breaks one changed behaviour. "Main resume" means the newest (`newest()` in `routes/Posting.tsx`).
+- **Visual identity conventions.** Sheets are told from the page by a line, never a shadow; `rounded-card`
+  (6px) for sheets, `rounded-control` (4px) for buttons, chips and fields — no pills. Section headings are
+  plain sentences (no uppercase labels); metadata is a sentence with commas, never "A · B · C"; times are
+  `ago()` with the full date in `title`. A missing requirement is `Chip present={false}` (the stamp); where
+  met and missing share one list, add words for a screen reader, since no heading separates them. A
+  posting's `stage`/`best_score` are the caller's, so **matching and starting an interview must invalidate
+  `documentsKey`** as well as the dashboard. A dependency added to `web/` needs
+  `docker compose up -d --build --renew-anon-volumes web`: the container's `node_modules` is its own volume.
 
 ## Constraints
 
