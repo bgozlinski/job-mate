@@ -13,8 +13,7 @@ import type { Step } from '../api/dashboard'
 import { useInterviews, useStartInterview } from '../api/interview'
 import { useMatch, useMatches } from '../api/matching'
 import type { Pairing } from '../api/matching'
-import { Alert, Button, ButtonLink, Card, Skeleton, Thinking } from '../ui'
-import { percentage } from './MatchResult'
+import { Alert, Button, ButtonLink, Sheet, Skeleton, Thinking, percentage } from '../ui'
 import { newestFirst } from './timeline'
 
 /** How much of your history the dashboard shows; the rest is on History. */
@@ -270,7 +269,7 @@ function OtherSteps({
       <h3 id="other-steps" className="text-lg font-bold">
         Other things to do
       </h3>
-      <Card>
+      <Sheet>
         <ul className="flex flex-col divide-y divide-line">
           {steps.map((step) => {
             const { sentence, detail, action } = describe(step)
@@ -289,7 +288,7 @@ function OtherSteps({
             )
           })}
         </ul>
-      </Card>
+      </Sheet>
     </section>
   )
 }
@@ -332,7 +331,7 @@ function Recently(): ReactElement | null {
           {error.message}
         </Alert>
       ) : (
-        <Card>
+        <Sheet>
           <ul className="flex flex-col divide-y divide-line">
             {rows.map((row) => (
               <li
@@ -352,7 +351,7 @@ function Recently(): ReactElement | null {
               </li>
             ))}
           </ul>
-        </Card>
+        </Sheet>
       )}
     </section>
   )

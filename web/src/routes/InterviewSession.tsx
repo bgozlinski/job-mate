@@ -12,16 +12,16 @@ import type { Interview, InterviewMessage } from '../api/interview'
 import {
   Alert,
   Button,
-  Card,
   Chip,
   Field,
   Meter,
   Muted,
+  Sheet,
   Skeleton,
   Thinking,
+  percentage,
 } from '../ui'
 import { BackToPosting } from './MatchDetail'
-import { percentage } from './MatchResult'
 
 const CRITERIA: Record<string, string> = {
   on_topic: 'On topic',
@@ -33,10 +33,10 @@ const HEADING = 'text-sm font-semibold tracking-wide text-ink-soft uppercase'
 
 function Question({ message }: { message: InterviewMessage }): ReactElement {
   return (
-    <Card className="flex flex-col gap-1">
+    <Sheet className="flex flex-col gap-1">
       <p className="text-xs text-ink-faint">Question · {message.requirement}</p>
       <p className="font-medium">{message.content}</p>
-    </Card>
+    </Sheet>
   )
 }
 
@@ -105,7 +105,7 @@ function Summary({ interview }: { interview: Interview }): ReactElement {
   const { summary, score } = interview
 
   return (
-    <Card className="flex flex-col gap-4">
+    <Sheet className="flex flex-col gap-4">
       <h3 className="flex flex-wrap items-baseline gap-x-3">
         {score === null ? (
           <span className="text-lg font-medium">Interview finished</span>
@@ -150,7 +150,7 @@ function Summary({ interview }: { interview: Interview }): ReactElement {
           </ul>
         </section>
       ) : null}
-    </Card>
+    </Sheet>
   )
 }
 
@@ -210,7 +210,7 @@ function AnswerForm({
   }
 
   return (
-    <Card>
+    <Sheet>
       <form aria-label="Answer" onSubmit={onSubmit} className="flex flex-col gap-4">
         <Field id="interview-answer" label="Your answer">
           {(className, id) => (
@@ -252,7 +252,7 @@ function AnswerForm({
 
       {answer.error ? <Alert>{answer.error.message}</Alert> : null}
       {finish.error ? <Alert>{finish.error.message}</Alert> : null}
-    </Card>
+    </Sheet>
   )
 }
 

@@ -16,10 +16,10 @@ import {
 import {
   Alert,
   Button,
-  Card,
   EmptyState,
   Field,
   PageHeader,
+  Sheet,
   Skeleton,
   Status,
   Thinking,
@@ -418,14 +418,14 @@ export function Resumes(): ReactElement {
 
       {panelOpen ? (
         <section id="add-resume" aria-label="Add a resume">
-          <Card className="flex max-w-2xl flex-col gap-2">
+          <Sheet className="flex max-w-2xl flex-col gap-2">
             <AddByFile />
 
             <details className="border-t border-line pt-3">
               <summary className={SUMMARY}>…or paste the text</summary>
               <AddByText />
             </details>
-          </Card>
+          </Sheet>
         </section>
       ) : null}
 
@@ -457,15 +457,15 @@ export function Resumes(): ReactElement {
       ) : null}
 
       {main ? (
-        <Card>
+        <Sheet>
           <Stored resume={main} main onDeleted={setDeleted} />
-        </Card>
+        </Sheet>
       ) : null}
 
       {older.length > 0 ? (
         <details className="flex flex-col gap-3">
           <summary className={SUMMARY}>Older versions ({older.length})</summary>
-          <Card className="mt-3">
+          <Sheet className="mt-3">
             <ul className="flex flex-col divide-y divide-line">
               {older.map((resume) => (
                 <li key={resume.id} className="py-3 first:pt-0 last:pb-0">
@@ -473,7 +473,7 @@ export function Resumes(): ReactElement {
                 </li>
               ))}
             </ul>
-          </Card>
+          </Sheet>
         </details>
       ) : null}
     </>

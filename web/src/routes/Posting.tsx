@@ -17,14 +17,14 @@ import {
   Alert,
   Button,
   CONTROL,
-  Card,
   EmptyState,
   PageHeader,
+  Sheet,
   Skeleton,
   Status,
   Thinking,
+  percentage,
 } from '../ui'
-import { percentage } from './MatchResult'
 
 const LINK = 'text-accent underline underline-offset-2'
 const HEADING = 'text-xs font-bold tracking-wide text-ink-soft uppercase'
@@ -181,7 +181,7 @@ function Details({ posting }: { posting: DocumentDetail }): ReactElement {
   const requirements = posting.requirements ?? []
 
   return (
-    <Card className="flex flex-col gap-5">
+    <Sheet className="flex flex-col gap-5">
       <section className="flex flex-col gap-2">
         <h3 className={HEADING}>Requirements ({requirements.length})</h3>
         {requirements.length > 0 ? (
@@ -224,7 +224,7 @@ function Details({ posting }: { posting: DocumentDetail }): ReactElement {
           </Button>
         </div>
       </section>
-    </Card>
+    </Sheet>
   )
 }
 
@@ -232,7 +232,7 @@ function YourMatches({ documentId }: { documentId: string }): ReactElement {
   const matches = usePostingMatches(documentId)
 
   return (
-    <Card className="flex flex-col gap-3">
+    <Sheet className="flex flex-col gap-3">
       <h3 className={HEADING}>Your matches</h3>
       {matches.isPending ? <Skeleton lines={1} label="Loading your matches…" /> : null}
       {matches.error ? (
@@ -274,7 +274,7 @@ function YourMatches({ documentId }: { documentId: string }): ReactElement {
           </Link>
         </>
       ) : null}
-    </Card>
+    </Sheet>
   )
 }
 
@@ -282,7 +282,7 @@ function YourInterviews({ documentId }: { documentId: string }): ReactElement {
   const interviews = usePostingInterviews(documentId, PER_POSTING)
 
   return (
-    <Card className="flex flex-col gap-3">
+    <Sheet className="flex flex-col gap-3">
       <h3 className={HEADING}>Your interviews</h3>
       {interviews.isPending ? (
         <Skeleton lines={1} label="Loading your interviews…" />
@@ -330,7 +330,7 @@ function YourInterviews({ documentId }: { documentId: string }): ReactElement {
           </Link>
         </>
       ) : null}
-    </Card>
+    </Sheet>
   )
 }
 

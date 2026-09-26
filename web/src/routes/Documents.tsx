@@ -26,12 +26,12 @@ import { ago } from '../time'
 import {
   Alert,
   Button,
-  Card,
   EmptyState,
   Field,
   Muted,
   Notice,
   PageHeader,
+  Sheet,
   Skeleton,
   Status,
   Thinking,
@@ -427,7 +427,7 @@ function PostingRow({
 /** The three ways a posting comes in (FR-1), the address first. */
 function AddPanel(): ReactElement {
   return (
-    <Card className="flex max-w-2xl flex-col gap-2">
+    <Sheet className="flex max-w-2xl flex-col gap-2">
       <AddByUrl />
 
       <details className="border-t border-line pt-3">
@@ -439,7 +439,7 @@ function AddPanel(): ReactElement {
         <summary className={SUMMARY}>…or paste the text</summary>
         <AddByText />
       </details>
-    </Card>
+    </Sheet>
   )
 }
 
@@ -586,7 +586,7 @@ export function Documents(): ReactElement {
       ) : null}
 
       {listed.length > 0 ? (
-        <Card>
+        <Sheet>
           <ul aria-label="Postings" className="flex flex-col divide-y divide-line">
             {listed.map((document) => (
               <PostingRow
@@ -598,7 +598,7 @@ export function Documents(): ReactElement {
               />
             ))}
           </ul>
-        </Card>
+        </Sheet>
       ) : null}
 
       {/* A short page is the end of the listing: the route returns no total,

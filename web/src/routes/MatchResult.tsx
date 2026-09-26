@@ -1,11 +1,7 @@
 import type { ReactElement } from 'react'
 
 import type { Match } from '../api/matching'
-import { Card, Chip, Meter, Muted } from '../ui'
-
-export function percentage(score: number): string {
-  return `${String(Math.round(score * 100))}%`
-}
+import { Chip, Meter, Muted, Sheet, percentage } from '../ui'
 
 function Terms({
   title,
@@ -69,7 +65,7 @@ function Terms({
 export function MatchResult({ match }: { match: Match }): ReactElement {
   return (
     <article aria-label="Match result" className="flex flex-col gap-8">
-      <Card className="flex flex-col gap-4">
+      <Sheet className="flex flex-col gap-4">
         {/* One heading, not a number floating beside one. The hero figure is
             a span inside it, so the score reads as display type while the
             heading's accessible name stays the whole sentence -- somebody
@@ -92,7 +88,7 @@ export function MatchResult({ match }: { match: Match }): ReactElement {
         </Muted>
 
         <Meter value={match.score} label="Requirements covered" />
-      </Card>
+      </Sheet>
 
       <div className="grid gap-8 md:grid-cols-2">
         <Terms
@@ -112,7 +108,7 @@ export function MatchResult({ match }: { match: Match }): ReactElement {
           <ul className="flex flex-col gap-2">
             {match.suggestions.map((suggestion) => (
               <li key={suggestion}>
-                <Card className="max-w-prose text-sm">{suggestion}</Card>
+                <Sheet className="max-w-prose text-sm">{suggestion}</Sheet>
               </li>
             ))}
           </ul>

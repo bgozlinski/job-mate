@@ -3,7 +3,7 @@ import type { LucideIcon } from 'lucide-react'
 
 import type { InterviewSummary } from '../api/interview'
 import type { MatchSummary } from '../api/matching'
-import { percentage } from './MatchResult'
+import { percentage } from '../ui'
 
 /**
  * One match or interview as a line of your history, drawn the same way on

@@ -5,7 +5,7 @@ import { Link, useSearchParams } from 'react-router'
 
 import { useInterviews } from '../api/interview'
 import { HISTORY_PAGE_SIZE, MAX_HISTORY_PAGE_SIZE, useMatches } from '../api/matching'
-import { Alert, Button, Card, EmptyState, PageHeader, Skeleton } from '../ui'
+import { Alert, Button, EmptyState, PageHeader, Sheet, Skeleton } from '../ui'
 import { newestFirst } from './timeline'
 
 type Kind = 'all' | 'matches' | 'interviews'
@@ -97,7 +97,7 @@ export function History(): ReactElement {
         <ul className="flex flex-col gap-3">
           {rows.map((row) => (
             <li key={row.key}>
-              <Card className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <Sheet className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <row.icon aria-hidden="true" className="size-5 shrink-0 text-ink-faint" />
                 <Link
                   to={row.to}
@@ -108,7 +108,7 @@ export function History(): ReactElement {
                 <time dateTime={row.at} className="text-sm text-ink-faint">
                   {new Date(row.at).toLocaleString()}
                 </time>
-              </Card>
+              </Sheet>
             </li>
           ))}
         </ul>
