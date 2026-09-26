@@ -10,24 +10,32 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { useDocument } from '../api/documents'
 import type { DocumentDetail } from '../api/documents'
 import { usePostingInterviews, useStartInterview } from '../api/interview'
-import { PER_POSTING, usePostingMatches, useMatch } from '../api/matching'
+import {
+  PER_POSTING,
+  useMatch,
+  useMatchDetail,
+  usePostingMatches,
+} from '../api/matching'
 import { useResumes } from '../api/resumes'
 import type { Resume } from '../api/resumes'
 import {
   Alert,
   Button,
   CONTROL,
+  Chip,
   EmptyState,
-  PageHeader,
+  PageTitle,
   Sheet,
   Skeleton,
+  StageRail,
   Status,
   Thinking,
   percentage,
+  reachedOf,
 } from '../ui'
 
 const LINK = 'text-accent underline underline-offset-2'
-const HEADING = 'text-xs font-bold tracking-wide text-ink-soft uppercase'
+const HEADING = 'text-base font-bold'
 const BACK = 'inline-flex items-center gap-1 text-sm text-ink-soft hover:text-accent'
 
 /** What an ingestion hands over when it opens the posting it stored. */
@@ -81,7 +89,7 @@ function Actions({ posting }: { posting: DocumentDetail }): ReactElement {
   const noRequirements = !posting.requirements || posting.requirements.length === 0
 
   return (
-    <div className="flex flex-col items-start gap-2 sm:items-end">
+    <div className="flex flex-col items-start gap-2">
       <div className="flex flex-wrap gap-2">
         <Button
           type="button"
@@ -156,7 +164,7 @@ function Actions({ posting }: { posting: DocumentDetail }): ReactElement {
       ) : null}
 
       {noRequirements && !noResume ? (
-        <p className="max-w-xs text-xs text-ink-faint sm:text-right">
+        <p className="max-w-xs text-xs text-ink-faint">
           An interview needs the posting&apos;s requirements, and these have not been
           read yet.
         </p>
@@ -170,15 +178,52 @@ function Actions({ posting }: { posting: DocumentDetail }): ReactElement {
   )
 }
 
+/** A requirement as matching names it, whatever the case it was read in. */
+function normalised(requirement: string): string {
+  return requirement.trim().toLowerCase()
+}
+
+/**
+ * What the match behind the posting's best score found: true for a
+ * requirement your resume covers, false for one it misses. Null while there is
+ * no such match to read.
+ *
+ * The best match, not the newest, because the best score is what the path
+ * above shows, and stamps from another match would contradict it. It is looked
+ * for among the latest matches the page lists anyway; an older best one is not
+ * there, and then the requirements stay plain -- plain is better than wrong.
+ * A failed or slow read leaves them plain too.
+ */
+function useVerdicts(posting: DocumentDetail): Map<string, boolean> | null {
+  const matches = usePostingMatches(posting.id)
+  const best =
+    posting.best_score === null
+      ? undefined
+      : matches.data?.find((match) => match.score === posting.best_score)
+  const detail = useMatchDetail(best?.id ?? '', best !== undefined)
+
+  if (!detail.data) {
+    return null
+  }
+
+  return new Map([
+    ...detail.data.missing_keywords.map((term) => [normalised(term), false] as const),
+    ...detail.data.matched_keywords.map((term) => [normalised(term), true] as const),
+  ])
+}
+
 /**
  * The posting itself: what it asks for, then its text.
  *
- * The requirements are plain chips, not the covered/missing ones of a match:
- * nothing has been compared yet.
+ * With a match, each requirement says whether your resume covers it -- a
+ * filled chip or a stamp, and the same in words for a screen reader, since
+ * the two sit in one list rather than under headings of their own. One the
+ * match did not mention, or any without a match, is a plain chip.
  */
 function Details({ posting }: { posting: DocumentDetail }): ReactElement {
   const [expanded, setExpanded] = useState(false)
   const requirements = posting.requirements ?? []
+  const verdicts = useVerdicts(posting)
 
   return (
     <Sheet className="flex flex-col gap-5">
@@ -186,14 +231,26 @@ function Details({ posting }: { posting: DocumentDetail }): ReactElement {
         <h3 className={HEADING}>Requirements ({requirements.length})</h3>
         {requirements.length > 0 ? (
           <ul className="flex flex-wrap gap-2">
-            {requirements.map((requirement) => (
-              <li
-                key={requirement}
-                className="rounded-control bg-sunken px-3 py-1 text-sm text-ink"
-              >
-                {requirement}
-              </li>
-            ))}
+            {requirements.map((requirement) => {
+              const covered = verdicts?.get(normalised(requirement))
+
+              return (
+                <li key={requirement}>
+                  {covered === undefined ? (
+                    <span className="inline-block rounded-control bg-sunken px-3 py-1 text-sm text-ink">
+                      {requirement}
+                    </span>
+                  ) : (
+                    <>
+                      <Chip present={covered}>{requirement}</Chip>
+                      <span className="sr-only">
+                        {covered ? ', in your resume' : ', missing from your resume'}
+                      </span>
+                    </>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         ) : (
           <p className="text-sm text-ink-faint">
@@ -365,9 +422,10 @@ export function Posting(): ReactElement {
 
       {posting.data ? (
         <>
-          <PageHeader
-            title={posting.data.title ?? 'Untitled posting'}
-            description={
+          {/* The posting as its file: where it came from on the tab, then its
+              title, how far you got with it, and what to do next. */}
+          <Sheet
+            tab={
               <>
                 {posting.data.source_url ? (
                   <>
@@ -375,18 +433,27 @@ export function Posting(): ReactElement {
                       href={posting.data.source_url}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-accent hover:underline"
+                      className="hover:underline"
                     >
                       {hostOf(posting.data.source_url)}
                     </a>
-                    {' · '}
+                    {', added '}
                   </>
-                ) : null}
-                added {formatDate(posting.data.created_at)}
+                ) : (
+                  'Added '
+                )}
+                {formatDate(posting.data.created_at)}
               </>
             }
-            actions={<Actions posting={posting.data} />}
-          />
+            className="flex flex-col gap-4"
+          >
+            <PageTitle>{posting.data.title ?? 'Untitled posting'}</PageTitle>
+            <StageRail
+              reached={reachedOf(posting.data.stage)}
+              score={posting.data.best_score}
+            />
+            <Actions posting={posting.data} />
+          </Sheet>
 
           {arrival?.duplicate ? (
             <Status>

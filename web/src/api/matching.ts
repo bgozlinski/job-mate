@@ -104,10 +104,16 @@ export function usePostingMatches(documentId: string): UseQueryResult<MatchSumma
   })
 }
 
-/** One stored match in full, including what the model was shown. */
-export function useMatchDetail(id: string): UseQueryResult<Match> {
+/**
+ * One stored match in full, including what the model was shown.
+ *
+ * `enabled` is for a page that only sometimes has a match to read: a query
+ * for an empty id would ask the API for /matches/.
+ */
+export function useMatchDetail(id: string, enabled = true): UseQueryResult<Match> {
   return useQuery({
     queryKey: [...matchesKey, 'detail', id],
+    enabled,
     queryFn: async () => {
       const { data, error, response } = await api.GET('/matches/{match_id}', {
         params: { path: { match_id: id } },

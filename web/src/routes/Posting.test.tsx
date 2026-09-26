@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter, Route, Routes, useParams } from 'react-router'
@@ -330,4 +330,89 @@ test('a posting that failed to load can be asked again', async () => {
   expect(
     await screen.findByRole('heading', { name: 'Python Developer — DCV' }),
   ).toBeInTheDocument()
+})
+
+function summary(id: string, score: number) {
+  return {
+    id,
+    document_id: 'd1',
+    document_title: POSTING.title,
+    resume_id: 'r-new',
+    score,
+    matched_count: 1,
+    missing_count: 1,
+    created_at: '2026-09-20T10:00:00Z',
+  }
+}
+
+function detail(id: string, score: number, matched: string[], missing: string[]) {
+  return {
+    ...summary(id, score),
+    matched_keywords: matched,
+    missing_keywords: missing,
+    suggestions: [],
+    notes: [],
+    retrieved_chunk_ids: [],
+    matched_evidence: {},
+  }
+}
+
+function requirementItem(name: string): HTMLElement | null {
+  return screen.getByText(name).closest('li')
+}
+
+test('the posting is drawn as a file, with how far you got on its path', async () => {
+  arrange({ posting: { ...POSTING, stage: 2, best_score: 0.72 } })
+
+  show()
+
+  const rail = await screen.findByRole('list', { name: 'Stage' })
+  const steps = within(rail).getAllByRole('listitem')
+  expect(steps[1]).toHaveTextContent('72%')
+  expect(steps[2]).toHaveAttribute('aria-current', 'step')
+  expect(screen.getByRole('link', { name: 'justjoin.it' })).toHaveAttribute(
+    'rel',
+    'noreferrer',
+  )
+})
+
+test('the requirements say what your best match found and missed', async () => {
+  arrange({
+    posting: { ...POSTING, stage: 2, best_score: 0.5 },
+    matches: [summary('m-new', 0.3), summary('m-best', 0.5)],
+  })
+  server.use(
+    http.get('/api/matches/m-best', () =>
+      HttpResponse.json(detail('m-best', 0.5, ['Python'], ['docker'])),
+    ),
+  )
+
+  show()
+
+  await waitFor(() => {
+    expect(requirementItem('python')).toHaveTextContent('in your resume')
+  })
+  expect(requirementItem('docker')).toHaveTextContent('missing from your resume')
+})
+
+test('without a match the requirements are plain', async () => {
+  arrange()
+
+  show()
+
+  await screen.findByText('python')
+  expect(requirementItem('python')).not.toHaveTextContent('resume')
+  expect(requirementItem('python')?.querySelector('svg')).toBeNull()
+})
+
+test('when the best match is not among those listed, the requirements stay plain', async () => {
+  arrange({
+    posting: { ...POSTING, stage: 2, best_score: 0.9 },
+    matches: [summary('m-new', 0.3)],
+  })
+
+  show()
+
+  await screen.findByText('python')
+  expect(requirementItem('python')).not.toHaveTextContent('resume')
 })

@@ -119,7 +119,7 @@ Kolejność według tego, jak często są używane:
    czasem względnym.
 2. **Lista ogłoszeń** — wiersz: tytuł, źródło i wiek, mini-ścieżka, `best_score` (lub „—”), akcje.
 3. **Strona ogłoszenia** — zakładka ze źródłem i datą, tytuł, pełna ścieżka; wymagania jako `met`/`gap`
-   (według ostatniego dopasowania, jeśli jest), obok „Your work on it”.
+   (według dopasowania z najlepszym wynikiem — tego samego, którego wynik pokazuje ścieżka; gdy nie ma go wśród ostatnich na stronie, wymagania zostają neutralne), obok „Your work on it”.
 4. **Pozostałe** — Resumes, wynik dopasowania, rozmowa, History, Login: bez zmian układu, nowy wygląd przez
    komponenty.
 
