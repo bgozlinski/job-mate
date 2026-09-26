@@ -13,11 +13,27 @@ import type { Step } from '../api/dashboard'
 import { useInterviews, useStartInterview } from '../api/interview'
 import { useMatch, useMatches } from '../api/matching'
 import type { Pairing } from '../api/matching'
-import { Alert, Button, ButtonLink, Sheet, Skeleton, Thinking, percentage } from '../ui'
+import { ago } from '../time'
+import {
+  Alert,
+  Button,
+  ButtonLink,
+  Chip,
+  Score,
+  Sheet,
+  Skeleton,
+  StageRail,
+  Thinking,
+  percentage,
+} from '../ui'
+import type { Reached } from '../ui'
 import { newestFirst } from './timeline'
 
 /** How much of your history the dashboard shows; the rest is on History. */
 const RECENT = 5
+
+/** Gaps shown on the next step; a long posting's list would bury the action. */
+const GAPS_SHOWN = 5
 
 type Action =
   | { kind: 'link'; to: string; label: string; name?: string; icon: LucideIcon }
@@ -101,6 +117,42 @@ function describe(step: Step): Described {
 
       return unknown
     }
+  }
+}
+
+/** The posting a step is about, and how far along it you are. */
+interface Place {
+  title: string
+  reached: Reached
+  score: number | null
+  gaps: string[]
+}
+
+/**
+ * Where a step stands on the path of an application, or null for a step that
+ * is not about a posting.
+ *
+ * The rail marks the step after `reached` as next, so each kind maps to the
+ * stage before the one it asks for. An interview in progress is still the
+ * step to take, so it maps to 2 like practice does -- even when it was started
+ * without a match, which the step cannot tell. The dashboard is about what to
+ * do next, and for that the approximation is exact.
+ */
+function placeOf(step: Step): Place | null {
+  switch (step.kind) {
+    case 'match':
+      return { title: titleOf(step.document_title), reached: 1, score: null, gaps: [] }
+    case 'practise':
+      return {
+        title: titleOf(step.document_title),
+        reached: 2,
+        score: step.score,
+        gaps: step.gaps,
+      }
+    case 'continue_interview':
+      return { title: titleOf(step.document_title), reached: 2, score: null, gaps: [] }
+    default:
+      return null
   }
 }
 
@@ -233,22 +285,56 @@ function ActionState({
   )
 }
 
-function NextStep({ step, running }: { step: Step; running: Running }): ReactElement {
-  const { sentence, detail, action } = describe(step)
+/** What the best match found missing, as stamps, cut short when long. */
+function Gaps({ gaps }: { gaps: string[] }): ReactElement {
+  const shown = gaps.slice(0, GAPS_SHOWN)
+  const more = gaps.length - shown.length
 
   return (
-    <section
-      aria-labelledby="next-step"
-      className="flex flex-col items-start gap-4 rounded-card border border-l-4 border-line border-l-accent bg-raised p-6"
-    >
-      <div className="flex max-w-prose flex-col gap-1">
-        <h2 id="next-step" className="text-[1.75rem] leading-tight font-extrabold tracking-tight">
-          {sentence}
-        </h2>
-        {detail ? <p className="text-ink-soft">{detail}</p> : null}
-      </div>
-      <ActionControl action={action} running={running} primary />
-      <ActionState action={action} running={running} />
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-sm text-ink-soft">Missing from your resume:</span>
+      {shown.map((gap) => (
+        <Chip key={gap} present={false}>
+          {gap}
+        </Chip>
+      ))}
+      {more > 0 ? (
+        <span className="text-sm text-ink-soft">and {String(more)} more</span>
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * The next step, as the file of the posting it is about: its title on the
+ * tab, the path of the application across the top, then the sentence and the
+ * one primary action on the page.
+ */
+function NextStep({ step, running }: { step: Step; running: Running }): ReactElement {
+  const { sentence, detail, action } = describe(step)
+  const place = placeOf(step)
+
+  return (
+    <section aria-labelledby="next-step">
+      <Sheet tab={place?.title} className="flex flex-col items-start gap-4">
+        {place ? (
+          <div className="self-stretch">
+            <StageRail reached={place.reached} score={place.score} />
+          </div>
+        ) : null}
+        <div className="flex max-w-prose flex-col gap-1">
+          <h2
+            id="next-step"
+            className="text-[1.75rem] leading-tight font-extrabold tracking-tight"
+          >
+            {sentence}
+          </h2>
+          {detail ? <p className="text-ink-soft">{detail}</p> : null}
+        </div>
+        {place && place.gaps.length > 0 ? <Gaps gaps={place.gaps} /> : null}
+        <ActionControl action={action} running={running} primary />
+        <ActionState action={action} running={running} />
+      </Sheet>
     </section>
   )
 }
@@ -273,11 +359,13 @@ function OtherSteps({
         <ul className="flex flex-col divide-y divide-line">
           {steps.map((step) => {
             const { sentence, detail, action } = describe(step)
+            const place = placeOf(step)
 
             return (
               <li key={keyOf(step)} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                  <div className="min-w-0 flex-1">
+                  {place ? <StageRail reached={place.reached} compact /> : null}
+                  <div className="min-w-48 flex-1">
                     <p className="font-semibold">{sentence}</p>
                     {detail ? <p className="text-sm text-ink-soft">{detail}</p> : null}
                   </div>
@@ -339,14 +427,22 @@ function Recently(): ReactElement | null {
                 className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 first:pt-0 last:pb-0"
               >
                 <row.icon aria-hidden="true" className="size-4 shrink-0 text-ink-faint" />
-                <Link
-                  to={row.to}
-                  className="font-semibold text-accent tabular-nums hover:underline"
-                >
-                  {row.what} · {row.outcome} · {row.title}
+                <Link to={row.to} className="min-w-0 flex-1 hover:text-accent hover:underline">
+                  {row.what}{' '}
+                  {row.score === null ? (
+                    <span className="font-semibold">{row.outcome}</span>
+                  ) : (
+                    <Score value={row.score} size="sm" />
+                  )}
+                  {' — '}
+                  {row.title}
                 </Link>
-                <time dateTime={row.at} className="text-sm text-ink-faint">
-                  {new Date(row.at).toLocaleString()}
+                <time
+                  dateTime={row.at}
+                  title={new Date(row.at).toLocaleString()}
+                  className="text-sm text-ink-faint"
+                >
+                  {ago(row.at)}
                 </time>
               </li>
             ))}

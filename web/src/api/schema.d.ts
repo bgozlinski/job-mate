@@ -898,6 +898,8 @@ export interface components {
             document_id: string;
             /** Document Title */
             document_title: string | null;
+            /** Gaps */
+            gaps: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}

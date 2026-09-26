@@ -31,6 +31,7 @@ const PRACTISE: Step = {
   document_title: 'Backend Engineer at Bar',
   resume_id: 'r2',
   score: 0.72,
+  gaps: ['Kubernetes', 'CI/CD'],
 }
 
 const A_MATCH: MatchSummary = {
@@ -302,4 +303,38 @@ test('a failed read can be tried again', async () => {
   expect(
     await screen.findByRole('heading', { level: 2, name: 'See how your resume fits Data Engineer at Foo' }),
   ).toBeInTheDocument()
+})
+
+test('a practice step is drawn as the file of its posting, at the interview stage', async () => {
+  arrange([PRACTISE])
+  show()
+
+  const rail = await screen.findByRole('list', { name: 'Stage' })
+  const current = within(rail)
+    .getAllByRole('listitem')
+    .filter((step) => step.getAttribute('aria-current') === 'step')
+  expect(current.map((step) => step.textContent)).toEqual([
+    expect.stringContaining('Interview'),
+  ])
+  expect(within(rail).getAllByRole('listitem')[1]).toHaveTextContent('72%')
+  expect(screen.getAllByText('Backend Engineer at Bar').length).toBeGreaterThan(0)
+})
+
+test('the gaps worth rehearsing are listed, and a long list is cut short', async () => {
+  const gaps = ['Kubernetes', 'CI/CD', 'Go', 'Rust', 'Kafka', 'Terraform', 'AWS']
+  arrange([{ ...PRACTISE, gaps }])
+  show()
+
+  expect(await screen.findByText('Kubernetes')).toBeInTheDocument()
+  expect(screen.getByText('Kafka')).toBeInTheDocument()
+  expect(screen.queryByText('Terraform')).not.toBeInTheDocument()
+  expect(screen.getByText('and 2 more')).toBeInTheDocument()
+})
+
+test('recent work says how long ago it happened', async () => {
+  arrange([MATCH], { matches: [{ ...A_MATCH, created_at: new Date().toISOString() }] })
+  show()
+
+  const recently = await screen.findByRole('region', { name: 'Recently' })
+  expect(within(recently).getByText('today')).toBeInTheDocument()
 })

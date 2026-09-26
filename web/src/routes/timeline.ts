@@ -15,6 +15,8 @@ export interface Row {
   icon: LucideIcon
   what: string
   outcome: string
+  /** The number behind `outcome`, where there is one, for a Score to draw. */
+  score: number | null
   title: string
   at: string
 }
@@ -26,6 +28,7 @@ export function fromMatch(match: MatchSummary): Row {
     icon: GitCompareArrowsIcon,
     what: 'Match',
     outcome: percentage(match.score),
+    score: match.score,
     title: match.document_title ?? 'Deleted posting',
     at: match.created_at,
   }
@@ -43,6 +46,10 @@ export function fromInterview(interview: InterviewSummary): Row {
         : interview.score === null
           ? 'Finished, nothing judged'
           : percentage(interview.score),
+    score:
+      interview.status === 'finished' && interview.score !== null
+        ? interview.score
+        : null,
     title: interview.document_title ?? 'Deleted posting',
     at: interview.created_at,
   }

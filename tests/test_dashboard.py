@@ -67,7 +67,11 @@ async def a_posting(factory: Factory, title: str = "Backend developer") -> uuid.
 
 
 async def a_match(
-    factory: Factory, resume: Owned, document_id: uuid.UUID, score: float = 0.5
+    factory: Factory,
+    resume: Owned,
+    document_id: uuid.UUID,
+    score: float = 0.5,
+    missing: list[str] | None = None,
 ) -> None:
     async with factory() as db:
         db.add(
@@ -78,7 +82,7 @@ async def a_match(
                 document_title="Snapshot title",
                 score=score,
                 matched_keywords=[],
-                missing_keywords=[],
+                missing_keywords=missing or [],
                 suggestions=[],
                 notes=[],
                 matched_evidence={},
@@ -200,6 +204,7 @@ async def test_a_match_without_an_interview_is_offered_for_practice(
             document_title="Data engineer",
             resume_id=resume.resume_id,
             score=0.72,
+            gaps=[],
         )
     ]
 
@@ -278,6 +283,23 @@ async def test_practice_takes_the_best_match_per_posting_best_first(
         (second, 0.6),
     ]
     assert practise[0].resume_id == stronger.resume_id
+
+
+async def test_practice_shows_the_gaps_of_the_best_match(
+    session_factory: Factory,
+) -> None:
+    """The gaps and the score come from one match, or they would disagree."""
+    user_id = await a_user(session_factory)
+    weaker = await a_resume(session_factory, user_id)
+    stronger = await a_resume(session_factory, user_id)
+    document_id = await a_posting(session_factory)
+    await a_match(session_factory, stronger, document_id, 0.8, ["Kubernetes"])
+    await a_match(session_factory, weaker, document_id, 0.4, ["Kubernetes", "Go"])
+
+    steps = await steps_for(session_factory, user_id)
+
+    practise = [step for step in steps if isinstance(step, PractiseStep)]
+    assert [step.gaps for step in practise] == [["Kubernetes"]]
 
 
 async def test_the_cap_on_practice_keeps_the_best_scores(

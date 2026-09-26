@@ -898,6 +898,13 @@
             ],
             "title": "Document Title"
           },
+          "gaps": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Gaps",
+            "type": "array"
+          },
           "kind": {
             "const": "practise",
             "default": "practise",
@@ -918,7 +925,8 @@
           "document_id",
           "document_title",
           "resume_id",
-          "score"
+          "score",
+          "gaps"
         ],
         "title": "PractiseStep",
         "type": "object"

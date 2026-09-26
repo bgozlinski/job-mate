@@ -48,6 +48,8 @@ class PractiseStep(BaseModel):
     resume_id: uuid.UUID
     """The resume behind the best match, which the interview is then about."""
     score: float
+    gaps: list[str]
+    """What that same match found missing: the requirements worth rehearsing."""
 
 
 class AddAnotherPostingStep(BaseModel):
