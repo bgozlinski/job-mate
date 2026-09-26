@@ -4,7 +4,7 @@ import { Link } from 'react-router'
 import type { LinkProps } from 'react-router'
 
 const BUTTON_BASE =
-  'inline-flex items-center justify-center gap-2 rounded-full font-semibold ' +
+  'inline-flex items-center justify-center gap-2 rounded-control font-semibold ' +
   'transition-colors disabled:cursor-not-allowed disabled:opacity-50'
 
 const VARIANTS = {
@@ -88,7 +88,7 @@ export function ButtonLink({
  * takes 3:1 against its surroundings, and --line is too faint for that.
  */
 export const CONTROL =
-  'w-full rounded-xl border border-control bg-raised px-3 py-2 text-sm ' +
+  'w-full rounded-control border border-control bg-raised px-3 py-2 text-sm ' +
   'text-ink placeholder:text-ink-faint transition-colors ' +
   'hover:border-ink-soft focus-visible:border-accent'
 

@@ -13,13 +13,14 @@ import {
   useResumes,
   useUploadResume,
 } from '../api/resumes'
+import { ago } from '../time'
 import {
   Alert,
   Button,
-  Card,
   EmptyState,
   Field,
   PageHeader,
+  Sheet,
   Skeleton,
   Status,
   Thinking,
@@ -115,7 +116,7 @@ function AddByFile(): ReactElement {
             // Deliberately not `required`: the button below is disabled without
             // a file, and jsdom's constraint validation does not see files set
             // by a test, so the attribute would make this path untestable.
-            className={`${className} file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-sm file:text-accent-strong`}
+            className={`${className} file:mr-3 file:rounded-control file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-sm file:text-accent-strong`}
             onChange={(event) => {
               setFile(event.target.files?.[0] ?? null)
             }}
@@ -289,8 +290,8 @@ function Stored({
     <div className={`flex flex-col ${main ? 'gap-3' : 'gap-2'}`}>
       {main ? (
         <p>
-          <span className="rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-bold text-accent-strong">
-            Main · used for matching
+          <span className="rounded-control bg-accent-soft px-2.5 py-0.5 text-xs font-bold text-accent-strong">
+            Main, used for matching
           </span>
         </p>
       ) : null}
@@ -298,10 +299,12 @@ function Stored({
         <h3 className={main ? 'text-lg font-extrabold' : 'font-bold'}>{name}</h3>
         <p className="text-sm text-ink-faint">
           <span>{resume.target_role ?? 'no target role'}</span>
-          {' · '}
+          {', '}
           <span>{resume.content.length.toLocaleString('en')} characters</span>
-          {' · '}
-          <time dateTime={resume.created_at}>{created.toLocaleString()}</time>
+          {', added '}
+          <time dateTime={resume.created_at} title={created.toLocaleString()}>
+            {ago(resume.created_at)}
+          </time>
         </p>
       </div>
 
@@ -312,7 +315,7 @@ function Stored({
           page crawl by the third one. */}
       <details>
         <summary className={SUMMARY}>Show text</summary>
-        <pre className="mt-2 max-h-72 overflow-auto rounded-xl bg-sunken p-3 font-mono text-xs whitespace-pre-wrap text-ink-soft">
+        <pre className="mt-2 max-h-72 overflow-auto rounded-control bg-sunken p-3 font-mono text-xs whitespace-pre-wrap text-ink-soft">
           {resume.content}
         </pre>
       </details>
@@ -418,14 +421,14 @@ export function Resumes(): ReactElement {
 
       {panelOpen ? (
         <section id="add-resume" aria-label="Add a resume">
-          <Card className="flex max-w-2xl flex-col gap-2">
+          <Sheet className="flex max-w-2xl flex-col gap-2">
             <AddByFile />
 
             <details className="border-t border-line pt-3">
               <summary className={SUMMARY}>…or paste the text</summary>
               <AddByText />
             </details>
-          </Card>
+          </Sheet>
         </section>
       ) : null}
 
@@ -457,15 +460,15 @@ export function Resumes(): ReactElement {
       ) : null}
 
       {main ? (
-        <Card>
+        <Sheet>
           <Stored resume={main} main onDeleted={setDeleted} />
-        </Card>
+        </Sheet>
       ) : null}
 
       {older.length > 0 ? (
         <details className="flex flex-col gap-3">
           <summary className={SUMMARY}>Older versions ({older.length})</summary>
-          <Card className="mt-3">
+          <Sheet className="mt-3">
             <ul className="flex flex-col divide-y divide-line">
               {older.map((resume) => (
                 <li key={resume.id} className="py-3 first:pt-0 last:pb-0">
@@ -473,7 +476,7 @@ export function Resumes(): ReactElement {
                 </li>
               ))}
             </ul>
-          </Card>
+          </Sheet>
         </details>
       ) : null}
     </>

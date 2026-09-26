@@ -14,7 +14,7 @@
     "gen": "npm run gen:spec && npm run gen:api"
   },
   "dependencies": {
-    "@fontsource-variable/nunito-sans": "^5.3.0",
+    "@fontsource-variable/public-sans": "^5.3.0",
     "@tanstack/react-query": "^5.102.8",
     "lucide-react": "^1.48.0",
     "openapi-fetch": "^0.17.0",

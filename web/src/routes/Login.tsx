@@ -3,7 +3,7 @@ import type { ReactElement, SyntheticEvent } from 'react'
 import { Navigate, useLocation } from 'react-router'
 
 import { useLogin, useRegister, useSession } from '../auth/session'
-import { Alert, Button, Field } from '../ui'
+import { Alert, Button, Field, Sheet } from '../ui'
 
 interface FromState {
   from?: string
@@ -64,56 +64,60 @@ export function Login(): ReactElement {
         </p>
       </div>
 
-      <form onSubmit={onSubmit} className="flex flex-col gap-4">
-        <Field id="email" label="Email">
-          {(className, id) => (
-            <input
-              id={id}
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-              className={className}
-              value={email}
-              onChange={(event) => {
-                setEmail(event.target.value)
-              }}
-            />
-          )}
-        </Field>
+      {/* On a sheet, like every page behind it: the only one without the
+          header, and without a sheet it would be fields on bare paper. */}
+      <Sheet>
+        <form onSubmit={onSubmit} className="flex flex-col gap-4">
+          <Field id="email" label="Email">
+            {(className, id) => (
+              <input
+                id={id}
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                className={className}
+                value={email}
+                onChange={(event) => {
+                  setEmail(event.target.value)
+                }}
+              />
+            )}
+          </Field>
 
-        <Field id="password" label="Password">
-          {(className, id) => (
-            <input
-              id={id}
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              className={className}
-              value={password}
-              onChange={(event) => {
-                setPassword(event.target.value)
-              }}
-            />
-          )}
-        </Field>
+          <Field id="password" label="Password">
+            {(className, id) => (
+              <input
+                id={id}
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                className={className}
+                value={password}
+                onChange={(event) => {
+                  setPassword(event.target.value)
+                }}
+              />
+            )}
+          </Field>
 
-        <div className="mt-2 flex flex-col gap-2">
-          <Button type="submit" name="action" value="login" disabled={pending}>
-            Log in
-          </Button>
-          <Button
-            type="submit"
-            name="action"
-            value="register"
-            variant="secondary"
-            disabled={pending}
-          >
-            Create an account
-          </Button>
-        </div>
-      </form>
+          <div className="mt-2 flex flex-col gap-2">
+            <Button type="submit" name="action" value="login" disabled={pending}>
+              Log in
+            </Button>
+            <Button
+              type="submit"
+              name="action"
+              value="register"
+              variant="secondary"
+              disabled={pending}
+            >
+              Create an account
+            </Button>
+          </div>
+        </form>
+      </Sheet>
 
       {failure ? <Alert>{failure.message}</Alert> : null}
     </main>

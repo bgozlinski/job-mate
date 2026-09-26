@@ -26,15 +26,18 @@ import { ago } from '../time'
 import {
   Alert,
   Button,
-  Card,
   EmptyState,
   Field,
   Muted,
   Notice,
   PageHeader,
+  Score,
+  Sheet,
   Skeleton,
+  StageRail,
   Status,
   Thinking,
+  reachedOf,
 } from '../ui'
 import { newest } from './Posting'
 import type { Arrival } from './Posting'
@@ -154,7 +157,7 @@ function AddByFile(): ReactElement {
             // guarantee -- and jsdom's constraint validation does not see files
             // set by a test, so with it the form silently never submits and the
             // upload path cannot be covered at all.
-            className={`${className} file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-sm file:text-accent-strong`}
+            className={`${className} file:mr-3 file:rounded-control file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-sm file:text-accent-strong`}
             onChange={(event) => {
               setFile(event.target.files?.[0] ?? null)
             }}
@@ -270,7 +273,7 @@ function DeletePosting({
     <div
       role="group"
       aria-label={`Confirm deleting ${name}`}
-      className="flex flex-col gap-2 rounded-xl bg-sunken p-3"
+      className="flex flex-col gap-2 rounded-control bg-sunken p-3"
     >
       <p className="text-sm">
         This removes the posting and its chunks for good. Matches already in
@@ -337,8 +340,13 @@ interface RowActions {
 }
 
 /**
- * One posting as a row: what it is, how old, whether it was read -- and the
- * two things to do with it, right here, on the newest resume.
+ * One posting as a row: what it is, how old, whether it was read, how far you
+ * got with it -- and the two things to do with it, right here, on the newest
+ * resume.
+ *
+ * From md the row is a grid, so stages and scores stand in columns and can be
+ * compared down the list; below it the parts wrap, with room kept for the
+ * title.
  */
 function PostingRow({
   document,
@@ -356,8 +364,8 @@ function PostingRow({
 
   return (
     <li className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="min-w-0 flex-1">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 md:grid md:grid-cols-[minmax(0,1fr)_auto_4rem_auto]">
+        <div className="min-w-48 flex-1">
           <h3 className="truncate font-bold">
             <Link
               to={`/documents/${document.id}`}
@@ -368,22 +376,37 @@ function PostingRow({
           </h3>
           <p className="text-sm text-ink-faint">
             {document.source_url ? hostOf(document.source_url) : 'uploaded'}
-            {' · '}
+            {', '}
             <time
               dateTime={document.created_at}
               title={new Date(document.created_at).toLocaleString()}
             >
               {ago(document.created_at)}
             </time>
-            {' · '}
+            {', '}
             {requirements(document.requirement_count)}
           </p>
         </div>
+
+        <StageRail reached={reachedOf(document.stage)} compact />
+        <span className="w-16 text-right">
+          {document.best_score === null ? (
+            <>
+              <span aria-hidden="true" className="text-ink-faint">
+                —
+              </span>
+              <span className="sr-only">Not matched yet</span>
+            </>
+          ) : (
+            <Score value={document.best_score} size="sm" />
+          )}
+        </span>
 
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
             size="sm"
+            variant="secondary"
             icon={GitCompareArrowsIcon}
             aria-label={`Match my CV with ${name}`}
             disabled={actions.busy || !actions.resumeId}
@@ -427,7 +450,7 @@ function PostingRow({
 /** The three ways a posting comes in (FR-1), the address first. */
 function AddPanel(): ReactElement {
   return (
-    <Card className="flex max-w-2xl flex-col gap-2">
+    <Sheet className="flex max-w-2xl flex-col gap-2">
       <AddByUrl />
 
       <details className="border-t border-line pt-3">
@@ -439,7 +462,7 @@ function AddPanel(): ReactElement {
         <summary className={SUMMARY}>…or paste the text</summary>
         <AddByText />
       </details>
-    </Card>
+    </Sheet>
   )
 }
 
@@ -586,7 +609,7 @@ export function Documents(): ReactElement {
       ) : null}
 
       {listed.length > 0 ? (
-        <Card>
+        <Sheet>
           <ul aria-label="Postings" className="flex flex-col divide-y divide-line">
             {listed.map((document) => (
               <PostingRow
@@ -598,7 +621,7 @@ export function Documents(): ReactElement {
               />
             ))}
           </ul>
-        </Card>
+        </Sheet>
       ) : null}
 
       {/* A short page is the end of the listing: the route returns no total,

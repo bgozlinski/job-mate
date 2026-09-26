@@ -68,6 +68,10 @@ class DocumentRead(BaseModel):
     requirement_count: int | None
     """How many requirements an LLM read out of it, or null when nobody has."""
     created_at: datetime
+    stage: int
+    """How far the caller got with it: 1 added, 2 matched, 3 interviewed."""
+    best_score: float | None
+    """The caller's best match score for it, or null without a match."""
 
 
 class DocumentDetail(DocumentRead):

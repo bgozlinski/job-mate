@@ -382,6 +382,14 @@ Przeglądarka                              Testy, curl, Swagger
 > tabelami, a listy w API są stronicowane. Bez migracji i bez wywołań modelu. Projekt i decyzje DB-1…DB-6:
 > `docs/superpowers/specs/2026-09-26-dashboard-design.md`.
 
+> **Zmiana 2026-09-26 (noc). Nowa tożsamość wizualna: „Teczka rekrutacyjna”.** Wygląd z redesignu
+> (ciepły, beże i teal, Nunito Sans) był według użytkownika generyczny i bez związku z tematem. Nowy kierunek
+> bierze charakter z rekrutacji: ogłoszenie jako teczka z zakładką, etapy (Posting, Match, Interview, Applied)
+> jako ścieżka, luki jak pieczątka; Public Sans, chłodny papier i granatowy atrament, ton rzeczowy. Zmienia
+> decyzje U-1…U-4 z części 1. Jedyna zmiana w API to twój etap i najlepszy wynik przy ogłoszeniu, bo klient ma
+> tylko stronicowane listy. Etap „Applied” to osobny, późniejszy projekt (śledzenie wysłanych aplikacji, tabela
+> per użytkownik i ogłoszenie). Projekt i decyzje V-1…V-7: `docs/superpowers/specs/2026-09-26-ui-identity-design.md`.
+
 ## 8. Pułapki, których nie widać z kodu
 
 Zapis z 2026-09-10, przy czyszczeniu komentarzy z kodu, przycięty wieczorem po usunięciu FR-7. Każdy punkt

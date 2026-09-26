@@ -48,14 +48,21 @@ export function Layout(): ReactElement {
         {/* 6xl rather than 5xl so the places, the theme toggle and the account
             fit on one line at laptop width; main matches it so the logo stays
             aligned with the content under it. */}
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-3">
-          <h1 className="text-xl font-extrabold tracking-tight">
-            <Link to="/" className="rounded-md transition-colors hover:text-accent">
+        {/* Aligned to the bottom edge, with no padding under the places, so the
+            current one can sit on the header's bottom line and join the page
+            like the tab of a file. Below lg the places take a row of their own,
+            last, so that tab still meets the page rather than the row under it. */}
+        <div className="mx-auto flex max-w-6xl flex-wrap items-end gap-x-6 px-6 pt-3">
+          <h1 className="pb-3 text-xl font-extrabold tracking-tight">
+            <Link to="/" className="rounded-control transition-colors hover:text-accent">
               Job<span className="text-accent">Mate</span>
             </Link>
           </h1>
 
-          <nav aria-label="Main" className="flex flex-wrap gap-1">
+          <nav
+            aria-label="Main"
+            className="order-last flex w-full flex-wrap gap-1 pb-3 md:pb-0 lg:order-none lg:w-auto"
+          >
             {TABS.map(({ to, label, icon: Icon, also }) => {
               // Home only at its own address: every other page is "under" /,
               // so a prefix test would mark it current everywhere.
@@ -73,14 +80,17 @@ export function Layout(): ReactElement {
                   // Worked out here rather than by NavLink, which only knows
                   // its own address: a match is part of History without
                   // living under /history. The current tab is marked by
-                  // weight and a filled background, not by colour alone, and
-                  // aria-current is what a screen reader announces.
+                  // weight and by its shape -- a tab joined to the page, or
+                  // below md, where the places wrap, a filled background --
+                  // not by colour alone, and aria-current is what a screen
+                  // reader announces.
                   aria-current={active ? 'page' : undefined}
                   className={
-                    'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors ' +
+                    'inline-flex items-center gap-1.5 rounded-control border border-transparent px-3 py-2 text-sm transition-colors ' +
+                    'md:rounded-t-card md:rounded-b-none md:border-b-0 ' +
                     (active
-                      ? 'bg-accent-soft font-bold text-accent-strong'
-                      : 'text-ink-soft hover:bg-sunken hover:text-accent')
+                      ? 'bg-accent-soft font-bold text-accent-strong md:relative md:top-px md:border-line md:bg-surface md:text-ink'
+                      : 'text-ink-soft hover:bg-sunken hover:text-accent md:hover:bg-transparent')
                   }
                 >
                   <Icon aria-hidden="true" className="size-4" />
@@ -90,7 +100,7 @@ export function Layout(): ReactElement {
             })}
           </nav>
 
-          <div className="ml-auto flex items-center gap-3 text-sm text-ink-faint">
+          <div className="ml-auto flex items-center gap-3 pb-3 text-sm text-ink-faint">
             <ThemeToggle />
             {/* The address is on the way out rather than beside it: six places,
                 the toggle and an address do not fit one line in 6xl, and who is

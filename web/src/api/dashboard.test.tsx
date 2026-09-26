@@ -7,7 +7,7 @@ import { describe, expect, test } from 'vitest'
 import { Providers, createQueryClient } from '../providers'
 import { server } from '../test/server'
 import { dashboardKey, useDashboard } from './dashboard'
-import { useDeleteDocument, useIngestText } from './documents'
+import { documentsKey, useDeleteDocument, useIngestText } from './documents'
 import { useStartInterview } from './interview'
 import { useMatch } from './matching'
 import { useCreateResume } from './resumes'
@@ -92,6 +92,21 @@ const CHANGES = [
         .mutateAsync(PAIRING),
   },
 ]
+
+describe('the postings, which carry your stage, are read again after', () => {
+  test.each(CHANGES.filter(({ name }) => ['matching', 'starting an interview'].includes(name)))(
+    '$name',
+    async ({ handler, run }) => {
+      server.use(handler)
+      const client = createQueryClient()
+      client.setQueryData([...documentsKey, 20], [])
+
+      await run(client)
+
+      expect(client.getQueryState([...documentsKey, 20])?.isInvalidated).toBe(true)
+    },
+  )
+})
 
 describe('the dashboard is read again after', () => {
   test.each(CHANGES)('$name', async ({ handler, run }) => {

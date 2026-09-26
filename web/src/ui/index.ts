@@ -16,7 +16,7 @@
  */
 
 export { Button, ButtonLink, CONTROL, Field } from './controls'
-export { Chip, Meter } from './data'
+export { Chip, Meter, Score, percentage } from './data'
 export {
   Alert,
   EmptyState,
@@ -26,5 +26,7 @@ export {
   Status,
   Thinking,
 } from './feedback'
-export { Card, Muted, PageHeader, PageTitle } from './surfaces'
+export { Muted, PageHeader, PageTitle, Sheet } from './surfaces'
+export { StageRail, reachedOf } from './stages'
+export type { Reached } from './stages'
 export { ThemeToggle } from './ThemeToggle'

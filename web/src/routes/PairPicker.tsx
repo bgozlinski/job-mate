@@ -6,7 +6,7 @@ import type { LucideIcon } from 'lucide-react'
 import { MAX_PAGE_SIZE, useDocuments } from '../api/documents'
 import type { Pairing } from '../api/matching'
 import { useResumes } from '../api/resumes'
-import { Alert, Button, Card, Field, Notice, PageHeader, Thinking } from '../ui'
+import { Alert, Button, Field, Notice, PageHeader, Sheet, Thinking } from '../ui'
 import { newest } from './Posting'
 
 const LINK = 'text-accent underline underline-offset-2'
@@ -89,7 +89,7 @@ export function PairPicker({
         </Notice>
       ) : null}
 
-      <Card className="max-w-2xl">
+      <Sheet className="max-w-2xl">
         <form aria-label={title} onSubmit={onSubmit} className="flex flex-col gap-4">
           <Field id="pair-resume" label="Resume">
             {(className, id) => (
@@ -145,7 +145,7 @@ export function PairPicker({
             {pending ? <Thinking>{thinking}</Thinking> : null}
           </div>
         </form>
-      </Card>
+      </Sheet>
 
       {error ? <Alert>{error.message}</Alert> : null}
     </>

@@ -146,7 +146,8 @@ async def _matches_to_practise(
     One step per posting, from its best match: DISTINCT ON keeps the first row
     of each posting, so the ordering inside it must lead with the posting. The
     cap applies only after the best scores are sorted, or it would cut them off
-    in posting order.
+    in posting order. The gaps come from that same best match, so they agree
+    with the score beside them.
     """
     interviewed = select(InterviewSession.id).where(
         InterviewSession.user_id == user_id,
@@ -154,7 +155,7 @@ async def _matches_to_practise(
     )
 
     best = (
-        select(Match.document_id, Match.resume_id, Match.score)
+        select(Match.document_id, Match.resume_id, Match.score, Match.missing_keywords)
         .distinct(Match.document_id)
         .where(
             Match.user_id == user_id,
@@ -167,7 +168,13 @@ async def _matches_to_practise(
     )
 
     rows = await db.execute(
-        select(best.c.document_id, Document.title, best.c.resume_id, best.c.score)
+        select(
+            best.c.document_id,
+            Document.title,
+            best.c.resume_id,
+            best.c.score,
+            best.c.missing_keywords,
+        )
         .join(Document, Document.id == best.c.document_id)
         .order_by(best.c.score.desc(), Document.created_at.desc(), Document.id.desc())
         .limit(STEPS_PER_KIND)
@@ -179,6 +186,7 @@ async def _matches_to_practise(
             document_title=title,
             resume_id=resume_id,
             score=score,
+            gaps=gaps,
         )
-        for document_id, title, resume_id, score in rows
+        for document_id, title, resume_id, score, gaps in rows
     ]

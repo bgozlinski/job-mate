@@ -451,7 +451,7 @@ test('the newest resume is the main one, and older versions are folded away', as
 
   show()
 
-  const main = await screen.findByText('Main · used for matching')
+  const main = await screen.findByText('Main, used for matching')
   // The badge sits with the newest resume, the one Match and Practise use.
   expect(main.closest('div')?.parentElement).toHaveTextContent('new.pdf')
   const older = screen.getByText('Older versions (2)')
@@ -467,7 +467,7 @@ test('with a single resume there are no older versions to fold', async () => {
 
   show()
 
-  expect(await screen.findByText('Main · used for matching')).toBeInTheDocument()
+  expect(await screen.findByText('Main, used for matching')).toBeInTheDocument()
   expect(screen.queryByText(/Older versions/)).not.toBeInTheDocument()
 })
 

@@ -3,6 +3,7 @@ import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
 
 import { api } from './client'
 import { dashboardKey } from './dashboard'
+import { documentsKey } from './documents'
 import { detailOf, reasonFor } from './errors'
 import type { components } from './schema'
 
@@ -45,10 +46,12 @@ export function useMatch(): UseMutationResult<Match, Error, Pairing> {
     },
     onSuccess: async () => {
       // Every match is stored, so the history on the other screen is now one
-      // row out of date (FR-2), and the dashboard's steps with it.
+      // row out of date (FR-2), and the dashboard's steps with it -- and the
+      // postings, which carry your stage and best score at each.
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: matchesKey }),
         queryClient.invalidateQueries({ queryKey: dashboardKey }),
+        queryClient.invalidateQueries({ queryKey: documentsKey }),
       ])
     },
   })
@@ -101,10 +104,16 @@ export function usePostingMatches(documentId: string): UseQueryResult<MatchSumma
   })
 }
 
-/** One stored match in full, including what the model was shown. */
-export function useMatchDetail(id: string): UseQueryResult<Match> {
+/**
+ * One stored match in full, including what the model was shown.
+ *
+ * `enabled` is for a page that only sometimes has a match to read: a query
+ * for an empty id would ask the API for /matches/.
+ */
+export function useMatchDetail(id: string, enabled = true): UseQueryResult<Match> {
   return useQuery({
     queryKey: [...matchesKey, 'detail', id],
+    enabled,
     queryFn: async () => {
       const { data, error, response } = await api.GET('/matches/{match_id}', {
         params: { path: { match_id: id } },

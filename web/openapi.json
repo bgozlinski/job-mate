@@ -281,6 +281,17 @@
       "DocumentDetail": {
         "description": "One posting in full: what the list leaves out, for the posting's own page.",
         "properties": {
+          "best_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Score"
+          },
           "chunk_count": {
             "title": "Chunk Count",
             "type": "integer"
@@ -340,6 +351,10 @@
             ],
             "title": "Source Url"
           },
+          "stage": {
+            "title": "Stage",
+            "type": "integer"
+          },
           "title": {
             "anyOf": [
               {
@@ -360,6 +375,8 @@
           "chunk_count",
           "requirement_count",
           "created_at",
+          "stage",
+          "best_score",
           "content",
           "requirements"
         ],
@@ -391,6 +408,17 @@
       "DocumentRead": {
         "description": "Public view of a stored posting.",
         "properties": {
+          "best_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Score"
+          },
           "chunk_count": {
             "title": "Chunk Count",
             "type": "integer"
@@ -432,6 +460,10 @@
             ],
             "title": "Source Url"
           },
+          "stage": {
+            "title": "Stage",
+            "type": "integer"
+          },
           "title": {
             "anyOf": [
               {
@@ -451,7 +483,9 @@
           "metadata",
           "chunk_count",
           "requirement_count",
-          "created_at"
+          "created_at",
+          "stage",
+          "best_score"
         ],
         "title": "DocumentRead",
         "type": "object"
@@ -864,6 +898,13 @@
             ],
             "title": "Document Title"
           },
+          "gaps": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Gaps",
+            "type": "array"
+          },
           "kind": {
             "const": "practise",
             "default": "practise",
@@ -884,7 +925,8 @@
           "document_id",
           "document_title",
           "resume_id",
-          "score"
+          "score",
+          "gaps"
         ],
         "title": "PractiseStep",
         "type": "object"
@@ -1598,7 +1640,7 @@
     },
     "/documents": {
       "get": {
-        "description": "List the knowledge base, newest first.",
+        "description": "List the knowledge base, newest first, with your stage at each posting.",
         "operationId": "list_documents_documents_get",
         "parameters": [
           {

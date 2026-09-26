@@ -27,72 +27,75 @@
   --color-danger-soft: var(--danger-soft);
   --color-danger-ink: var(--danger-ink);
   --color-on-danger: var(--on-danger);
-
-  --shadow-card: var(--card-shadow);
 }
 
 @theme {
-  --radius-card: 1rem;
+  /* Paper, not cards: a sheet is told from the page by a 1px line and barely
+     rounded; buttons, chips and fields are rounded less still. Nothing floats
+     on a shadow. */
+  --radius-card: 0.375rem;
+  --radius-control: 0.25rem;
 
-  /* The variable build of Nunito Sans, bundled with the app (main.tsx), then
-     the system stack. The package splits the font by script and the browser
-     downloads only the ranges a page uses, so Polish letters in a resume come
-     from the latin-ext file rather than falling back to another typeface. */
+  /* The variable build of Public Sans, bundled with the app (main.tsx), then
+     the system stack. A typeface made for official documents: plain, serious,
+     and good at setting figures. The package splits the font by script and
+     the browser downloads only the ranges a page uses, so Polish letters in a
+     resume come from the latin-ext file rather than falling back to another
+     typeface. */
   --font-sans:
-    'Nunito Sans Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+    'Public Sans Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
     Roboto, sans-serif;
 }
 
 /* Every ratio below was measured (WCAG 2) against the backgrounds the token is
    drawn on. Text needs 4.5:1; the border of a form control needs 3:1, which is
-   why --control exists beside --line: --line only separates cards, and at
-   about 1.3:1 it is too faint to show where a text field is. */
+   why --control exists beside --line: --line only separates sheets, and it is
+   too faint to show where a text field is. */
 
-/* Light. The warm direction: beige surfaces, a teal accent. */
+/* Light. The recruitment file: cool paper, navy ink, and a stamp red kept for
+   what is missing. */
 :root {
   color-scheme: light;
 
-  --surface: #faf8f5;
+  --surface: #f3f5f8;
   --raised: #ffffff;
-  --sunken: #f3efe9;
-  --line: #e7e2da;
-  /* 3.54:1 on raised, 3.34:1 on surface. */
-  --control: #8f877d;
+  --sunken: #e8ecf1;
+  --line: #d5dbe3;
+  /* 3.74:1 on raised, 3.42:1 on surface. */
+  --control: #7a8595;
 
-  /* 15.17:1 on raised, 13.24:1 on sunken. */
-  --ink: #292524;
-  /* 7.63:1 on raised, 7.20:1 on surface. */
-  --ink-soft: #57534e;
-  /* 5.32:1 on raised, 4.65:1 on sunken. The mockup's #78716c came out at
-     4.19:1 on sunken, so it is a step darker. */
-  --ink-faint: #716a63;
+  /* 16.40:1 on raised, 15.02:1 on surface. */
+  --ink: #16202e;
+  /* 7.81:1 on raised, 7.15:1 on surface. */
+  --ink-soft: #465366;
+  /* 5.58:1 on raised, 5.11:1 on surface, 4.70:1 on sunken. */
+  --ink-faint: #5d6979;
 
   /* The accent is also the fill of every meter, one colour doing both jobs:
      the brand and the magnitude encoding cannot clash, and a reader never has
-     to work out whether a teal thing is decoration or data.
-     5.47:1 on raised, 5.16:1 on surface. */
-  --accent: #0f766e;
-  /* 6.73:1 on accent-soft, where chips and success messages are written. */
-  --accent-strong: #115e59;
-  --accent-soft: #ccfbf1;
-  /* 5.47:1 on accent. */
+     to work out whether an ink-blue thing is decoration or data.
+     9.90:1 on raised, 9.07:1 on surface, 8.16:1 on accent-soft. */
+  --accent: #2a3b8f;
+  /* 10.54:1 on accent-soft, where chips and success messages are written. */
+  --accent-strong: #1e2c6e;
+  --accent-soft: #e4e9f7;
+  /* 9.90:1 on accent. */
   --on-accent: #ffffff;
 
   /* An error has its own colour, but never only a colour: every use of it
-     carries an icon and a sentence as well. 6.47:1 on raised. */
-  --danger: #b91c1c;
-  --danger-soft: #fee2e2;
-  /* 8.20:1 on danger-soft. */
-  --danger-ink: #7f1d1d;
-  /* 6.47:1 on danger. */
+     carries an icon and a sentence as well, and a gap its own shape.
+     7.36:1 on raised. */
+  --danger: #a3261e;
+  --danger-soft: #fbe8e6;
+  /* 8.96:1 on danger-soft. */
+  --danger-ink: #7a1a14;
+  /* 7.36:1 on danger. */
   --on-danger: #ffffff;
-
-  --card-shadow: 0 4px 14px rgb(41 37 36 / 0.08);
 }
 
-/* Dark. Its steps are chosen against the dark surface rather than flipped
-   from the light ones: an automatic inversion gives an accent that is either
-   invisible or glaring, because lightness and chroma do not mirror.
+/* Dark. A night desk, its steps chosen against the dark surface rather than
+   flipped from the light ones: an automatic inversion gives an accent that is
+   either invisible or glaring, because lightness and chroma do not mirror.
 
    It applies when chosen in the app, and when the system asks for it unless
    light was chosen in the app. The two blocks carry the same values; CSS has
@@ -100,61 +103,57 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  /* 13.90:1 ink on raised; ink-faint 6.01:1 on raised, 6.57:1 on sunken. */
-  --surface: #1c1917;
-  --raised: #292524;
-  --sunken: #211e1c;
-  --line: #44403c;
-  /* 3.16:1 on raised, 3.65:1 on surface. */
-  --control: #78716c;
-  --ink: #f5f5f4;
-  --ink-soft: #d6d3d1;
-  --ink-faint: #a8a29e;
+  /* ink 13.72:1 on raised, 15.43:1 on surface; ink-soft 8.86:1 on raised;
+     ink-faint 5.65:1 on raised, 6.35:1 on surface, 6.05:1 on sunken. */
+  --surface: #10151e;
+  --raised: #192030;
+  --sunken: #141a25;
+  --line: #2c3547;
+  /* 3.80:1 on raised, 4.27:1 on surface. */
+  --control: #6f7b8e;
+  --ink: #e8ecf2;
+  --ink-soft: #b7c0cd;
+  --ink-faint: #8e99aa;
 
-  /* 8.15:1 on raised. */
-  --accent: #2dd4bf;
-  /* 6.41:1 on accent-soft. */
-  --accent-strong: #5eead4;
-  --accent-soft: #134e4a;
-  /* Dark ink on the light accent: 9.39:1, where white would be unreadable. */
-  --on-accent: #1c1917;
+  /* 7.75:1 on raised, 8.71:1 on surface, 6.00:1 on accent-soft. */
+  --accent: #9fb0f5;
+  /* 8.12:1 on accent-soft. */
+  --accent-strong: #c3cefa;
+  --accent-soft: #243060;
+  /* Dark ink on the light accent: 8.71:1, where white would be unreadable. */
+  --on-accent: #10151e;
 
-  /* 5.48:1 on raised. */
-  --danger: #f87171;
-  --danger-soft: #450a0a;
-  /* 11.16:1 on danger-soft. */
-  --danger-ink: #fecaca;
-  /* 6.32:1 on danger. */
-  --on-danger: #1c1917;
-
-  /* A shadow barely shows on a dark surface, so a card is outlined instead. */
-  --card-shadow: 0 0 0 1px var(--line);
+  /* 6.81:1 on raised. */
+  --danger: #f28b82;
+  --danger-soft: #3b1714;
+  /* 10.73:1 on danger-soft. */
+  --danger-ink: #f8c9c4;
+  /* 7.66:1 on danger. */
+  --on-danger: #10151e;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
 
-    --surface: #1c1917;
-    --raised: #292524;
-    --sunken: #211e1c;
-    --line: #44403c;
-    --control: #78716c;
-    --ink: #f5f5f4;
-    --ink-soft: #d6d3d1;
-    --ink-faint: #a8a29e;
+    --surface: #10151e;
+    --raised: #192030;
+    --sunken: #141a25;
+    --line: #2c3547;
+    --control: #6f7b8e;
+    --ink: #e8ecf2;
+    --ink-soft: #b7c0cd;
+    --ink-faint: #8e99aa;
 
-    --accent: #2dd4bf;
-    --accent-strong: #5eead4;
-    --accent-soft: #134e4a;
-    --on-accent: #1c1917;
+    --accent: #9fb0f5;
+    --accent-strong: #c3cefa;
+    --accent-soft: #243060;
+    --on-accent: #10151e;
 
-    --danger: #f87171;
-    --danger-soft: #450a0a;
-    --danger-ink: #fecaca;
-    --on-danger: #1c1917;
-
-    --card-shadow: 0 0 0 1px var(--line);
+    --danger: #f28b82;
+    --danger-soft: #3b1714;
+    --danger-ink: #f8c9c4;
+    --on-danger: #10151e;
   }
 }
 

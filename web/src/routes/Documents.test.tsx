@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, delay, http } from 'msw'
 import { Link, MemoryRouter, Route, Routes, useLocation, useParams } from 'react-router'
@@ -21,6 +21,8 @@ interface Stored {
   chunk_count: number
   requirement_count: number | null
   created_at: string
+  stage: number
+  best_score: number | null
 }
 
 function posting(overrides: Partial<Stored> = {}): Stored {
@@ -32,6 +34,8 @@ function posting(overrides: Partial<Stored> = {}): Stored {
     chunk_count: 3,
     requirement_count: 6,
     created_at: '2026-09-07T12:00:00Z',
+    stage: 1,
+    best_score: null,
     ...overrides,
   }
 }
@@ -120,9 +124,26 @@ test('each posting is a row saying where it came from and whether it was read', 
   // The line is split by its <time>, so it is matched as a whole paragraph.
   const line = (pattern: RegExp) => (_: string, element: Element | null) =>
     element?.tagName === 'P' && pattern.test(element.textContent)
-  expect(screen.getByText(line(/^justjoin\.it · .+ · 6 requirements$/))).toBeInTheDocument()
+  expect(screen.getByText(line(/^justjoin\.it, .+, 6 requirements$/))).toBeInTheDocument()
   expect(screen.getByText(line(/requirements not read$/))).toBeInTheDocument()
   expect(screen.queryByText(/chunks/)).not.toBeInTheDocument()
+})
+
+test('each row says how far you got with the posting', async () => {
+  listing(
+    posting({ stage: 2, best_score: 0.72 }),
+    posting({ id: 'd2', title: 'Untouched' }),
+  )
+
+  show()
+
+  const rows = within(await screen.findByRole('list', { name: 'Postings' })).getAllByRole(
+    'listitem',
+  )
+  expect(rows[0]).toHaveTextContent('Stage 2 of 4: Match')
+  expect(rows[0]).toHaveTextContent('72%')
+  expect(rows[1]).toHaveTextContent('Stage 1 of 4: Posting')
+  expect(rows[1]).toHaveTextContent('Not matched yet')
 })
 
 test('matching from a row uses the newest resume and opens the result', async () => {
