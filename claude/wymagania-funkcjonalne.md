@@ -375,6 +375,13 @@ Przeglądarka                              Testy, curl, Swagger
 > nie po dobie. Nadal jest dłuższy niż ciasteczko (15 min), które przeglądarka odnawia sama — dwa
 > ustawienia zostają, bo dwa kanały dalej różnią się tym, czy umieją się odnowić.
 
+> **Zmiana 2026-09-26 (wieczorem). Dashboard jako strona główna.** Poza roadmapą, jak klient w przeglądarce.
+> Po zalogowaniu `/` przestaje przekierowywać na listę ogłoszeń i pokazuje jeden następny krok w rekrutacji
+> („co dalej”), kilka kolejnych i skrót do ostatniej pracy. Kroki wybiera API (`GET /dashboard`), nie klient,
+> bo reguły „ogłoszenie bez dopasowania” i „najlepsze dopasowanie bez rozmowy” są pytaniami o relacje między
+> tabelami, a listy w API są stronicowane. Bez migracji i bez wywołań modelu. Projekt i decyzje DB-1…DB-6:
+> `docs/superpowers/specs/2026-09-26-dashboard-design.md`.
+
 ## 8. Pułapki, których nie widać z kodu
 
 Zapis z 2026-09-10, przy czyszczeniu komentarzy z kodu, przycięty wieczorem po usunięciu FR-7. Każdy punkt
