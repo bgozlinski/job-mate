@@ -4,6 +4,7 @@ import {
   FileTextIcon,
   GitCompareArrowsIcon,
   HistoryIcon,
+  HouseIcon,
   LogOutIcon,
   MessagesSquareIcon,
 } from 'lucide-react'
@@ -18,6 +19,7 @@ import { Button, ThemeToggle } from '../ui'
  * address: a match or an interview is part of your history.
  */
 const TABS: { to: string; label: string; icon: LucideIcon; also: string[] }[] = [
+  { to: '/', label: 'Home', icon: HouseIcon, also: [] },
   { to: '/documents', label: 'Postings', icon: BriefcaseIcon, also: [] },
   { to: '/resumes', label: 'Resumes', icon: FileTextIcon, also: [] },
   { to: '/match', label: 'Match', icon: GitCompareArrowsIcon, also: [] },
@@ -43,20 +45,26 @@ export function Layout(): ReactElement {
   return (
     <div className="min-h-dvh">
       <header className="border-b border-line bg-raised">
-        {/* 6xl rather than 5xl so five places, the theme toggle and the account
+        {/* 6xl rather than 5xl so the places, the theme toggle and the account
             fit on one line at laptop width; main matches it so the logo stays
             aligned with the content under it. */}
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-3">
           <h1 className="text-xl font-extrabold tracking-tight">
-            Job<span className="text-accent">Mate</span>
+            <Link to="/" className="rounded-md transition-colors hover:text-accent">
+              Job<span className="text-accent">Mate</span>
+            </Link>
           </h1>
 
           <nav aria-label="Main" className="flex flex-wrap gap-1">
             {TABS.map(({ to, label, icon: Icon, also }) => {
+              // Home only at its own address: every other page is "under" /,
+              // so a prefix test would mark it current everywhere.
               const active =
-                pathname === to ||
-                pathname.startsWith(`${to}/`) ||
-                also.some((prefix) => pathname.startsWith(prefix))
+                to === '/'
+                  ? pathname === '/'
+                  : pathname === to ||
+                    pathname.startsWith(`${to}/`) ||
+                    also.some((prefix) => pathname.startsWith(prefix))
 
               return (
                 <Link

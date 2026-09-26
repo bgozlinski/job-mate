@@ -28,15 +28,23 @@ function signedOut(): void {
   )
 }
 
-/** The knowledge base, empty. Signing in lands on it, so every test that
- *  gets past the login screen needs it answered. */
-function emptyKnowledgeBase(): void {
-  server.use(http.get('/api/documents', () => HttpResponse.json([])))
+/** An account with nothing in it yet. Signing in lands on the dashboard, so
+ *  every test that gets past the login screen needs it answered -- and the
+ *  knowledge base, for the tests that go there. */
+function newAccount(): void {
+  server.use(
+    http.get('/api/dashboard', () =>
+      HttpResponse.json({ steps: [{ kind: 'add_resume' }, { kind: 'add_posting' }] }),
+    ),
+    http.get('/api/matches', () => HttpResponse.json([])),
+    http.get('/api/sessions', () => HttpResponse.json([])),
+    http.get('/api/documents', () => HttpResponse.json([])),
+  )
 }
 
 function signedIn(): void {
   server.use(http.get('/api/auth/me', () => HttpResponse.json(USER)))
-  emptyKnowledgeBase()
+  newAccount()
 }
 
 test('a visitor with no session is sent to the login screen', async () => {
@@ -74,7 +82,7 @@ test('logging in replaces the form with the application', async () => {
       return HttpResponse.json({ access_token: 'x', token_type: 'bearer' })
     }),
   )
-  emptyKnowledgeBase()
+  newAccount()
 
   show('/')
   await userEvent.type(await screen.findByLabelText('Email'), USER.email)
@@ -119,7 +127,7 @@ test('logging out returns to the login screen', async () => {
       return new HttpResponse(null, { status: 204 })
     }),
   )
-  emptyKnowledgeBase()
+  newAccount()
 
   show('/')
   await userEvent.click(await screen.findByRole('button', { name: 'Log out' }))
@@ -129,7 +137,17 @@ test('logging out returns to the login screen', async () => {
   })
 })
 
-test('the navigation offers five places', async () => {
+test('signing in lands on what to do next', async () => {
+  signedIn()
+
+  show('/')
+
+  expect(
+    await screen.findByRole('heading', { level: 2, name: 'Add your resume' }),
+  ).toBeInTheDocument()
+})
+
+test('the navigation offers six places, home first', async () => {
   signedIn()
 
   show('/documents')
@@ -138,7 +156,40 @@ test('the navigation offers five places', async () => {
   const places = within(nav)
     .getAllByRole('link')
     .map((link) => link.textContent)
-  expect(places).toEqual(['Postings', 'Resumes', 'Match', 'Interview', 'History'])
+  expect(places).toEqual([
+    'Home',
+    'Postings',
+    'Resumes',
+    'Match',
+    'Interview',
+    'History',
+  ])
+})
+
+test.each([
+  ['/', true],
+  ['/documents', false],
+])('on %s the Home place is current: %s', async (at, current) => {
+  signedIn()
+
+  show(at)
+
+  const nav = within(await screen.findByRole('navigation', { name: 'Main' }))
+  const home = nav.getByRole('link', { name: 'Home' })
+  if (current) {
+    expect(home).toHaveAttribute('aria-current', 'page')
+  } else {
+    expect(home).not.toHaveAttribute('aria-current')
+  }
+})
+
+test('the logo leads home', async () => {
+  signedIn()
+
+  show('/documents')
+
+  const banner = within(await screen.findByRole('banner'))
+  expect(banner.getByRole('link', { name: 'JobMate' })).toHaveAttribute('href', '/')
 })
 
 test('a match belongs to History in the navigation', async () => {
