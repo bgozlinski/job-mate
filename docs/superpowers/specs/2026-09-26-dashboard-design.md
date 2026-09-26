@@ -37,7 +37,7 @@ rozróżniana polem `kind` (w OpenAPI `oneOf` z `discriminator`, w TS unia zawę
 |---|---|---|
 | `add_resume` | — | użytkownik nie ma żadnego CV |
 | `add_posting` | — | baza ogłoszeń jest pusta |
-| `continue_interview` | `session_id`, `document_id`, `document_title`, `answered`, `question_count` | rozmowa użytkownika ze `status = "active"`, której ogłoszenie istnieje |
+| `continue_interview` | `session_id`, `document_id`, `document_title`, `answered`, `question_count` | rozmowa użytkownika ze `status = "active"`, której ogłoszenie i CV istnieją |
 | `match` | `document_id`, `document_title`, `resume_id` | ogłoszenie bez żadnego dopasowania użytkownika (do dowolnego jego CV); `resume_id` to jego najnowsze CV („main resume”, jak `newest()` w kliencie) |
 | `practise` | `document_id`, `document_title`, `resume_id`, `score` | dopasowanie użytkownika z istniejącym ogłoszeniem i CV, bez żadnej jego rozmowy o tym ogłoszeniu |
 | `add_another_posting` | — | żadna inna reguła nie pasuje |
@@ -56,8 +56,9 @@ rozróżniana polem `kind` (w OpenAPI `oneOf` z `discriminator`, w TS unia zawę
 jak w FR-4.
 
 **Usunięte ogłoszenia i CV:** dopasowania i rozmowy są migawkami, a ich klucze obce przechodzą na NULL po
-usunięciu. Wiersz z `document_id IS NULL` nie daje żadnego kroku; `practise` wymaga też `resume_id IS NOT NULL`,
-bo bez CV nie da się zacząć rozmowy.
+usunięciu. Wiersz z `document_id IS NULL` nie daje żadnego kroku. `practise` i `continue_interview` wymagają też
+`resume_id IS NOT NULL`: bez CV nie da się zacząć rozmowy, a odpowiedzi w trwającej są oceniane względem niego
+(`ResumeDeletedError` w `app/services/interview.py`).
 
 **Pliki:**
 
