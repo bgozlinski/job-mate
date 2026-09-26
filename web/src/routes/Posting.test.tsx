@@ -20,6 +20,8 @@ const POSTING: DocumentDetail = {
   created_at: '2026-09-10T12:00:00Z',
   content:'We are looking for a Python developer to join our backend team.',
   requirements: ['python', 'docker'],
+  stage: 1,
+  best_score: null,
 }
 
 function resume(id: string, created: string, name: string): Resume {

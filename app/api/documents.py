@@ -54,6 +54,7 @@ from app.services.jobposting import (
 )
 from app.services.requirements import SkillExtractor
 from app.services.scraping import PostingSource, ScrapeError, SourceUnavailableError
+from app.services.stages import Standing, standings
 
 router = APIRouter(
     prefix="/documents",
@@ -84,8 +85,8 @@ has not thought about paging yet.
 """
 
 
-def _describe(document: Document, chunk_count: int) -> DocumentRead:
-    """Build the public view of a document from a row and its chunk count."""
+def _describe(document: Document, chunk_count: int, standing: Standing) -> DocumentRead:
+    """Build the public view of a document for one caller."""
     return DocumentRead(
         id=document.id,
         title=document.title,
@@ -98,25 +99,37 @@ def _describe(document: Document, chunk_count: int) -> DocumentRead:
             None if document.requirements is None else len(document.requirements)
         ),
         created_at=document.created_at,
+        stage=standing.stage,
+        best_score=standing.best_score,
     )
 
 
-async def _read(session: AsyncSession, document: Document) -> DocumentRead:
-    """Describe a stored document, counting its chunks in the database."""
+async def _read(
+    session: AsyncSession, document: Document, user_id: uuid.UUID
+) -> DocumentRead:
+    """
+    Describe a stored document for one caller, counting its chunks.
+
+    For the caller, because a posting is shared but how far somebody got with it
+    is theirs -- and an ingestion that turns out to be a duplicate returns a
+    posting they may already have matched.
+    """
     chunk_count = await session.scalar(
         select(func.count()).select_from(Chunk).where(Chunk.document_id == document.id)
     )
+    standing = (await standings(session, user_id, [document.id]))[document.id]
 
-    return _describe(document, int(chunk_count or 0))
+    return _describe(document, int(chunk_count or 0), standing)
 
 
 @router.get("")
 async def list_documents(
+    user: CurrentUser,
     session: Session,
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[DocumentRead]:
-    """List the knowledge base, newest first."""
+    """List the knowledge base, newest first, with your stage at each posting."""
     counted = select(Document, func.count(Chunk.id)).outerjoin(
         Chunk, Chunk.document_id == Document.id
     )
@@ -128,11 +141,20 @@ async def list_documents(
         .offset(offset)
     )
 
-    return [_describe(document, chunk_count) for document, chunk_count in rows]
+    page = list(rows.tuples())
+    # One lookup for the whole page, not one per row.
+    standing = await standings(session, user.id, [document.id for document, _ in page])
+
+    return [
+        _describe(document, chunk_count, standing[document.id])
+        for document, chunk_count in page
+    ]
 
 
 @router.get("/{document_id}")
-async def read_document(document_id: uuid.UUID, session: Session) -> DocumentDetail:
+async def read_document(
+    document_id: uuid.UUID, user: CurrentUser, session: Session
+) -> DocumentDetail:
     """
     Return one posting with its text and requirements, or 404.
 
@@ -143,7 +165,7 @@ async def read_document(document_id: uuid.UUID, session: Session) -> DocumentDet
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
-    summary = await _read(session, document)
+    summary = await _read(session, document, user.id)
 
     return DocumentDetail(
         **summary.model_dump(),
@@ -268,6 +290,7 @@ async def ingest_from_url(  # noqa: PLR0913, PLR0917 -- six are dependencies
                 source_url=str(payload.url),
                 metadata=scraped.metadata | payload.metadata,
             ),
+            user.id,
             session,
             cache,
             model,
@@ -310,11 +333,12 @@ async def _ingest(  # noqa: PLR0913, PLR0917 -- five are dependencies
 ) -> DocumentRead:
     """Store a source however it arrived, and describe what came of it."""
     with traced("ingest", user_id, title=source.title):
-        return await _store(source, session, cache, model, extractor, response)
+        return await _store(source, user_id, session, cache, model, extractor, response)
 
 
 async def _store(  # noqa: PLR0913, PLR0917 -- five are dependencies
     source: SourceDocument,
+    user_id: uuid.UUID,
     session: AsyncSession,
     cache: Redis,
     model: EmbeddingModel,
@@ -338,7 +362,7 @@ async def _store(  # noqa: PLR0913, PLR0917 -- five are dependencies
     response.status_code = (
         status.HTTP_201_CREATED if ingested.created else status.HTTP_200_OK
     )
-    described = await _read(session, ingested.document)
+    described = await _read(session, ingested.document, user_id)
     record(
         output={
             "document_id": str(ingested.document.id),

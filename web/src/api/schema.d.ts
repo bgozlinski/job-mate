@@ -153,7 +153,7 @@ export interface paths {
         };
         /**
          * List Documents
-         * @description List the knowledge base, newest first.
+         * @description List the knowledge base, newest first, with your stage at each posting.
          */
         get: operations["list_documents_documents_get"];
         put?: never;
@@ -640,6 +640,8 @@ export interface components {
          * @description One posting in full: what the list leaves out, for the posting's own page.
          */
         DocumentDetail: {
+            /** Best Score */
+            best_score: number | null;
             /** Chunk Count */
             chunk_count: number;
             /** Content */
@@ -664,6 +666,8 @@ export interface components {
             requirements: string[] | null;
             /** Source Url */
             source_url: string | null;
+            /** Stage */
+            stage: number;
             /** Title */
             title: string | null;
         };
@@ -687,6 +691,8 @@ export interface components {
          * @description Public view of a stored posting.
          */
         DocumentRead: {
+            /** Best Score */
+            best_score: number | null;
             /** Chunk Count */
             chunk_count: number;
             /**
@@ -707,6 +713,8 @@ export interface components {
             requirement_count: number | null;
             /** Source Url */
             source_url: string | null;
+            /** Stage */
+            stage: number;
             /** Title */
             title: string | null;
         };
