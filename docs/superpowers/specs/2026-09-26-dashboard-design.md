@@ -4,7 +4,7 @@
 **Zakres:** nowy endpoint `GET /dashboard` oraz strona `/` w `web/`
 **Rezultat:** po zalogowaniu użytkownik widzi jeden następny krok w swojej rekrutacji, kilka kolejnych i skrót do
 ostatniej pracy
-**Status:** projekt zatwierdzony w rozmowie 2026-09-26; kod jeszcze nie istnieje
+**Status:** zrealizowany 2026-09-26 (PR #45); odstępstwa od projektu wpisane w tekst
 
 ---
 
@@ -79,6 +79,10 @@ wspólną bazą, ale „bez dopasowania” oznacza „bez dopasowania **tego** u
 - `App.tsx`: pod `/` zamiast `<Navigate to="/documents">` jest `<Dashboard />`. `Login` już przekierowuje na `/`.
 - `Layout.tsx`: zakładka **Home** (`HouseIcon`) na pierwszej pozycji; logo „JobMate” staje się linkiem do `/`.
   Aktywność tej zakładki to **wyłącznie** `pathname === '/'` — warunek `startsWith` pasowałby do każdej strony.
+- Po wdrożeniu: sześć zakładek, przełącznik motywu i „Signed in as …” nie mieściły się w jednej linii
+  `max-w-6xl` (potrzeba 1155 px, dostępne 1104 — przy każdej szerokości okna, bo kontener ma stały limit).
+  Adres przeniesiony do `title` przycisku „Log out” (podpowiedź i opis dla czytnika ekranu); nagłówek zajmuje
+  znów jedną linię.
 
 **Pliki:** `web/src/api/dashboard.ts` (`useDashboard()`, klucz `['dashboard']`), `web/src/routes/Dashboard.tsx`,
 `web/src/routes/Dashboard.test.tsx`; zregenerowane `web/openapi.json` i `web/src/api/schema.d.ts`

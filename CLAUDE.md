@@ -34,7 +34,7 @@ the roadmap, and dated **"Zmiana"** entries that record every change of directio
 before designing any feature**, and read §8 ("Pułapki, których nie widać z kodu") before touching scraping,
 migrations, ingestion or tokens — that section is the only record of traps that were stripped from code comments.
 
-### Current state (2026-09-25)
+### Current state (2026-09-26)
 
 - **Done:** stages 1–5 — the whole MVP roadmap.
   - 1–3: auth (JWT via Bearer header or httpOnly cookies), resumes (text or file upload), job-posting
@@ -55,8 +55,13 @@ migrations, ingestion or tokens — that section is the only record of traps tha
     `/documents/:id` as the centre of the work, one `/history` for matches and interviews, API
     `GET /documents/{id}` and a `document_id` filter), **states** (skeletons, empty states, "Try again",
     `Thinking` for model waits, neutral `Notice`), **hierarchy** (postings as rows with Match/Practise,
-    the main resume first, interview progress and summary on top). The nav is Postings, Resumes, Match,
-    Interview, History — Match and Interview were removed in part 2 and brought back on request.
+    the main resume first, interview progress and summary on top). Match and Interview were removed from
+    the nav in part 2 and brought back on request.
+  - Dashboard (PR #45): the home page `/` answers "what next" — one step in a sentence with its action
+    (add a resume or posting, continue an interview, match, practise), the other steps under it, and recent
+    work. Steps come from `GET /dashboard`. Decisions DB-1…DB-6 are in
+    `docs/superpowers/specs/2026-09-26-dashboard-design.md`. The nav is Home, Postings, Resumes, Match,
+    Interview, History.
 - **Next:** nothing scheduled. Stage 6 (bonus: voice, salary trends) is optional — ask before starting it.
 - **Removed:** FR-7 automated harvesting (Scrapy) — built and reverted on 2026-09-10; the spec says why.
   Don't reintroduce crawling: NFR-5 allows one fetch per explicit user action, nothing more.
@@ -66,13 +71,15 @@ migrations, ingestion or tokens — that section is the only record of traps tha
 - `app/` — FastAPI package (`app.main:app`). `api/` routers + `deps.py` (DI, auth, rate limits, ownership
   checks like `OwnedResume`), `auth/`, `core/` (config, db, redis, Langfuse, prompts), `models/`, `schemas/`,
   `services/` (chunking, embeddings, extraction, ingestion, jobposting, scraping, requirements, judging,
-  matching, rate_limit, reindexing, export; interview: `interview_graph` the LangGraph graph, `interviewing`
+  matching, rate_limit, reindexing, export, dashboard; interview: `interview_graph` the LangGraph graph, `interviewing`
   the model calls, `interview` the service that joins them to the database), `assets/fonts/` (PT Sans + its OFL licence, for PDF export).
 - `migrations/` — Alembic; the only source of truth for the schema (no `db/schema.sql`).
 - `web/` — React + TypeScript (Vite) client. Types in `web/src/api/schema.d.ts` are generated from
   `web/openapi.json`, which is generated from the app. `src/ui/` holds every shared component behind one
-  `index.ts` (controls, surfaces, data, feedback, the theme toggle); `src/theme.ts` the theme choice;
-  `src/time.ts` relative dates; `src/routes/` one file per screen (`PairPicker` backs Match and Interview).
+  `index.ts` (controls incl. `ButtonLink` for a link drawn as a button, surfaces, data, feedback, the theme
+  toggle); `src/theme.ts` the theme choice; `src/time.ts` relative dates; `src/routes/` one file per screen
+  (`Dashboard` is `/`; `PairPicker` backs Match and Interview; `timeline.ts` holds the history rows History
+  and the dashboard share).
 - `scripts/` — a package, run as `python -m scripts.<name>`: `export_openapi`, `seed_prompts` (Langfuse),
   `eval_*` runners for `evals/`, `grant_admin` and `reindex` (FR-6).
 - `docs/superpowers/specs/` — per-stage design docs.
@@ -153,6 +160,12 @@ Pydantic schema or route must regenerate `web/openapi.json` and `web/src/api/sch
   `Content-Disposition`). PDF uses fpdf2 with the bundled font (the core PDF fonts are Latin-1 only) and drops
   characters the font lacks. The browser downloads through the API client, not a plain link, because only the
   client renews an expired access cookie.
+- **Dashboard:** Python chooses the steps (`app/services/dashboard.py`), one query per rule, because "a
+  posting you haven't matched" and "your best match without an interview" are questions about every row and
+  the client's lists are paged. Postings are shared but matches, sessions and resumes are filtered by user
+  (NFR-1). A step needs its posting and resume to still exist — answers are judged against the resume. The
+  list is never empty. In the client, **every mutation of resumes, postings, matches or interviews must
+  invalidate `dashboardKey`**, or going back to `/` shows a step already done.
 - **Prompts** are served from Langfuse with a code fallback (`app/core/prompts.py`); every LLM call is traced.
 - **URL ingestion** reads only the `application/ld+json` `JobPosting` block from hosts in
   `SCRAPER_ALLOWED_HOSTS` (exact match, redirects validated per hop, body capped after decompression).
