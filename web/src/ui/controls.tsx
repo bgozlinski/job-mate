@@ -1,5 +1,7 @@
 import type { ComponentPropsWithoutRef, ReactElement, ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
+import { Link } from 'react-router'
+import type { LinkProps } from 'react-router'
 
 const BUTTON_BASE =
   'inline-flex items-center justify-center gap-2 rounded-full font-semibold ' +
@@ -19,6 +21,20 @@ const SIZES = {
   sm: 'px-3 py-1 text-xs',
 } as const
 
+interface Look {
+  variant?: keyof typeof VARIANTS
+  size?: keyof typeof SIZES
+  icon?: LucideIcon
+}
+
+function classesFor(
+  variant: keyof typeof VARIANTS,
+  size: keyof typeof SIZES,
+  className: string,
+): string {
+  return `${BUTTON_BASE} ${VARIANTS[variant]} ${SIZES[size]} ${className}`
+}
+
 /**
  * A button, and nothing but one: whatever is passed goes onto the <button>,
  * so a label, aria-label and type work as they do on the element.
@@ -33,19 +49,35 @@ export function Button({
   className = '',
   children,
   ...props
-}: ComponentPropsWithoutRef<'button'> & {
-  variant?: keyof typeof VARIANTS
-  size?: keyof typeof SIZES
-  icon?: LucideIcon
-}): ReactElement {
+}: ComponentPropsWithoutRef<'button'> & Look): ReactElement {
   return (
-    <button
-      {...props}
-      className={`${BUTTON_BASE} ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
-    >
+    <button {...props} className={classesFor(variant, size, className)}>
       {Icon ? <Icon aria-hidden="true" className="size-4 shrink-0" /> : null}
       {children}
     </button>
+  )
+}
+
+/**
+ * A link that looks like a button, for an action that only goes somewhere.
+ *
+ * Still an <a>: it opens in a new tab, and a screen reader announces a link.
+ * It has no disabled state, because a link has none -- when there is nowhere
+ * to go, the page leaves it out.
+ */
+export function ButtonLink({
+  variant = 'primary',
+  size = 'md',
+  icon: Icon,
+  className = '',
+  children,
+  ...props
+}: LinkProps & Look): ReactElement {
+  return (
+    <Link {...props} className={classesFor(variant, size, className)}>
+      {Icon ? <Icon aria-hidden="true" className="size-4 shrink-0" /> : null}
+      {children}
+    </Link>
   )
 }
 
