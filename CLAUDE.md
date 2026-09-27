@@ -88,7 +88,11 @@ migrations, ingestion or tokens — that section is the only record of traps tha
     and on PATCH; migration `8b0c1f4e2a77` copies the alias list — change one, change both.
   - Numbered pages (2026-09-27): `GET /documents` answers `Page[DocumentRead]` (`{items, total}`,
     `app/schemas/page.py`); `GET /history?kind=` merges matches and interviews in SQL before paging.
-    The client's `Pagination` (`src/ui/pagination.tsx`) keeps the page in the address (`?page=`).
+    The client's `Pagination` (`src/ui/pagination.tsx`) keeps the page in the address (`?page=`), and
+    `PageSize` the rows per page (`?size=` of 5, 10, 15, 20; changing it keeps the first row in view).
+    The look follows Ant Design's pagination: bare numbers, the current one outlined, arrows without
+    words, "10 / page", and "Go to [ ] page" from 10 pages. One list for every width (`steps()`): the
+    current page's neighbours hide below sm, so each page stays one link to a screen reader.
 - **Next:** nothing scheduled; the roadmap is complete (stage 6 dropped on 2026-09-27, see the spec).
 - **Removed:** FR-7 automated harvesting (Scrapy) — built and reverted on 2026-09-10; the spec says why.
   Don't reintroduce crawling: NFR-5 allows only what a user action asks for — one posting, or one page of

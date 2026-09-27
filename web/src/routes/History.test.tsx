@@ -222,3 +222,19 @@ test('a history that failed to load can be asked again', async () => {
 
   expect(await screen.findByRole('link', { name: /^Match 56% —/ })).toBeInTheDocument()
 })
+
+test('a new filter keeps the rows per page', async () => {
+  const asked = answer(
+    Array.from({ length: 30 }, (_, i) => match(`m${String(i)}`, '2026-09-22T12:00:00Z')),
+    [interview('s1', '2026-09-21T12:00:00Z')],
+  )
+
+  show('/history?size=10')
+  await screen.findByRole('navigation', { name: 'Pages of history' })
+  await userEvent.click(screen.getByRole('button', { name: 'Matches' }))
+
+  await waitFor(() => {
+    expect(asked).toEqual(['all:10@0', 'matches:10@0'])
+  })
+  expect(screen.getByLabelText('Rows per page')).toHaveValue('10')
+})

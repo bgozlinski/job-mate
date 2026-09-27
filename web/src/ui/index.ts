@@ -26,8 +26,22 @@ export {
   Status,
   Thinking,
 } from './feedback'
+export type { Step } from './pagination'
 export { Footer, Muted, PageHeader, PageTitle, Sheet } from './surfaces'
-export { Pagination, pageFrom, pagesAround } from './pagination'
+export {
+  DEFAULT_PAGE_SIZE,
+  GoToPage,
+  JUMP_FROM,
+  PAGE_SIZES,
+  PageSize,
+  Pagination,
+  pageFrom,
+  pageKeeping,
+  pagedSearch,
+  pagesAround,
+  sizeFrom,
+  steps,
+} from './pagination'
 export { StageRail, reachedOf } from './stages'
 export type { Reached } from './stages'
 export { ThemeToggle } from './ThemeToggle'

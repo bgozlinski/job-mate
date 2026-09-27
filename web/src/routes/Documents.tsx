@@ -11,7 +11,6 @@ import { Link, useNavigate, useSearchParams } from 'react-router'
 
 import type { Document, Imported, Ingested } from '../api/documents'
 import {
-  PAGE_SIZE,
   pageCount,
   useApply,
   useDeleteDocument,
@@ -33,6 +32,8 @@ import {
   EmptyState,
   Field,
   Notice,
+  GoToPage,
+  PageSize,
   Pagination,
   PageHeader,
   Score,
@@ -42,7 +43,10 @@ import {
   Status,
   Thinking,
   pageFrom,
+  pageKeeping,
+  pagedSearch,
   reachedOf,
+  sizeFrom,
 } from '../ui'
 import { newest } from './Posting'
 import type { Arrival } from './Posting'
@@ -854,9 +858,9 @@ function AddPanel(): ReactElement {
   )
 }
 
-/** The address of one page of the postings: the first is the bare list. */
-function pageHref(page: number): string {
-  return page === 1 ? '/documents' : `/documents?page=${String(page)}`
+/** The address of one page of the postings, at one size: the defaults are bare. */
+function pageHref(page: number, size: number): string {
+  return `/documents${pagedSearch(page, size)}`
 }
 
 /**
@@ -869,10 +873,11 @@ function pageHref(page: number): string {
 export function Documents(): ReactElement {
   const [params] = useSearchParams()
   const page = pageFrom(params.get('page'))
-  const documents = useDocuments(page)
+  const size = sizeFrom(params.get('size'))
+  const documents = useDocuments(page, size)
   const listed = documents.data?.items ?? []
   const total = documents.data?.total ?? 0
-  const pages = pageCount(total, PAGE_SIZE)
+  const pages = pageCount(total, size)
   // The last deletion, said once over the list: the row just disappears, and
   // a row that vanishes without a word reads as a glitch. Replaced by the next.
   const [deleted, setDeleted] = useState<string | null>(null)
@@ -1027,14 +1032,30 @@ export function Documents(): ReactElement {
       {pastEnd ? (
         <Notice>
           There is no page {page}: your postings fill {pages === 1 ? '1 page' : `${String(pages)} pages`}.{' '}
-          <Link to={pageHref(pages)} className="text-accent underline underline-offset-2">
+          <Link to={pageHref(pages, size)} className="text-accent underline underline-offset-2">
             Go to the last page
           </Link>
           .
         </Notice>
       ) : null}
 
-      <Pagination page={page} count={pages} hrefFor={pageHref} label="Pages of postings" />
+      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+        <Pagination
+          page={page}
+          count={pages}
+          hrefFor={(n) => pageHref(n, size)}
+          label="Pages of postings"
+        />
+        <PageSize
+          id="postings-page-size"
+          size={size}
+          total={total}
+          onChange={(next) => {
+            void navigate(pageHref(pageKeeping(page, size, next), next))
+          }}
+        />
+        <GoToPage id="postings-go-to" count={pages} hrefFor={(n) => pageHref(n, size)} />
+      </div>
     </>
   )
 }
