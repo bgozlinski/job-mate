@@ -36,7 +36,8 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 - System przyjmuje **wyłącznie ogłoszenia o pracę**, na trzy sposoby: wklejony tekst, plik PDF / DOCX / TXT
   albo **adres URL ogłoszenia** w serwisie z allowlisty (warunki w NFR-5).
 - Dokumenty są dzielone na chunki (500–1000 tokenów z overlapem), embedowane i zapisywane w bazie.
-- Duplikaty są odrzucane na podstawie hasha treści.
+- Duplikaty są odrzucane na podstawie hasha treści, w obrębie konta: każde ogłoszenie należy do użytkownika,
+  który je dodał (zmiana 2026-09-27).
 
 > **Zmiana 2026-09-07.** Doszedł trzeci sposób wprowadzenia ogłoszenia: użytkownik podaje URL, a system
 > odczytuje z tej strony treść oferty. Nie jest to nowa ścieżka ingestii — odczytana treść trafia do tego
@@ -138,8 +139,13 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 > jawnie, zamiast zostawiać pustą lukę z ostrzeżeniem w logu.
 
 ### FR-6. Administracja bazą wiedzy
-- Administrator może przeglądać i usuwać źródła.
+- Użytkownik może przeglądać i usuwać własne ogłoszenia; cudzych nie widzi (zmiana 2026-09-27).
 - Obsługiwana jest re-indeksacja po zmianie modelu embeddingów.
+
+> **Zmiana 2026-09-27.** Ogłoszenia są per użytkownik, więc usuwa je właściciel, nie admin:
+> `DELETE /documents/{id}` odpowiada 404 na cudze ogłoszenie, także adminowi. Zależność `get_current_admin`
+> zniknęła, bo żaden endpoint jej już nie używał. Flaga `is_admin` i `scripts.grant_admin` zostają — admin
+> przejmuje nieużywane ogłoszenia w migracji `984408943e7c` (patrz zmiana 2026-09-27 w §7).
 
 > **Zmiana 2026-09-23.** Usuwanie ogłoszeń: `DELETE /documents/{id}`, tylko dla admina. Uprawnienia nadaje
 > skrypt `scripts.grant_admin`, nie endpoint — pierwszego admina i tak nie dałoby się utworzyć przez API,
@@ -265,7 +271,7 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 
 - `users` — konta użytkowników (e-mail, hash hasła)
 - `resumes` — wersje CV per użytkownik (surowy tekst, docelowa rola)
-- `documents` — ogłoszenia o pracę (od 2026-09-02 baza wiedzy nie zawiera niczego innego, więc nie ma kolumny rozróżniającej rodzaj źródła); deduplikacja po `content_hash`; `metadata JSONB` (rola, seniority) umożliwia filtrowane wyszukiwanie hybrydowe; `requirements JSONB` — wymagania odczytane przez LLM przy zapisie
+- `documents` — ogłoszenia o pracę (od 2026-09-02 baza wiedzy nie zawiera niczego innego, więc nie ma kolumny rozróżniającej rodzaj źródła); `user_id` — właściciel (`CASCADE`, od 2026-09-27); `company`, `role`, `posted_on` (`DATE`) — firma, stanowisko i dzień publikacji, odczytane z JSON-LD albo wpisane przez właściciela (migracja `408d74d864e6`); `applied_on` (`DATE`) i `applied_resume_id` (`SET NULL`) — kiedy i z jakim CV właściciel aplikował, `CHECK`: CV tylko razem z dniem (migracja `2e471b342517`); deduplikacja po `UNIQUE (user_id, content_hash)`; `metadata JSONB` (rola, seniority) umożliwia filtrowane wyszukiwanie hybrydowe; `requirements JSONB` — wymagania odczytane przez LLM przy zapisie
 - `chunks` — fragmenty dokumentów z embeddingami `vector(1536)`; indeks HNSW z metryką kosinusową (Redis pełni rolę cache'a przed API embeddingów; Postgres pozostaje źródłem prawdy); `embedding_model` — model, który wyliczył wektor (migracja `49572ac20106`), `NULL` dla wierszy starszych niż ta kolumna, czyli „nie wiadomo"
 - `sessions` — sesje mock interview per użytkownik (FR-4, zmiana 2026-09-24): `user_id` (`CASCADE`); `resume_id` i `document_id` (`SET NULL` — sesja przeżywa usunięcie CV albo ogłoszenia) oraz kopia tytułu ogłoszenia, jak w `matches`; `status` (`active` / `finished`, ograniczenie `CHECK`, nie natywny enum — §8); `plan JSONB` — lista `{question, requirement}`; `score` i `summary JSONB` ustawiane przy podsumowaniu; `created_at`, `finished_at`
 - `messages` — kolejne wypowiedzi w sesji: `position` (`UNIQUE (session_id, position)` — jawna kolejność, bo `created_at` nie rozróżnia wierszy z jednej transakcji, §8); `role` (`interviewer` / `candidate` / `evaluator`, `CHECK`); `content`; `requirement`, którego dotyczy pytanie lub ocena; przy ocenie `verdicts JSONB` i `score` liczony w Pythonie; `retrieved_chunk_ids` — ID chunków ogłoszenia podanych modelowi, do audytu tego, co faktycznie widział; `input_tokens` / `output_tokens` przy wiadomościach wytworzonych przez model. Postęp sesji wynika z danych (liczba odpowiedzi `candidate`), bez osobnego licznika
@@ -274,6 +280,8 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 **Relacje:**
 ```
 users 1—N resumes
+users 1—N documents
+documents N—1 resumes (applied_resume_id, opcjonalnie)
 users 1—N matches
 users 1—N sessions 1—N messages
 documents 1—N chunks
@@ -390,6 +398,39 @@ Przeglądarka                              Testy, curl, Swagger
 > tylko stronicowane listy. Etap „Applied” to osobny, późniejszy projekt (śledzenie wysłanych aplikacji, tabela
 > per użytkownik i ogłoszenie). Projekt i decyzje V-1…V-7: `docs/superpowers/specs/2026-09-26-ui-identity-design.md`.
 
+> **Zmiana 2026-09-27. Ogłoszenia są per użytkownik.** Do tej pory baza ogłoszeń była wspólna: każdy widział
+> i dopasowywał każde, a usuwał tylko admin. Użytkownik chce śledzić, na które oferty aplikował, kiedy i
+> z jakim CV, oraz poprawiać firmę, stanowisko i datę publikacji, których ogłoszenia wklejone albo wgrane
+> z pliku nie mają. Na wspólnym ogłoszeniu taka poprawka zmieniałaby dane wszystkim, więc ogłoszenie
+> dostało właściciela (`documents.user_id`) i widzi je, dopasowuje, ćwiczy i usuwa tylko on — cudze
+> odpowiada 404, nie 403 (NFR-1). Ten sam tekst dodany przez dwie osoby to dwie kopie z osobnymi chunkami.
+>
+> **Istniejące wiersze** (migracja `984408943e7c`): nikt nie zapisywał, kto dodał ogłoszenie, więc
+> właścicielem zostaje autor najwcześniejszego dopasowania albo rozmowy na nim, a nieużyte trafiają do
+> najstarszego admina. Bez admina i z nieużytymi ogłoszeniami migracja się zatrzymuje, zamiast zgadywać.
+> Skutek uboczny: jeśli ogłoszenia używały dwie osoby, druga traci do niego dostęp — jej dopasowania zostają
+> jako migawki, niedokończonej rozmowy nie dokończy (dashboard jej nie proponuje).
+>
+> **Dalej:** skoro ogłoszenie ma jednego właściciela, „Applied” to kolumny na `documents` (data i złożone CV),
+> nie osobna tabela; firma, stanowisko i data publikacji stają się edytowalnymi kolumnami; lista ogłoszeń
+> staje się tabelą.
+>
+> **Firma, stanowisko, dzień publikacji** (migracja `408d74d864e6`). Kolumny `company`, `role` i
+> `posted_on`, które właściciel poprawia przez `PATCH /documents/{id}` (pominięte pole zostaje, jawny `null`
+> czyści, pusty napis to `null`). Ogłoszenie z linku wypełnia je od razu z JSON-LD; migracja uzupełnia stare
+> z `metadata` i z tytułu sklejonego jako „rola — firma”. `title` zostaje, jak był — używają go historia,
+> dashboard i migawki w `matches`. Dzień to `DATE`, nie znacznik czasu: godziny nikt nie zna, a UTC
+> przesunęłoby wieczorną publikację na następny dzień. Z tego samego powodu API przyjmuje dzień o jeden
+> późniejszy niż dzisiejszy w UTC — u właściciela może już być jutro. Nieczytelny `datePosted` (także
+> poprawny w formie `2026-02-30`) jest pomijany, nie odrzucany — dlatego w migracji w Pythonie, nie `::date`.
+>
+> **Applied** (migracja `2e471b342517`). `PUT /documents/{id}/application` z `{applied_on, resume_id}`
+> zapisuje albo poprawia aplikację, `DELETE` ją cofa (brak aplikacji to też 204). CV jest wymagane i musi być
+> własne (404 na cudze), więc `applied_on` bez CV znaczy jedno: CV usunięto później — aplikacja zostaje, bo
+> została wysłana. Dzień podlega tej samej regule co `posted_on` (najwyżej jutro w UTC). Etap 4 wynika
+> z kolumny i wygrywa z pozostałymi: można aplikować bez dopasowania i bez rozmowy. Dashboard na razie
+> tego nie uwzględnia — ogłoszenie z aplikacją dalej może być proponowane do dopasowania i ćwiczenia.
+
 ## 8. Pułapki, których nie widać z kodu
 
 Zapis z 2026-09-10, przy czyszczeniu komentarzy z kodu, przycięty wieczorem po usunięciu FR-7. Każdy punkt
@@ -424,9 +465,10 @@ i jest błędem. To jedyne miejsce poza historią gita, gdzie ta wiedza istnieje
 
 - `ingest_document` commituje sam. Wołający nie dzieli z nim transakcji i nie może liczyć na to, że jego
   własny zapis cofnie się razem z nieudaną ingestią.
-- Deduplikacja rozstrzyga się na unikalnym indeksie `content_hash`, nie na `SELECT` przed `INSERT`: dwa
-  równoległe żądania z tym samym tekstem przechodzą tamto sprawdzenie, a przegrany łapie `IntegrityError`
-  i zwraca dokument zwycięzcy.
+- Deduplikacja rozstrzyga się na ograniczeniu `UNIQUE (user_id, content_hash)`, nie na `SELECT` przed
+  `INSERT`: dwa równoległe żądania jednego użytkownika z tym samym tekstem przechodzą tamto sprawdzenie,
+  a przegrany łapie `IntegrityError` i zwraca dokument zwycięzcy. Wyszukanie duplikatu musi filtrować po
+  `user_id` — samo `content_hash` zwróciłoby cudzą kopię.
 - Async psycopg wymaga `SelectorEventLoop` na Windowsie — stąd `pytest_asyncio_loop_factories`
   w `conftest.py`. Sama aplikacja tego nie obchodzi, bo chodzi w Dockerze na Linuksie.
 - `jwt.encode` dla `alg="none"` dostaje `key=""`, nie `None`: `NoneAlgorithm.prepare_key` mapuje puste na

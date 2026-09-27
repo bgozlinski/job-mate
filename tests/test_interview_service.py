@@ -54,6 +54,7 @@ async def owner_resume_and_posting(
             user_id=user.id, content=RESUME, target_role="Backend developer"
         )
         document = Document(
+            user_id=user.id,
             title="Backend developer",
             content="Python and Docker.",
             content_hash=uuid.uuid4().hex * 2,

@@ -1,4 +1,5 @@
 import json
+from datetime import date
 
 import pytest
 
@@ -68,6 +69,32 @@ def test_a_posting_is_read_from_the_structured_block():
         "salary_unit": "HOUR",
         "salary_min": 100,
     }
+
+
+def test_the_company_role_and_day_are_read_apart_from_the_title():
+    scraped = parse_job_posting(page(POSTING))
+
+    assert scraped.company == "DCV Technologies"
+    assert scraped.role == "Python Developer"
+    assert scraped.posted_on == date(2026, 9, 7)
+
+
+@pytest.mark.parametrize(
+    ("stated", "expected"),
+    [
+        ("2026-09-07", date(2026, 9, 7)),
+        ("2026-02-30T10:00:00Z", None),
+        ("last week", None),
+        (None, None),
+    ],
+)
+def test_a_publication_day_that_cannot_be_read_is_left_out(
+    stated: str | None, expected: date | None
+) -> None:
+    """The posting is still worth storing without its day."""
+    scraped = parse_job_posting(page(POSTING | {"datePosted": stated}))
+
+    assert scraped.posted_on == expected
 
 
 def test_only_the_posting_is_read_not_the_rest_of_the_page():

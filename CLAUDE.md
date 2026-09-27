@@ -67,9 +67,18 @@ migrations, ingestion or tokens — that section is the only record of traps tha
     gaps; a posting is drawn as a file with a tab, and how far you got with it as a path of four stages
     (Posting, Match, Interview, Applied — the last dashed until it exists). API: `stage` and `best_score` on
     each posting, for the caller. Decisions V-1…V-7 in `docs/superpowers/specs/2026-09-26-ui-identity-design.md`.
-- **Next:** nothing scheduled. Two candidates, ask before starting either: tracking sent applications
-  ("Applied" — a per-user table, since postings are shared; its stage slot is already drawn), and stage 6
-  (bonus: voice, salary trends).
+  - Postings per user (2026-09-27, in progress on `feat/posting-owner`): `documents.user_id`, dedup per
+    account, `OwnedDocument` (404 for someone else's), only the owner deletes. Migration `984408943e7c`
+    gives existing rows to their first user, else the oldest admin. The spec's "Zmiana 2026-09-27" says why.
+    Then `company`, `role`, `posted_on` columns (migration `408d74d864e6`), filled from JSON-LD and
+    corrected by the owner through `PATCH /documents/{id}`. Then Applied (migration `2e471b342517`):
+    `applied_on` + `applied_resume_id` on `documents`, `PUT`/`DELETE /documents/{id}/application`, stage 4.
+    The client: `/documents` is a register (a `<table>` from lg, a stack of labelled entries below it) with
+    company, role, short link, posted, added, applied and resume; "Mark as applied" opens a form under
+    the row, and an application's day is drawn as a stamp that reopens it. The posting page edits company,
+    role and publication day. `StageRail` reaches stage 4.
+- **Next:** nothing scheduled; stage 6 (voice, salary trends) is the remaining candidate. The dashboard
+  still ignores applications (it may offer to match or practise a posting already applied to).
 - **Removed:** FR-7 automated harvesting (Scrapy) — built and reverted on 2026-09-10; the spec says why.
   Don't reintroduce crawling: NFR-5 allows one fetch per explicit user action, nothing more.
 
@@ -137,8 +146,10 @@ Pydantic schema or route must regenerate `web/openapi.json` and `web/src/api/sch
 
 ## Architecture notes
 
-- **Knowledge base = job postings only** (since 2026-09-02). Ingestion dedups on the unique index on
-  `documents.content_hash` (catching `IntegrityError`, not select-then-insert) and commits on its own.
+- **Knowledge base = job postings only** (since 2026-09-02), **each owned by the account that added it**
+  (since 2026-09-27). Ingestion dedups per account on `UNIQUE (user_id, content_hash)` (catching
+  `IntegrityError`, not select-then-insert) and commits on its own. Every route that takes a posting id —
+  path or body — loads it through `owned_document`/`OwnedDocument`, which answers 404 for someone else's.
   Requirements are extracted by an LLM at write time into `documents.requirements`.
 - **Matching (FR-3) does not use vector retrieval.** A deterministic rule matches skills first; an LLM judge
   may only *add* matches, requirement by requirement, quoting the resume. Score and gaps are computed in Python
@@ -160,9 +171,9 @@ Pydantic schema or route must regenerate `web/openapi.json` and `web/src/api/sch
   `embedding_model` (NULL = older than the column = unknown). Re-indexing selects stale chunks with
   `IS DISTINCT FROM`, never `!=` (which skips NULL), and updates vectors **in place** so chunk ids — and
   `retrieved_chunk_ids` pointing at them — survive; one commit per document, so a failed run just resumes.
-- **Admin (FR-6):** `CurrentAdmin` in `app/api/deps.py` answers 403 after authentication (401 stays with
-  `get_current_user`). No route grants `is_admin`, on purpose — only `scripts.grant_admin`. The flag is read
-  from the database on every request, so a grant or revoke applies to tokens already issued.
+- **Admin (FR-6):** since postings are per user, the owner deletes them and no route checks `is_admin` any
+  more. The flag and `scripts.grant_admin` stay: migration `984408943e7c` gives unused postings to the
+  oldest admin. No route grants `is_admin`, on purpose.
 - **Export (FR-5):** converts a stored resume version and calls no model — the "improved" resume is one its
   owner wrote. The filename is always `resume-<id>.<format>`, never user text (it lands in
   `Content-Disposition`). PDF uses fpdf2 with the bundled font (the core PDF fonts are Latin-1 only) and drops
@@ -170,7 +181,7 @@ Pydantic schema or route must regenerate `web/openapi.json` and `web/src/api/sch
   client renews an expired access cookie.
 - **Dashboard:** Python chooses the steps (`app/services/dashboard.py`), one query per rule, because "a
   posting you haven't matched" and "your best match without an interview" are questions about every row and
-  the client's lists are paged. Postings are shared but matches, sessions and resumes are filtered by user
+  the client's lists are paged. Postings, matches, sessions and resumes are all filtered by user
   (NFR-1). A step needs its posting and resume to still exist — answers are judged against the resume. The
   list is never empty. In the client, **every mutation of resumes, postings, matches or interviews must
   invalidate `dashboardKey`**, or going back to `/` shows a step already done.
@@ -190,7 +201,10 @@ Pydantic schema or route must regenerate `web/openapi.json` and `web/src/api/sch
 - **Visual identity conventions.** Sheets are told from the page by a line, never a shadow; `rounded-card`
   (6px) for sheets, `rounded-control` (4px) for buttons, chips and fields — no pills. Section headings are
   plain sentences (no uppercase labels); metadata is a sentence with commas, never "A · B · C"; times are
-  `ago()` with the full date in `title`. A missing requirement is `Chip present={false}` (the stamp); where
+  `ago()` with the full date in `title` — except in the postings register, where days stand in columns.
+  A calendar day from the API (`posted_on`, `applied_on`) goes through `day()` in `time.ts`, never
+  `new Date("2026-09-20")` (midnight UTC, the 19th west of Greenwich); today for a form is `today()`,
+  the reader's day, not `toISOString()`. A missing requirement is `Chip present={false}` (the stamp); where
   met and missing share one list, add words for a screen reader, since no heading separates them. A
   posting's `stage`/`best_score` are the caller's, so **matching and starting an interview must invalidate
   `documentsKey`** as well as the dashboard. A dependency added to `web/` needs

@@ -1,13 +1,14 @@
 import { useState } from 'react'
-import type { ReactElement } from 'react'
+import type { ReactElement, SyntheticEvent } from 'react'
 import {
   ArrowLeftIcon,
   GitCompareArrowsIcon,
   MessagesSquareIcon,
+  PencilIcon,
 } from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 
-import { useDocument } from '../api/documents'
+import { useDocument, useUpdateDocument } from '../api/documents'
 import type { DocumentDetail } from '../api/documents'
 import { usePostingInterviews, useStartInterview } from '../api/interview'
 import {
@@ -18,12 +19,14 @@ import {
 } from '../api/matching'
 import { useResumes } from '../api/resumes'
 import type { Resume } from '../api/resumes'
+import { day, today } from '../time'
 import {
   Alert,
   Button,
   CONTROL,
   Chip,
   EmptyState,
+  Field,
   PageTitle,
   Sheet,
   Skeleton,
@@ -37,6 +40,9 @@ import {
 const LINK = 'text-accent underline underline-offset-2'
 const HEADING = 'text-base font-bold'
 const BACK = 'inline-flex items-center gap-1 text-sm text-ink-soft hover:text-accent'
+
+const MAX_LABEL_LENGTH = 200
+/** Mirrors MAX_LABEL_LENGTH in app/schemas/document.py. */
 
 /** What an ingestion hands over when it opens the posting it stored. */
 export interface Arrival {
@@ -66,6 +72,139 @@ function hostOf(url: string): string {
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString()
+}
+
+/** Company, role and publication day, as far as they are known. */
+function factsOf(posting: DocumentDetail): string {
+  const known = [
+    posting.company,
+    posting.role,
+    posting.posted_on ? `published ${day(posting.posted_on)}` : null,
+  ].filter((part): part is string => Boolean(part))
+
+  return known.length > 0
+    ? known.join(', ')
+    : 'Company, role and publication day not stated'
+}
+
+/**
+ * Who is hiring, for what, and since when -- read from the page when it said
+ * so, and yours to fill in or correct when it did not (a pasted posting says
+ * none of it). A sentence while read, three fields while edited.
+ */
+function Facts({ posting }: { posting: DocumentDetail }): ReactElement {
+  const [editing, setEditing] = useState(false)
+  const [company, setCompany] = useState(posting.company ?? '')
+  const [role, setRole] = useState(posting.role ?? '')
+  const [postedOn, setPostedOn] = useState(posting.posted_on ?? '')
+  const update = useUpdateDocument()
+
+  function onSubmit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>): void {
+    event.preventDefault()
+    update.mutate(
+      {
+        id: posting.id,
+        // Blank is no value: the API stores an empty label as null too.
+        changes: { company, role, posted_on: postedOn || null },
+      },
+      {
+        onSuccess: () => {
+          setEditing(false)
+        },
+      },
+    )
+  }
+
+  if (!editing) {
+    return (
+      <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-soft">
+        {factsOf(posting)}
+        <Button
+          type="button"
+          size="sm"
+          variant="quiet"
+          icon={PencilIcon}
+          onClick={() => {
+            setCompany(posting.company ?? '')
+            setRole(posting.role ?? '')
+            setPostedOn(posting.posted_on ?? '')
+            update.reset()
+            setEditing(true)
+          }}
+        >
+          Edit details
+        </Button>
+      </p>
+    )
+  }
+
+  return (
+    <form
+      aria-label="Posting details"
+      onSubmit={onSubmit}
+      className="flex flex-col gap-3 rounded-control bg-sunken p-3"
+    >
+      <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+        <Field id="posting-company" label="Company">
+          {(className, id) => (
+            <input
+              id={id}
+              maxLength={MAX_LABEL_LENGTH}
+              className={className}
+              value={company}
+              onChange={(event) => {
+                setCompany(event.target.value)
+              }}
+            />
+          )}
+        </Field>
+        <Field id="posting-role" label="Role">
+          {(className, id) => (
+            <input
+              id={id}
+              maxLength={MAX_LABEL_LENGTH}
+              className={className}
+              value={role}
+              onChange={(event) => {
+                setRole(event.target.value)
+              }}
+            />
+          )}
+        </Field>
+        <Field id="posting-posted-on" label="Published on">
+          {(className, id) => (
+            <input
+              id={id}
+              type="date"
+              max={today()}
+              className={`${className} tabular-nums`}
+              value={postedOn}
+              onChange={(event) => {
+                setPostedOn(event.target.value)
+              }}
+            />
+          )}
+        </Field>
+      </div>
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" disabled={update.isPending}>
+          {update.isPending ? 'Saving…' : 'Save'}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={update.isPending}
+          onClick={() => {
+            setEditing(false)
+          }}
+        >
+          Cancel
+        </Button>
+      </div>
+      {update.error ? <Alert>{update.error.message}</Alert> : null}
+    </form>
+  )
 }
 
 /**
@@ -448,6 +587,7 @@ export function Posting(): ReactElement {
             className="flex flex-col gap-4"
           >
             <PageTitle>{posting.data.title ?? 'Untitled posting'}</PageTitle>
+            <Facts key={posting.data.id} posting={posting.data} />
             <StageRail
               reached={reachedOf(posting.data.stage)}
               score={posting.data.best_score}

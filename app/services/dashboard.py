@@ -40,7 +40,9 @@ async def next_steps(db: AsyncSession, user_id: uuid.UUID) -> list[Step]:
     else can be done until they exist.
     """
     resume_id = await _newest_resume(db, user_id)
-    has_postings = bool(await db.scalar(select(exists().select_from(Document))))
+    has_postings = bool(
+        await db.scalar(select(exists().where(Document.user_id == user_id)))
+    )
 
     blockers: list[Step] = []
     if resume_id is None:
@@ -77,7 +79,8 @@ async def _unfinished_interviews(
     """
     List your active interviews, newest first.
 
-    Only those whose posting and resume still exist: answers are judged against
+    Only those whose posting is still yours and whose resume still exists: answers
+    are judged against
     the resume, so without it the interview cannot go on.
     """
     answered = (
@@ -97,6 +100,7 @@ async def _unfinished_interviews(
         .join(Document, Document.id == InterviewSession.document_id)
         .where(
             InterviewSession.user_id == user_id,
+            Document.user_id == user_id,
             InterviewSession.status == "active",
             InterviewSession.resume_id.is_not(None),
         )
@@ -119,14 +123,14 @@ async def _unfinished_interviews(
 async def _unmatched_postings(
     db: AsyncSession, user_id: uuid.UUID, resume_id: uuid.UUID
 ) -> list[MatchStep]:
-    """List the postings you have matched no resume against, newest first."""
+    """List your postings you have matched no resume against, newest first."""
     yours = select(Match.id).where(
         Match.user_id == user_id, Match.document_id == Document.id
     )
 
     rows = await db.execute(
         select(Document.id, Document.title)
-        .where(~yours.exists())
+        .where(Document.user_id == user_id, ~yours.exists())
         .order_by(Document.created_at.desc(), Document.id.desc())
         .limit(STEPS_PER_KIND)
     )
@@ -176,6 +180,7 @@ async def _matches_to_practise(
             best.c.missing_keywords,
         )
         .join(Document, Document.id == best.c.document_id)
+        .where(Document.user_id == user_id)
         .order_by(best.c.score.desc(), Document.created_at.desc(), Document.id.desc())
         .limit(STEPS_PER_KIND)
     )

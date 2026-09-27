@@ -112,17 +112,17 @@ async def test_a_posting_nobody_read_has_no_requirements(
     assert response.json()["requirements"] is None
 
 
-async def test_any_account_can_read_a_posting(
+async def test_someone_elses_posting_is_not_found(
     client: AsyncClient, session_factory: Factory
 ) -> None:
-    """The knowledge base is shared, as the list already is."""
+    """404, not 403: the answer must not reveal whether the id exists (NFR-1)."""
     owner = await account(client, "owner@example.com")
-    document_id = await posting(client, session_factory, owner, "Shared posting.")
+    document_id = await posting(client, session_factory, owner, "Owned posting.")
     someone = await account(client, "someone@example.com")
 
     response = await client.get(f"/documents/{document_id}", headers=someone)
 
-    assert response.status_code == status.HTTP_200_OK
+    assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
 async def test_an_unknown_posting_is_not_found(client: AsyncClient) -> None:

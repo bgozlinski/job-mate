@@ -12,11 +12,11 @@ from app.api.deps import (
     get_prompt_store,
     get_requirement_judge,
     get_suggestion_writer,
+    owned_document,
     rate_limited,
 )
 from app.core.observability import record, traced
 from app.core.prompts import PromptStore
-from app.models.document import Document
 from app.models.match import Match
 from app.schemas.matching import MatchCreate, MatchRead
 from app.services.judging import RequirementJudge
@@ -43,10 +43,7 @@ async def match(  # noqa: PLR0913, PLR0917 -- five are dependencies
     judge: Judge,
 ) -> MatchRead:
     """Score one of the caller's resumes against a posting and suggest edits."""
-    document = await session.get(Document, payload.document_id)
-
-    if document is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    document = await owned_document(session, resume.user_id, payload.document_id)
 
     try:
         with traced("match", resume.user_id, document_id=str(document.id)):

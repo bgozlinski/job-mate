@@ -5,10 +5,10 @@ import { HttpResponse, delay, http } from 'msw'
 import { Link, MemoryRouter, Route, Routes, useLocation, useParams } from 'react-router'
 import { expect, test } from 'vitest'
 
-import { sessionKey } from '../auth/session'
 import { Providers, createQueryClient } from '../providers'
 import { server } from '../test/server'
 import { Documents } from './Documents'
+import { today } from '../time'
 import type { Arrival } from './Posting'
 
 const TITLE = 'Python Developer — DCV Technologies'
@@ -17,6 +17,16 @@ interface Stored {
   id: string
   title: string | null
   source_url: string | null
+  company: string | null
+  role: string | null
+  posted_on: string | null
+  applied_on: string | null
+  applied_resume: {
+    id: string
+    original_filename: string | null
+    target_role: string | null
+    created_at: string
+  } | null
   metadata: Record<string, unknown>
   chunk_count: number
   requirement_count: number | null
@@ -30,6 +40,11 @@ function posting(overrides: Partial<Stored> = {}): Stored {
     id: '01a0-posting',
     title: 'Python Developer — DCV Technologies',
     source_url: 'https://justjoin.it/job-offer/dcv-python',
+    company: null,
+    role: null,
+    posted_on: null,
+    applied_on: null,
+    applied_resume: null,
     metadata: { company: 'DCV Technologies' },
     chunk_count: 3,
     requirement_count: 6,
@@ -48,23 +63,9 @@ const RESUME = {
   created_at: '2026-09-01T10:00:00Z',
 }
 
-function show({
-  admin = false,
-  resumes = [RESUME],
-}: { admin?: boolean; resumes?: unknown[] } = {}): QueryClient {
-  // The page reads the session to decide whether to offer deleting (FR-6),
-  // and the resumes to run Match and Practise from a row.
-  server.use(
-    http.get('/api/auth/me', () =>
-      HttpResponse.json({
-        id: '01a0-user',
-        email: 'reader@example.com',
-        is_admin: admin,
-        created_at: '2026-09-01T12:00:00Z',
-      }),
-    ),
-    http.get('/api/resumes', () => HttpResponse.json(resumes)),
-  )
+function show({ resumes = [RESUME] }: { resumes?: unknown[] } = {}): QueryClient {
+  // The page reads the resumes to run Match and Practise from a row.
+  server.use(http.get('/api/resumes', () => HttpResponse.json(resumes)))
   const client = createQueryClient()
 
   render(
@@ -113,37 +114,193 @@ function listing(...postings: Stored[]): void {
   server.use(http.get('/api/documents', () => HttpResponse.json(postings)))
 }
 
-test('each posting is a row saying where it came from and whether it was read', async () => {
-  listing(posting(), posting({ id: 'd2', title: 'Unread', requirement_count: null }))
+/** The register's rows, header first, without the rows opened under an entry. */
+async function registerRows(): Promise<HTMLElement[]> {
+  const table = await screen.findByRole('table', { name: 'Postings' })
+
+  return within(table)
+    .getAllByRole('row')
+    .filter((row) => within(row).queryAllByRole('cell').length !== 1)
+}
+
+/** One row of the register: 0 is the header. */
+async function registerRow(index: number): Promise<HTMLElement> {
+  const row = (await registerRows())[index]
+
+  if (!row) {
+    throw new Error(`The register has no row ${String(index)}`)
+  }
+
+  return row
+}
+
+test('the register names its seven columns, and actions', async () => {
+  listing(posting())
 
   show()
 
-  expect(await screen.findByRole('heading', { name: TITLE })).toBeInTheDocument()
-  // The source's domain rather than the whole address, and requirements
-  // rather than chunks: what matters when choosing an offer.
-  // The line is split by its <time>, so it is matched as a whole paragraph.
-  const line = (pattern: RegExp) => (_: string, element: Element | null) =>
-    element?.tagName === 'P' && pattern.test(element.textContent)
-  expect(screen.getByText(line(/^justjoin\.it, .+, 6 requirements$/))).toBeInTheDocument()
-  expect(screen.getByText(line(/requirements not read$/))).toBeInTheDocument()
-  expect(screen.queryByText(/chunks/)).not.toBeInTheDocument()
+  const header = await registerRow(0)
+  expect(
+    within(header)
+      .getAllByRole('columnheader')
+      .map((cell) => cell.textContent),
+  ).toEqual(['Company', 'Role', 'Link', 'Posted', 'Added', 'Applied', 'Resume', 'Actions'])
+})
+
+test('a row carries company, role, a short link and its days', async () => {
+  listing(
+    posting({
+      company: 'DCV Technologies',
+      role: 'Python Developer',
+      posted_on: '2026-09-05',
+      applied_on: '2026-09-20',
+      applied_resume: { ...RESUME, target_role: 'Backend' },
+    }),
+  )
+
+  show()
+
+  const row = await registerRow(1)
+  const cells = within(row).getAllByRole('cell')
+  expect(cells.map((cell) => cell.textContent).slice(0, 7)).toEqual([
+    'DCV Technologies',
+    expect.stringContaining('Python Developer'),
+    'justjoin.it (opens in a new tab)',
+    'Sep 5, 2026',
+    expect.stringMatching(/2026/),
+    'Sep 20, 2026',
+    'cv.pdf',
+  ])
+  const link = within(row).getByRole('link', { name: /justjoin\.it/ })
+  expect(link).toHaveAttribute('href', 'https://justjoin.it/job-offer/dcv-python')
+  expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+})
+
+test('without a company or role the row falls back to the title', async () => {
+  listing(posting({ source_url: null }))
+
+  show()
+
+  const row = await registerRow(1)
+  expect(within(row).getByRole('link', { name: TITLE })).toHaveAttribute(
+    'href',
+    '/documents/01a0-posting',
+  )
+  expect(row).toHaveTextContent('not stated')
+  expect(row).toHaveTextContent('no link')
+  expect(row).toHaveTextContent('not applied')
+})
+
+test('an application whose resume was deleted says so', async () => {
+  listing(posting({ applied_on: '2026-09-20', applied_resume: null, stage: 4 }))
+
+  show()
+
+  const row = await registerRow(1)
+  expect(row).toHaveTextContent('deleted resume')
+  expect(row).toHaveTextContent('Stage 4 of 4: Applied')
 })
 
 test('each row says how far you got with the posting', async () => {
   listing(
     posting({ stage: 2, best_score: 0.72 }),
-    posting({ id: 'd2', title: 'Untouched' }),
+    posting({ id: 'd2', title: 'Untouched', requirement_count: null }),
   )
 
   show()
 
-  const rows = within(await screen.findByRole('list', { name: 'Postings' })).getAllByRole(
-    'listitem',
+  const [, first, second] = await registerRows()
+  expect(first).toHaveTextContent('Stage 2 of 4: Match')
+  expect(first).toHaveTextContent('72%')
+  expect(second).toHaveTextContent('Stage 1 of 4: Posting')
+  expect(second).toHaveTextContent('requirements not read')
+  expect(screen.queryByText(/chunks/)).not.toBeInTheDocument()
+})
+
+/** Record what the application routes are sent. */
+function applications(): { method: string; body: unknown }[] {
+  const sent: { method: string; body: unknown }[] = []
+  server.use(
+    http.put('/api/documents/:id/application', async ({ request }) => {
+      sent.push({ method: 'PUT', body: await request.json() })
+
+      return HttpResponse.json(posting())
+    }),
+    http.delete('/api/documents/:id/application', () => {
+      sent.push({ method: 'DELETE', body: null })
+
+      return new HttpResponse(null, { status: 204 })
+    }),
   )
-  expect(rows[0]).toHaveTextContent('Stage 2 of 4: Match')
-  expect(rows[0]).toHaveTextContent('72%')
-  expect(rows[1]).toHaveTextContent('Stage 1 of 4: Posting')
-  expect(rows[1]).toHaveTextContent('Not matched yet')
+
+  return sent
+}
+
+test('marking as applied sends today where you are and the main resume', async () => {
+  const sent = applications()
+  listing(posting())
+
+  show({
+    resumes: [
+      { ...RESUME, id: 'r-old', created_at: '2026-08-01T10:00:00Z' },
+      { ...RESUME, id: 'r-new', created_at: '2026-09-01T10:00:00Z' },
+    ],
+  })
+  await userEvent.click(
+    await screen.findByRole('button', { name: `Mark ${TITLE} as applied` }),
+  )
+  const form = await screen.findByRole('form', { name: `Application to ${TITLE}` })
+  expect(within(form).getByLabelText('With resume')).toHaveValue('r-new')
+  expect(within(form).getByLabelText('Applied on')).toHaveValue(today())
+  await userEvent.click(within(form).getByRole('button', { name: 'Save' }))
+
+  await waitFor(() => {
+    expect(sent).toEqual([
+      { method: 'PUT', body: { applied_on: today(), resume_id: 'r-new' } },
+    ])
+  })
+  await waitFor(() => {
+    expect(
+      screen.queryByRole('form', { name: `Application to ${TITLE}` }),
+    ).not.toBeInTheDocument()
+  })
+})
+
+test('an application can be taken back from its stamp', async () => {
+  const sent = applications()
+  listing(
+    posting({ applied_on: '2026-09-20', applied_resume: { ...RESUME, target_role: null } }),
+  )
+
+  show()
+  await userEvent.click(
+    await screen.findByRole('button', {
+      name: `Applied Sep 20, 2026: change the application to ${TITLE}`,
+    }),
+  )
+  await userEvent.click(
+    await screen.findByRole('button', { name: 'Not applied after all' }),
+  )
+
+  await waitFor(() => {
+    expect(sent).toEqual([{ method: 'DELETE', body: null }])
+  })
+})
+
+test('without a resume there is nothing to apply with', async () => {
+  listing(posting())
+
+  show({ resumes: [] })
+  await userEvent.click(
+    await screen.findByRole('button', { name: `Mark ${TITLE} as applied` }),
+  )
+
+  expect(
+    await screen.findByText(/An application names the resume you sent/),
+  ).toBeInTheDocument()
+  expect(
+    screen.queryByRole('form', { name: `Application to ${TITLE}` }),
+  ).not.toBeInTheDocument()
 })
 
 test('matching from a row uses the newest resume and opens the result', async () => {
@@ -233,7 +390,7 @@ test('adding sits behind a button while there are postings to list', async () =>
   listing(posting())
 
   show()
-  await screen.findByRole('heading', { name: TITLE })
+  await screen.findByRole('link', { name: TITLE })
   expect(screen.queryByLabelText('Job posting URL')).not.toBeInTheDocument()
 
   await userEvent.click(screen.getByRole('button', { name: 'Add posting' }))
@@ -241,11 +398,11 @@ test('adding sits behind a button while there are postings to list', async () =>
   expect(screen.getByLabelText('Job posting URL')).toBeInTheDocument()
 })
 
-test('an empty knowledge base says so and leads to adding the first posting', async () => {
+test('no postings says so and leads to adding the first posting', async () => {
   listing()
 
   show()
-  expect(await screen.findByText('The knowledge base is empty.')).toBeInTheDocument()
+  expect(await screen.findByText('No postings yet.')).toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Add the first posting' }))
 
   expect(screen.getByLabelText('Job posting URL')).toHaveFocus()
@@ -262,7 +419,7 @@ test('a posting with no chunks is called out as a notice, not an error', async (
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
-test('the knowledge base shows its shape while it loads', async () => {
+test('the postings show their shape while they load', async () => {
   server.use(
     http.get('/api/documents', async () => {
       await delay(50)
@@ -273,27 +430,27 @@ test('the knowledge base shows its shape while it loads', async () => {
 
   show()
 
-  expect(screen.getByRole('status')).toHaveTextContent('Loading the knowledge base…')
-  expect(await screen.findByRole('heading', { name: TITLE })).toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('Loading your postings…')
+  expect(await screen.findByRole('link', { name: TITLE })).toBeInTheDocument()
 })
 
-test('a knowledge base that failed to load can be asked again', async () => {
+test('postings that failed to load can be asked for again', async () => {
   let calls = 0
   server.use(
     http.get('/api/documents', () => {
       calls += 1
 
       return calls === 1
-        ? HttpResponse.json({ detail: 'Could not read the knowledge base' }, { status: 500 })
+        ? HttpResponse.json({ detail: 'Could not read your postings' }, { status: 500 })
         : HttpResponse.json([posting()])
     }),
   )
 
   show()
-  expect(await screen.findByRole('alert')).toHaveTextContent('Could not read the knowledge base')
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not read your postings')
   await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
 
-  expect(await screen.findByRole('heading', { name: TITLE })).toBeInTheDocument()
+  expect(await screen.findByRole('link', { name: TITLE })).toBeInTheDocument()
 })
 
 test('reading a posting says so while it takes', async () => {
@@ -404,7 +561,7 @@ test('a stored posting is in the listing on the way back, without a reload', asy
   await userEvent.click(await screen.findByRole('link', { name: 'Back' }))
 
   expect(
-    await screen.findByRole('heading', { name: 'Python Developer — DCV Technologies' }),
+    await screen.findByRole('link', { name: 'Python Developer — DCV Technologies' }),
   ).toBeInTheDocument()
 })
 
@@ -495,23 +652,10 @@ function deletable(status: number, detail?: string): string[] {
   return deleted
 }
 
-test('someone who is not an administrator is not offered deleting', async () => {
-  listing(posting())
-
-  const client = show()
-
-  await screen.findByRole('heading', { name: TITLE })
-  await waitFor(() => {
-    expect(client.getQueryState(sessionKey)?.status).toBe('success')
-  })
-
-  expect(screen.queryByRole('button', { name: `Delete ${TITLE}` })).toBeNull()
-})
-
 test('deleting asks first and sends nothing until confirmed', async () => {
   const deleted = deletable(204)
 
-  show({ admin: true })
+  show()
   await userEvent.click(await screen.findByRole('button', { name: `Delete ${TITLE}` }))
 
   const confirm = screen.getByRole('group', { name: `Confirm deleting ${TITLE}` })
@@ -522,7 +666,7 @@ test('deleting asks first and sends nothing until confirmed', async () => {
 test('cancelling goes back without sending anything', async () => {
   const deleted = deletable(204)
 
-  show({ admin: true })
+  show()
   await userEvent.click(await screen.findByRole('button', { name: `Delete ${TITLE}` }))
   await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
@@ -533,34 +677,33 @@ test('cancelling goes back without sending anything', async () => {
 test('a confirmed delete removes the posting and says so', async () => {
   const deleted = deletable(204)
 
-  show({ admin: true })
+  show()
   await userEvent.click(await screen.findByRole('button', { name: `Delete ${TITLE}` }))
   await userEvent.click(screen.getByRole('button', { name: 'Delete for good' }))
 
-  expect(await screen.findByText('The knowledge base is empty.')).toBeInTheDocument()
+  expect(await screen.findByText('No postings yet.')).toBeInTheDocument()
   expect(screen.getByRole('status')).toHaveTextContent(`Posting deleted: ${TITLE}.`)
   expect(deleted).toEqual(['01a0-posting'])
 })
 
-test('a refusal says why and keeps the posting', async () => {
-  // Rights revoked after the page read the session: the API has the last word.
-  deletable(403, 'Administrator access required')
+test('a failure says why and keeps the posting', async () => {
+  deletable(500, 'The database is unavailable')
 
-  show({ admin: true })
+  show()
   await userEvent.click(await screen.findByRole('button', { name: `Delete ${TITLE}` }))
   await userEvent.click(screen.getByRole('button', { name: 'Delete for good' }))
 
-  expect(await screen.findByRole('alert')).toHaveTextContent('Administrator access required')
-  expect(screen.getByRole('heading', { name: TITLE })).toBeInTheDocument()
+  expect(await screen.findByRole('alert')).toHaveTextContent('The database is unavailable')
+  expect(screen.getByRole('link', { name: TITLE })).toBeInTheDocument()
 })
 
 test('a posting somebody else already deleted is simply gone', async () => {
   deletable(404)
 
-  show({ admin: true })
+  show()
   await userEvent.click(await screen.findByRole('button', { name: `Delete ${TITLE}` }))
   await userEvent.click(screen.getByRole('button', { name: 'Delete for good' }))
 
-  expect(await screen.findByText('The knowledge base is empty.')).toBeInTheDocument()
+  expect(await screen.findByText('No postings yet.')).toBeInTheDocument()
   expect(screen.queryByRole('alert')).toBeNull()
 })

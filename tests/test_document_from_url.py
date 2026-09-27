@@ -18,6 +18,7 @@ POSTING = {
         f"We need Python, Postgres and Docker, point {index}" for index in range(200)
     ),
     "employmentType": "FULL_TIME",
+    "datePosted": "2026-09-07T13:35:50.79Z",
     "hiringOrganization": {"@type": "Organization", "name": "DCV Technologies"},
     "jobLocation": {
         "@type": "Place",
@@ -61,6 +62,11 @@ async def test_a_posting_is_ingested_from_its_address(client, posting_source):
     assert body["chunk_count"] > 0
     assert body["metadata"]["company"] == "DCV Technologies"
     assert body["metadata"]["city"] == "Kraków"
+    assert (body["company"], body["role"], body["posted_on"]) == (
+        "DCV Technologies",
+        "Python Developer",
+        "2026-09-07",
+    )
     assert posting_source.fetched == [URL]
 
 

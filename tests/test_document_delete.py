@@ -12,22 +12,7 @@ from app.models.user import User
 from tests.test_documents import account, payload
 from tests.test_match_history import a_match
 
-ADMIN_EMAIL = "admin@example.com"
-
-
-async def admin(
-    client: AsyncClient, session_factory: async_sessionmaker[AsyncSession]
-) -> dict[str, str]:
-    """Register an account and promote it the only way there is: in the database."""
-    headers = await account(client, ADMIN_EMAIL)
-
-    async with session_factory() as session:
-        await session.execute(
-            update(User).where(User.email == ADMIN_EMAIL).values(is_admin=True)
-        )
-        await session.commit()
-
-    return headers
+OTHER_EMAIL = "someone-else@example.com"
 
 
 async def a_document(client: AsyncClient, headers: dict[str, str]) -> str:
@@ -36,10 +21,10 @@ async def a_document(client: AsyncClient, headers: dict[str, str]) -> str:
     return str(response.json()["id"])
 
 
-async def test_an_admin_deletes_a_document_with_its_chunks(
+async def test_the_owner_deletes_a_document_with_its_chunks(
     client: AsyncClient, session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
-    headers = await admin(client, session_factory)
+    headers = await account(client)
     document_id = await a_document(client, headers)
 
     response = await client.delete(f"/documents/{document_id}", headers=headers)
@@ -54,7 +39,7 @@ async def test_an_admin_deletes_a_document_with_its_chunks(
 async def test_a_match_outlives_the_document_it_was_run_against(
     client: AsyncClient, session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
-    headers = await admin(client, session_factory)
+    headers = await account(client)
     body = await a_match(client, headers)
 
     response = await client.delete(f"/documents/{body['document_id']}", headers=headers)
@@ -66,38 +51,42 @@ async def test_a_match_outlives_the_document_it_was_run_against(
         assert stored.document_id is None
 
 
-async def test_an_admin_gets_404_for_an_unknown_document(
-    client: AsyncClient, session_factory: async_sessionmaker[AsyncSession]
-) -> None:
-    headers = await admin(client, session_factory)
+async def test_an_unknown_document_is_404(client: AsyncClient) -> None:
+    headers = await account(client)
 
     response = await client.delete(f"/documents/{uuid.uuid4()}", headers=headers)
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
-async def test_a_user_who_is_not_an_admin_cannot_delete(
+async def test_someone_elses_document_is_404_and_stays(
     client: AsyncClient, session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
-    headers = await account(client)
-    document_id = await a_document(client, headers)
+    """404, not 403: the answer must not reveal whether the id exists (NFR-1)."""
+    document_id = await a_document(client, await account(client))
+    other = await account(client, OTHER_EMAIL)
 
-    response = await client.delete(f"/documents/{document_id}", headers=headers)
+    response = await client.delete(f"/documents/{document_id}", headers=other)
 
-    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.status_code == status.HTTP_404_NOT_FOUND
     async with session_factory() as session:
         assert await session.get(Document, uuid.UUID(document_id)) is not None
 
 
-async def test_a_user_who_is_not_an_admin_cannot_probe_for_ids(
-    client: AsyncClient,
+async def test_an_admin_cannot_delete_someone_elses_document_either(
+    client: AsyncClient, session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
-    """403 before 404: the answer must not reveal whether the id exists."""
-    headers = await account(client)
+    document_id = await a_document(client, await account(client))
+    admin = await account(client, OTHER_EMAIL)
+    async with session_factory() as session:
+        await session.execute(
+            update(User).where(User.email == OTHER_EMAIL).values(is_admin=True)
+        )
+        await session.commit()
 
-    response = await client.delete(f"/documents/{uuid.uuid4()}", headers=headers)
+    response = await client.delete(f"/documents/{document_id}", headers=admin)
 
-    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
 async def test_deleting_requires_a_token(client: AsyncClient) -> None:

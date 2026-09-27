@@ -13,7 +13,7 @@ from app.services.reindexing import (
     reindex,
     survey,
 )
-from tests.conftest import FakeEmbeddingModel
+from tests.conftest import FakeEmbeddingModel, an_account
 
 FIRST = "\n".join(f"first posting, line {index}" for index in range(300))
 SECOND = "\n".join(f"second posting, line {index}" for index in range(300))
@@ -49,10 +49,12 @@ async def ingest(
     cache: Redis,
     *contents: str,
 ) -> None:
+    owner = await an_account(session_factory)
+
     async with session_factory() as session:
         for content in contents:
             await ingest_document(
-                session, SourceDocument(content=content), model, cache
+                session, owner, SourceDocument(content=content), model, cache
             )
 
 

@@ -17,6 +17,7 @@ from app.auth.cookies import ACCESS_COOKIE
 from app.auth.security import decode_access_token
 from app.core.config import Settings, get_settings
 from app.core.prompts import PromptStore
+from app.models.document import Document
 from app.models.resume import Resume
 from app.models.user import User
 from app.services.embeddings import EmbeddingModel
@@ -74,20 +75,6 @@ async def get_current_user(
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
-
-
-async def get_current_admin(user: CurrentUser) -> User:
-    """Let an administrator through, or raise 403 (FR-6)."""
-    if not user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Administrator access required",
-        )
-
-    return user
-
-
-CurrentAdmin = Annotated[User, Depends(get_current_admin)]
 
 
 async def get_cache(request: Request) -> Redis:
@@ -212,14 +199,12 @@ async def get_prompt_store(request: Request) -> PromptStore:
     return prompts
 
 
-async def get_owned_resume(
-    resume_id: uuid.UUID,
-    user: CurrentUser,
-    session: Annotated[AsyncSession, Depends(get_db)],
+async def owned_resume(
+    session: AsyncSession, user_id: uuid.UUID, resume_id: uuid.UUID
 ) -> Resume:
-    """Load a resume belonging to the caller, or raise 404."""
+    """Load a resume belonging to this account, or raise 404."""
     resume = await session.scalar(
-        select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == user_id)
     )
 
     if resume is None:
@@ -228,4 +213,44 @@ async def get_owned_resume(
     return resume
 
 
+async def get_owned_resume(
+    resume_id: uuid.UUID,
+    user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> Resume:
+    """Load the resume named in the path, if it is the caller's, or raise 404."""
+    return await owned_resume(session, user.id, resume_id)
+
+
 OwnedResume = Annotated[Resume, Depends(get_owned_resume)]
+
+
+async def owned_document(
+    session: AsyncSession, user_id: uuid.UUID, document_id: uuid.UUID
+) -> Document:
+    """
+    Load a posting belonging to this account, or raise 404.
+
+    404 rather than 403 for someone else's: the answer must not tell whether a
+    posting with that id exists (NFR-1).
+    """
+    document = await session.scalar(
+        select(Document).where(Document.id == document_id, Document.user_id == user_id)
+    )
+
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
+    return document
+
+
+async def get_owned_document(
+    document_id: uuid.UUID,
+    user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> Document:
+    """Load the posting named in the path, if it is the caller's, or raise 404."""
+    return await owned_document(session, user.id, document_id)
+
+
+OwnedDocument = Annotated[Document, Depends(get_owned_document)]

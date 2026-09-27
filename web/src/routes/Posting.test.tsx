@@ -14,6 +14,11 @@ const POSTING: DocumentDetail = {
   id: 'd1',
   title: 'Python Developer — DCV',
   source_url: 'https://justjoin.it/job-offer/dcv-python',
+  company: 'DCV',
+  role: 'Python Developer',
+  posted_on: '2026-09-07',
+  applied_on: null,
+  applied_resume: null,
   metadata: {},
   chunk_count: 3,
   requirement_count: 2,
@@ -100,6 +105,43 @@ test('the page shows the posting, what it asks for and where it came from', asyn
     'href',
     POSTING.source_url,
   )
+})
+
+test('company, role and publication day read as one sentence', async () => {
+  arrange()
+
+  show()
+
+  expect(
+    await screen.findByText('DCV, Python Developer, published Sep 7, 2026'),
+  ).toBeInTheDocument()
+})
+
+test('the owner corrects the details, and a cleared field is sent as empty', async () => {
+  const sent: unknown[] = []
+  arrange()
+  server.use(
+    http.patch('/api/documents/d1', async ({ request }) => {
+      sent.push(await request.json())
+
+      return HttpResponse.json(POSTING)
+    }),
+  )
+
+  show()
+  await userEvent.click(await screen.findByRole('button', { name: 'Edit details' }))
+  const form = screen.getByRole('form', { name: 'Posting details' })
+  await userEvent.clear(within(form).getByLabelText('Company'))
+  await userEvent.type(within(form).getByLabelText('Company'), 'Acme')
+  await userEvent.clear(within(form).getByLabelText('Published on'))
+  await userEvent.click(within(form).getByRole('button', { name: 'Save' }))
+
+  await waitFor(() => {
+    expect(sent).toEqual([{ company: 'Acme', role: 'Python Developer', posted_on: null }])
+  })
+  await waitFor(() => {
+    expect(screen.queryByRole('form', { name: 'Posting details' })).not.toBeInTheDocument()
+  })
 })
 
 test('matching uses the newest resume and opens the result', async () => {

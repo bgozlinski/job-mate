@@ -15,7 +15,7 @@ from app.services.ingestion import (
     SourceDocument,
     ingest_document,
 )
-from tests.conftest import FakeEmbeddingModel
+from tests.conftest import FakeEmbeddingModel, an_account
 
 LONG_CONTENT = "\n".join(f"line {index} with a few words on it" for index in range(400))
 
@@ -43,12 +43,12 @@ async def count(
 
 
 async def test_a_source_is_stored_with_one_chunk_per_fragment(
-    session_factory, model, cache
+    session_factory, owner, model, cache
 ):
     fragments = split_content(LONG_CONTENT)
 
     async with session_factory() as session:
-        result = await ingest_document(session, job_post(), model, cache)
+        result = await ingest_document(session, owner, job_post(), model, cache)
         chunks = sorted(result.document.chunks, key=lambda chunk: chunk.chunk_index)
 
     assert result.created
@@ -59,21 +59,21 @@ async def test_a_source_is_stored_with_one_chunk_per_fragment(
 
 
 async def test_metadata_and_normalised_content_are_stored(
-    session_factory, model, cache
+    session_factory, owner, model, cache
 ):
     async with session_factory() as session:
         result = await ingest_document(
-            session, job_post(content="  python   backend  \r\n"), model, cache
+            session, owner, job_post(content="  python   backend  \r\n"), model, cache
         )
 
     assert result.document.content == "python   backend"
     assert result.document.doc_metadata == {"role": "backend", "seniority": "mid"}
 
 
-async def test_the_same_text_is_not_stored_twice(session_factory, model, cache):
+async def test_the_same_text_is_not_stored_twice(session_factory, owner, model, cache):
     async with session_factory() as session:
-        first = await ingest_document(session, job_post(), model, cache)
-        second = await ingest_document(session, job_post(), model, cache)
+        first = await ingest_document(session, owner, job_post(), model, cache)
+        second = await ingest_document(session, owner, job_post(), model, cache)
 
     assert first.created
     assert not second.created
@@ -82,23 +82,42 @@ async def test_the_same_text_is_not_stored_twice(session_factory, model, cache):
     assert await count(session_factory, Chunk) == len(split_content(LONG_CONTENT))
 
 
-async def test_line_endings_do_not_defeat_deduplication(session_factory, model, cache):
+async def test_the_same_text_from_two_accounts_is_stored_for_each(
+    session_factory, owner, model, cache
+):
+    """Postings are per user: a duplicate is one the same account already added."""
+    other = await an_account(session_factory)
+
+    async with session_factory() as session:
+        mine = await ingest_document(session, owner, job_post(), model, cache)
+        theirs = await ingest_document(session, other, job_post(), model, cache)
+
+    assert mine.created
+    assert theirs.created
+    assert theirs.document.id != mine.document.id
+    assert theirs.document.user_id == other
+    assert await count(session_factory, Document) == 2  # noqa: PLR2004
+
+
+async def test_line_endings_do_not_defeat_deduplication(
+    session_factory, owner, model, cache
+):
     windows = LONG_CONTENT.replace("\n", "  \r\n") + "   \r\n"
 
     async with session_factory() as session:
-        await ingest_document(session, job_post(), model, cache)
-        second = await ingest_document(session, job_post(windows), model, cache)
+        await ingest_document(session, owner, job_post(), model, cache)
+        second = await ingest_document(session, owner, job_post(windows), model, cache)
 
     assert not second.created
     assert await count(session_factory, Document) == 1
 
 
 async def test_concurrent_ingestion_of_one_text_stores_one_document(
-    session_factory, model, cache
+    session_factory, owner, model, cache
 ):
     async def ingest() -> Ingested:
         async with session_factory() as session:
-            return await ingest_document(session, job_post(), model, cache)
+            return await ingest_document(session, owner, job_post(), model, cache)
 
     first, second = await asyncio.gather(ingest(), ingest())
 
@@ -108,7 +127,9 @@ async def test_concurrent_ingestion_of_one_text_stores_one_document(
     assert await count(session_factory, Chunk) == len(split_content(LONG_CONTENT))
 
 
-async def test_a_failing_embeddings_api_leaves_nothing_behind(session_factory, cache):
+async def test_a_failing_embeddings_api_leaves_nothing_behind(
+    session_factory, owner, cache
+):
     class BrokenModel(FakeEmbeddingModel):
         async def embed(self, texts):
             raise RuntimeError("the embeddings API is down")
@@ -116,40 +137,48 @@ async def test_a_failing_embeddings_api_leaves_nothing_behind(session_factory, c
     async with session_factory() as session:
         with pytest.raises(RuntimeError):
             await ingest_document(
-                session, job_post(), BrokenModel(dimensions=EMBEDDING_DIMENSIONS), cache
+                session,
+                owner,
+                job_post(),
+                BrokenModel(dimensions=EMBEDDING_DIMENSIONS),
+                cache,
             )
 
     assert await count(session_factory, Document) == 0
     assert await count(session_factory, Chunk) == 0
 
 
-async def test_a_source_without_content_is_rejected(session_factory, model, cache):
+async def test_a_source_without_content_is_rejected(
+    session_factory, owner, model, cache
+):
     async with session_factory() as session:
         with pytest.raises(EmptyDocumentError):
-            await ingest_document(session, job_post(content="  \r\n "), model, cache)
+            await ingest_document(
+                session, owner, job_post(content="  \r\n "), model, cache
+            )
 
     assert await count(session_factory, Document) == 0
     assert model.calls == []
 
 
 async def test_every_chunk_records_the_model_that_embedded_it(
-    session_factory, model, cache
+    session_factory, owner, model, cache
 ):
     async with session_factory() as session:
-        result = await ingest_document(session, job_post(), model, cache)
+        result = await ingest_document(session, owner, job_post(), model, cache)
 
     assert {chunk.embedding_model for chunk in result.document.chunks} == {model.name}
 
 
 async def test_a_duplicate_keeps_the_model_it_was_first_embedded_with(
-    session_factory, model, cache
+    session_factory, owner, model, cache
 ):
     """Pasting a posting again is not re-indexing it."""
     other = FakeEmbeddingModel(name="another-embed", dimensions=EMBEDDING_DIMENSIONS)
 
     async with session_factory() as session:
-        await ingest_document(session, job_post(), model, cache)
-        repeated = await ingest_document(session, job_post(), other, cache)
+        await ingest_document(session, owner, job_post(), model, cache)
+        repeated = await ingest_document(session, owner, job_post(), other, cache)
 
     async with session_factory() as session:
         stored = set(
@@ -164,22 +193,24 @@ async def test_a_duplicate_keeps_the_model_it_was_first_embedded_with(
     assert stored == {model.name}
 
 
-async def test_a_repeated_source_is_not_embedded_again(session_factory, model, cache):
+async def test_a_repeated_source_is_not_embedded_again(
+    session_factory, owner, model, cache
+):
     async with session_factory() as session:
-        await ingest_document(session, job_post(), model, cache)
+        await ingest_document(session, owner, job_post(), model, cache)
         calls_after_first = len(model.calls)
-        await ingest_document(session, job_post(), model, cache)
+        await ingest_document(session, owner, job_post(), model, cache)
 
     assert len(model.calls) == calls_after_first
 
 
-async def test_the_cache_is_optional(session_factory, model):
+async def test_the_cache_is_optional(session_factory, owner, model):
     """A dead Redis costs API calls, never the ingestion itself."""
     broken = Redis.from_url("redis://127.0.0.1:1/0", socket_connect_timeout=1)
 
     try:
         async with session_factory() as session:
-            result = await ingest_document(session, job_post(), model, broken)
+            result = await ingest_document(session, owner, job_post(), model, broken)
     finally:
         await broken.aclose()
 
@@ -188,7 +219,7 @@ async def test_the_cache_is_optional(session_factory, model):
 
 
 async def test_a_document_stored_mid_flight_is_treated_as_the_duplicate(
-    session_factory, cache
+    session_factory, owner, cache
 ):
     """The unique index, not the lookup, is what settles a race."""
 
@@ -197,6 +228,7 @@ async def test_a_document_stored_mid_flight_is_treated_as_the_duplicate(
             async with session_factory() as other:
                 await ingest_document(
                     other,
+                    owner,
                     job_post(),
                     FakeEmbeddingModel(dimensions=EMBEDDING_DIMENSIONS),
                     cache,
@@ -206,7 +238,11 @@ async def test_a_document_stored_mid_flight_is_treated_as_the_duplicate(
 
     async with session_factory() as session:
         result = await ingest_document(
-            session, job_post(), RacingModel(dimensions=EMBEDDING_DIMENSIONS), cache
+            session,
+            owner,
+            job_post(),
+            RacingModel(dimensions=EMBEDDING_DIMENSIONS),
+            cache,
         )
 
     assert not result.created

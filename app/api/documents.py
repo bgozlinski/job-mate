@@ -23,26 +23,31 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
     CurrentUser,
+    OwnedDocument,
     get_cache,
-    get_current_admin,
     get_current_user,
     get_db,
     get_embedding_model,
     get_posting_source,
     get_requirement_extractor,
+    owned_resume,
     rate_limited,
 )
 from app.api.uploads import basename, read_within_limit, text_of
 from app.core.observability import record, traced
 from app.models.chunk import Chunk
 from app.models.document import Document
+from app.models.resume import Resume
 from app.schemas.document import (
     MAX_CONTENT_LENGTH,
     MAX_TITLE_LENGTH,
+    ApplicationWrite,
+    AppliedResume,
     DocumentCreate,
     DocumentDetail,
     DocumentFromUrl,
     DocumentRead,
+    DocumentUpdate,
     DocumentUpload,
 )
 from app.services.embeddings import EmbeddingModel
@@ -85,12 +90,50 @@ has not thought about paging yet.
 """
 
 
-def _describe(document: Document, chunk_count: int, standing: Standing) -> DocumentRead:
+async def _applied_resumes(
+    session: AsyncSession, user_id: uuid.UUID, documents: list[Document]
+) -> dict[uuid.UUID, Resume]:
+    """Load the resumes these postings were applied with, in one query."""
+    ids = {
+        document.applied_resume_id
+        for document in documents
+        if document.applied_resume_id is not None
+    }
+
+    if not ids:
+        return {}
+
+    resumes = await session.scalars(
+        select(Resume).where(Resume.id.in_(ids), Resume.user_id == user_id)
+    )
+
+    return {resume.id: resume for resume in resumes}
+
+
+def _describe(
+    document: Document,
+    chunk_count: int,
+    standing: Standing,
+    resumes: dict[uuid.UUID, Resume],
+) -> DocumentRead:
     """Build the public view of a document for one caller."""
+    resume = (
+        resumes.get(document.applied_resume_id)
+        if document.applied_resume_id is not None
+        else None
+    )
+
     return DocumentRead(
         id=document.id,
         title=document.title,
         source_url=document.source_url,
+        company=document.company,
+        role=document.role,
+        posted_on=document.posted_on,
+        applied_on=document.applied_on,
+        applied_resume=(
+            AppliedResume.model_validate(resume) if resume is not None else None
+        ),
         metadata=document.doc_metadata,
         chunk_count=chunk_count,
         # A count rather than the list: a listing row only needs to know whether
@@ -108,18 +151,18 @@ async def _read(
     session: AsyncSession, document: Document, user_id: uuid.UUID
 ) -> DocumentRead:
     """
-    Describe a stored document for one caller, counting its chunks.
+    Describe a stored document for its owner, counting its chunks.
 
-    For the caller, because a posting is shared but how far somebody got with it
-    is theirs -- and an ingestion that turns out to be a duplicate returns a
-    posting they may already have matched.
+    With the owner's stage, because an ingestion that turns out to be a duplicate
+    returns a posting they may already have matched.
     """
     chunk_count = await session.scalar(
         select(func.count()).select_from(Chunk).where(Chunk.document_id == document.id)
     )
-    standing = (await standings(session, user_id, [document.id]))[document.id]
+    standing = (await standings(session, user_id, [document]))[document.id]
+    resumes = await _applied_resumes(session, user_id, [document])
 
-    return _describe(document, int(chunk_count or 0), standing)
+    return _describe(document, int(chunk_count or 0), standing, resumes)
 
 
 @router.get("")
@@ -129,9 +172,11 @@ async def list_documents(
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[DocumentRead]:
-    """List the knowledge base, newest first, with your stage at each posting."""
-    counted = select(Document, func.count(Chunk.id)).outerjoin(
-        Chunk, Chunk.document_id == Document.id
+    """List your postings, newest first, with your stage at each."""
+    counted = (
+        select(Document, func.count(Chunk.id))
+        .outerjoin(Chunk, Chunk.document_id == Document.id)
+        .where(Document.user_id == user.id)
     )
 
     rows = await session.execute(
@@ -142,30 +187,21 @@ async def list_documents(
     )
 
     page = list(rows.tuples())
+    documents = [document for document, _ in page]
     # One lookup for the whole page, not one per row.
-    standing = await standings(session, user.id, [document.id for document, _ in page])
+    standing = await standings(session, user.id, documents)
+    resumes = await _applied_resumes(session, user.id, documents)
 
     return [
-        _describe(document, chunk_count, standing[document.id])
+        _describe(document, chunk_count, standing[document.id], resumes)
         for document, chunk_count in page
     ]
 
 
 @router.get("/{document_id}")
-async def read_document(
-    document_id: uuid.UUID, user: CurrentUser, session: Session
-) -> DocumentDetail:
-    """
-    Return one posting with its text and requirements, or 404.
-
-    Open to every signed-in account, like the list: the knowledge base is shared.
-    """
-    document = await session.get(Document, document_id)
-
-    if document is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-
-    summary = await _read(session, document, user.id)
+async def read_document(document: OwnedDocument, session: Session) -> DocumentDetail:
+    """Return one of your postings with its text and requirements, or 404."""
+    summary = await _read(session, document, document.user_id)
 
     return DocumentDetail(
         **summary.model_dump(),
@@ -174,18 +210,53 @@ async def read_document(
     )
 
 
-@router.delete(
-    "/{document_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(get_current_admin)],
-)
-async def delete_document(document_id: uuid.UUID, session: Session) -> None:
-    """Remove a posting and its chunks from the knowledge base (FR-6)."""
-    document = await session.get(Document, document_id)
+@router.patch("/{document_id}")
+async def update_document(
+    payload: DocumentUpdate, document: OwnedDocument, session: Session
+) -> DocumentRead:
+    """Correct the company, role or publication day of one of your postings."""
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(document, field, value)
 
-    if document is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    await session.commit()
 
+    return await _read(session, document, document.user_id)
+
+
+@router.put("/{document_id}/application")
+async def apply(
+    payload: ApplicationWrite, document: OwnedDocument, session: Session
+) -> DocumentRead:
+    """Record that you applied to one of your postings, or correct the record."""
+    resume = await owned_resume(session, document.user_id, payload.resume_id)
+    document.applied_on = payload.applied_on
+    document.applied_resume_id = resume.id
+
+    await session.commit()
+
+    return await _read(session, document, document.user_id)
+
+
+@router.delete("/{document_id}/application", status_code=status.HTTP_204_NO_CONTENT)
+async def withdraw(document: OwnedDocument, session: Session) -> None:
+    """
+    Take back the record of applying. Done already counts as done.
+
+    For the record only -- nothing is sent anywhere, now or when applying.
+    """
+    document.applied_on = None
+    document.applied_resume_id = None
+
+    await session.commit()
+
+
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document(document: OwnedDocument, session: Session) -> None:
+    """
+    Remove one of your postings and its chunks (FR-6).
+
+    Only its owner may: postings are per account, so an admin has no say in them.
+    """
     await session.delete(document)
     await session.commit()
 
@@ -288,6 +359,9 @@ async def ingest_from_url(  # noqa: PLR0913, PLR0917 -- six are dependencies
                 content=scraped.content,
                 title=scraped.title,
                 source_url=str(payload.url),
+                company=scraped.company,
+                role=scraped.role,
+                posted_on=scraped.posted_on,
                 metadata=scraped.metadata | payload.metadata,
             ),
             user.id,
@@ -347,7 +421,9 @@ async def _store(  # noqa: PLR0913, PLR0917 -- five are dependencies
 ) -> DocumentRead:
     """Do the ingesting, inside whatever trace the caller opened."""
     try:
-        ingested = await ingest_document(session, source, model, cache, extractor)
+        ingested = await ingest_document(
+            session, user_id, source, model, cache, extractor
+        )
     except EmptyDocumentError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

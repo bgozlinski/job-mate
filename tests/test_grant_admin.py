@@ -1,6 +1,3 @@
-import uuid
-
-from fastapi import status
 from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -79,22 +76,3 @@ async def test_granting_twice_is_harmless(
 
     assert (first, second) == (True, True)
     assert await is_admin(session_factory) is True
-
-
-async def test_the_change_applies_to_a_token_already_issued(
-    client: AsyncClient, session_factory: async_sessionmaker[AsyncSession]
-) -> None:
-    """The caller is read from the database on every request, so no new login."""
-    headers = await account(client, EMAIL)
-    url = f"/documents/{uuid.uuid4()}"
-
-    assert (await client.delete(url, headers=headers)).status_code == (
-        status.HTTP_403_FORBIDDEN
-    )
-
-    async with session_factory() as session:
-        await set_admin(session, EMAIL, admin=True)
-
-    assert (await client.delete(url, headers=headers)).status_code == (
-        status.HTTP_404_NOT_FOUND
-    )

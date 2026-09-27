@@ -4,6 +4,7 @@ import html
 import json
 import re
 from dataclasses import dataclass, field
+from datetime import date
 from html.parser import HTMLParser
 from typing import Any
 
@@ -44,6 +45,9 @@ class ScrapedPosting:
 
     content: str
     title: str | None = None
+    company: str | None = None
+    role: str | None = None
+    posted_on: date | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -230,6 +234,25 @@ def _metadata(posting: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def _day(value: object) -> date | None:
+    """
+    Read the day out of a date or a timestamp, or nothing out of anything else.
+
+    Only the leading YYYY-MM-DD: the time and the zone after it would move the day
+    for nobody's benefit, and a malformed value is dropped rather than refused --
+    the posting is still worth storing without it.
+    """
+    text = _text(value)
+
+    if text is None:
+        return None
+
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+
+
 def _title(posting: dict[str, Any]) -> str | None:
     """Name the document as a person would recognise it in a listing."""
     role = _text(posting.get("title"))
@@ -257,5 +280,8 @@ def parse_job_posting(document: str) -> ScrapedPosting:
     return ScrapedPosting(
         content=content,
         title=_title(posting),
+        company=_named(posting.get("hiringOrganization")),
+        role=_text(posting.get("title")),
+        posted_on=_day(posting.get("datePosted")),
         metadata=_metadata(posting),
     )
