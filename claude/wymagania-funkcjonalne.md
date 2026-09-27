@@ -432,6 +432,7 @@ Przeglądarka                              Testy, curl, Swagger
 > ogłoszenia z aplikacją we wszystkich trzech regułach (dopasuj, poćwicz, dokończ rozmowę) — są załatwione.
 > Filtr stoi w `WHERE`, przed limitem kroków, inaczej ogłoszenia z aplikacją zajęłyby wszystkie miejsca.
 > Gdy aplikowałeś na wszystko, zostaje krok „dodaj kolejne ogłoszenie”.
+
 > **Zmiana 2026-09-27. Etap 6 porzucony.** Nie jest potrzebny w tym projekcie.
 
 ## 8. Pułapki, których nie widać z kodu
