@@ -891,3 +891,106 @@ test('a page past the end says so and leads to the last one', async () => {
   )
   expect(screen.queryByText('No postings yet.')).not.toBeInTheDocument()
 })
+
+/** Record the limit and offset of every page of postings asked for. */
+function askedPages(total: number): string[] {
+  const asked: string[] = []
+  server.use(
+    http.get('/api/documents', ({ request }) => {
+      const params = new URL(request.url).searchParams
+      asked.push(`${params.get('limit') ?? ''}@${params.get('offset') ?? ''}`)
+
+      return HttpResponse.json(pageOf([posting()], total))
+    }),
+  )
+
+  return asked
+}
+
+test('picking rows per page asks for that many and keeps the first row in view', async () => {
+  const asked = askedPages(45)
+
+  show({ at: '/documents?page=7&size=5' })
+  await userEvent.selectOptions(await screen.findByLabelText('Rows per page'), '20')
+
+  // Row 31 was first on page 7 of fives; at twenty a page it is on page 2.
+  await waitFor(() => {
+    expect(asked).toEqual(['5@30', '20@20'])
+  })
+  const pages = screen.getByRole('navigation', { name: 'Pages of postings' })
+  expect(within(pages).getByText('Page 2').closest('[aria-current="page"]')).not.toBeNull()
+})
+
+test('page links keep the chosen size', async () => {
+  askedPages(45)
+
+  show({ at: '/documents?size=10' })
+
+  const pages = await screen.findByRole('navigation', { name: 'Pages of postings' })
+  expect(within(pages).getByRole('link', { name: /Next/ })).toHaveAttribute(
+    'href',
+    '/documents?page=2&size=10',
+  )
+  expect(screen.getByLabelText('Rows per page')).toHaveValue('10')
+})
+
+test('a size the list does not offer falls back to twenty', async () => {
+  const asked = askedPages(45)
+
+  show({ at: '/documents?size=1000' })
+
+  await screen.findByRole('link', { name: TITLE })
+  expect(asked).toEqual(['20@0'])
+})
+
+test('a list that fits the smallest page offers no choice of size', async () => {
+  askedPages(3)
+
+  show()
+
+  await screen.findByRole('link', { name: TITLE })
+  expect(screen.queryByLabelText('Rows per page')).not.toBeInTheDocument()
+})
+
+test('a long list lets you jump to a page by its number, keeping the size', async () => {
+  const asked = askedPages(60)
+
+  show({ at: '/documents?size=5' })
+  const jump = await screen.findByLabelText('Go to')
+  await userEvent.type(jump, '9{Enter}')
+
+  await waitFor(() => {
+    expect(asked).toEqual(['5@0', '5@40'])
+  })
+})
+
+test('a page number with no page behind it says so and goes nowhere', async () => {
+  const asked = askedPages(60)
+
+  show({ at: '/documents?size=5' })
+  await userEvent.type(await screen.findByLabelText('Go to'), '99{Enter}')
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'There is no page 99: pages go from 1 to 12.',
+  )
+  expect(screen.getByLabelText('Go to')).toHaveAttribute('aria-invalid', 'true')
+  expect(asked).toEqual(['5@0'])
+})
+
+test('a list of fewer than ten pages offers no jump', async () => {
+  askedPages(45)
+
+  show({ at: '/documents?size=5' })
+
+  await screen.findByRole('navigation', { name: 'Pages of postings' })
+  expect(screen.queryByLabelText('Go to')).not.toBeInTheDocument()
+})
+
+test('rows per page read as "10 / page" in the select', async () => {
+  askedPages(45)
+
+  show({ at: '/documents?size=10' })
+
+  const select = await screen.findByLabelText('Rows per page')
+  expect(select).toHaveDisplayValue('10 / page')
+})

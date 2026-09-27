@@ -1,9 +1,9 @@
 import type { ReactElement } from 'react'
 import { HistoryIcon } from 'lucide-react'
-import { Link, useSearchParams } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 
 import { pageCount } from '../api/documents'
-import { HISTORY_PAGE_SIZE, useHistory } from '../api/history'
+import { useHistory } from '../api/history'
 import type { HistoryItem, HistoryKind } from '../api/history'
 import {
   Alert,
@@ -11,10 +11,15 @@ import {
   EmptyState,
   Notice,
   PageHeader,
+  GoToPage,
+  PageSize,
   Pagination,
   Sheet,
   Skeleton,
   pageFrom,
+  pageKeeping,
+  pagedSearch,
+  sizeFrom,
 } from '../ui'
 import { TimelineItem } from './TimelineItem'
 import { fromInterview, fromMatch } from './timeline'
@@ -30,21 +35,9 @@ function kindOf(value: string | null): HistoryKind {
   return value === 'matches' || value === 'interviews' ? value : 'all'
 }
 
-/** The address of one page of one kind of history; page 1 and "all" are bare. */
-function historyHref(kind: HistoryKind, page: number): string {
-  const query = new URLSearchParams()
-
-  if (kind !== 'all') {
-    query.set('kind', kind)
-  }
-
-  if (page > 1) {
-    query.set('page', String(page))
-  }
-
-  const search = query.toString()
-
-  return search ? `/history?${search}` : '/history'
+/** The address of one page of one kind of history at one size; defaults are bare. */
+function historyHref(kind: HistoryKind, page: number, size: number): string {
+  return `/history${pagedSearch(page, size, kind === 'all' ? {} : { kind })}`
 }
 
 /** One line of the history, whichever of the two it is. */
@@ -70,15 +63,17 @@ function rowOf(item: HistoryItem): Row | null {
  * first page.
  */
 export function History(): ReactElement {
-  const [params, setParams] = useSearchParams()
+  const [params] = useSearchParams()
+  const navigate = useNavigate()
   const kind = kindOf(params.get('kind'))
   const page = pageFrom(params.get('page'))
-  const history = useHistory(kind, page)
+  const size = sizeFrom(params.get('size'))
+  const history = useHistory(kind, page, size)
   const rows = (history.data?.items ?? [])
     .map(rowOf)
     .filter((row): row is Row => row !== null)
   const total = history.data?.total ?? 0
-  const pages = pageCount(total, HISTORY_PAGE_SIZE)
+  const pages = pageCount(total, size)
   const pastEnd = history.isSuccess && total > 0 && rows.length === 0
 
   return (
@@ -97,7 +92,9 @@ export function History(): ReactElement {
             variant={kind === filter.kind ? 'primary' : 'secondary'}
             aria-pressed={kind === filter.kind}
             onClick={() => {
-              setParams(filter.kind === 'all' ? {} : { kind: filter.kind })
+              // Back to the first page, keeping the size: that is the
+              // reader's, not part of the filter.
+              void navigate(historyHref(filter.kind, 1, size))
             }}
           >
             {filter.label}
@@ -126,7 +123,7 @@ export function History(): ReactElement {
         <Notice>
           There is no page {page} of this history.{' '}
           <Link
-            to={historyHref(kind, pages)}
+            to={historyHref(kind, pages, size)}
             className="text-accent underline underline-offset-2"
           >
             Go to the last page
@@ -145,12 +142,23 @@ export function History(): ReactElement {
         </Sheet>
       ) : null}
 
-      <Pagination
-        page={page}
-        count={pages}
-        hrefFor={(n) => historyHref(kind, n)}
-        label="Pages of history"
-      />
+      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+        <Pagination
+          page={page}
+          count={pages}
+          hrefFor={(n) => historyHref(kind, n, size)}
+          label="Pages of history"
+        />
+        <PageSize
+          id="history-page-size"
+          size={size}
+          total={total}
+          onChange={(next) => {
+            void navigate(historyHref(kind, pageKeeping(page, size, next), next))
+          }}
+        />
+        <GoToPage id="history-go-to" count={pages} hrefFor={(n) => historyHref(kind, n, size)} />
+      </div>
     </>
   )
 }
