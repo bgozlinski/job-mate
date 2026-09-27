@@ -3,7 +3,7 @@
 import json
 import uuid
 from datetime import UTC, date, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
@@ -14,6 +14,9 @@ or turn into hundreds of embedding calls.
 """
 
 MAX_TITLE_LENGTH = 500
+
+WorkMode = Literal["remote", "hybrid", "office"]
+"""Mirrors ck_documents_work_mode: the API refuses what the database would."""
 
 MAX_LABEL_LENGTH = 200
 """Room for any company name or job title, and not for a pasted paragraph."""
@@ -97,9 +100,11 @@ class DocumentUpdate(BaseModel):
 
     company: str | None = Field(default=None, max_length=MAX_LABEL_LENGTH)
     role: str | None = Field(default=None, max_length=MAX_LABEL_LENGTH)
+    city: str | None = Field(default=None, max_length=MAX_LABEL_LENGTH)
+    work_mode: WorkMode | None = None
     posted_on: date | None = None
 
-    @field_validator("company", "role", mode="before")
+    @field_validator("company", "role", "city", mode="before")
     @classmethod
     def _blank_is_none(cls, value: object) -> object:
         """Trim a label, and store a blank one as no label at all."""
@@ -143,6 +148,9 @@ class DocumentRead(BaseModel):
     source_url: str | None
     company: str | None
     role: str | None
+    city: str | None
+    work_mode: WorkMode | None
+    """remote when the page said so; hybrid and office only when you did."""
     posted_on: date | None
     """The day it was published, when the page stated it or the owner typed it."""
     applied_on: date | None

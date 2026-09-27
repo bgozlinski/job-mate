@@ -385,6 +385,17 @@
             "title": "Chunk Count",
             "type": "integer"
           },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
           "company": {
             "anyOf": [
               {
@@ -488,6 +499,22 @@
               }
             ],
             "title": "Title"
+          },
+          "work_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "remote",
+                  "hybrid",
+                  "office"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Mode"
           }
         },
         "required": [
@@ -496,6 +523,8 @@
           "source_url",
           "company",
           "role",
+          "city",
+          "work_mode",
           "posted_on",
           "applied_on",
           "applied_resume",
@@ -590,6 +619,17 @@
             "title": "Chunk Count",
             "type": "integer"
           },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
           "company": {
             "anyOf": [
               {
@@ -675,6 +715,22 @@
               }
             ],
             "title": "Title"
+          },
+          "work_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "remote",
+                  "hybrid",
+                  "office"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Mode"
           }
         },
         "required": [
@@ -683,6 +739,8 @@
           "source_url",
           "company",
           "role",
+          "city",
+          "work_mode",
           "posted_on",
           "applied_on",
           "applied_resume",
@@ -700,6 +758,18 @@
         "additionalProperties": false,
         "description": "The fields of a posting its owner may correct.\n\nWhat the caller omits stays as it is, and an explicit null clears it.",
         "properties": {
+          "city": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
           "company": {
             "anyOf": [
               {
@@ -735,6 +805,22 @@
               }
             ],
             "title": "Role"
+          },
+          "work_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "remote",
+                  "hybrid",
+                  "office"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Mode"
           }
         },
         "title": "DocumentUpdate",

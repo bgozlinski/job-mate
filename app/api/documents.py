@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import (
     APIRouter,
@@ -51,6 +51,7 @@ from app.schemas.document import (
     DocumentUpdate,
     DocumentUpload,
     SearchResults,
+    WorkMode,
 )
 from app.services.embeddings import EmbeddingModel
 from app.services.ingestion import EmptyDocumentError, SourceDocument, ingest_document
@@ -133,6 +134,8 @@ def _describe(
         source_url=document.source_url,
         company=document.company,
         role=document.role,
+        city=document.city,
+        work_mode=cast("WorkMode | None", document.work_mode),
         posted_on=document.posted_on,
         applied_on=document.applied_on,
         applied_resume=(
@@ -365,6 +368,8 @@ async def ingest_from_url(  # noqa: PLR0913, PLR0917 -- six are dependencies
                 source_url=str(payload.url),
                 company=scraped.company,
                 role=scraped.role,
+                city=scraped.city,
+                work_mode=scraped.work_mode,
                 posted_on=scraped.posted_on,
                 metadata=scraped.metadata | payload.metadata,
             ),

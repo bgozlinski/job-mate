@@ -19,6 +19,8 @@ interface Stored {
   source_url: string | null
   company: string | null
   role: string | null
+  city: string | null
+  work_mode: 'remote' | 'hybrid' | 'office' | null
   posted_on: string | null
   applied_on: string | null
   applied_resume: {
@@ -42,6 +44,8 @@ function posting(overrides: Partial<Stored> = {}): Stored {
     source_url: 'https://justjoin.it/job-offer/dcv-python',
     company: null,
     role: null,
+    city: null,
+    work_mode: null,
     posted_on: null,
     applied_on: null,
     applied_resume: null,
@@ -134,7 +138,7 @@ async function registerRow(index: number): Promise<HTMLElement> {
   return row
 }
 
-test('the register names its seven columns, and actions', async () => {
+test('the register names its eight columns, and actions', async () => {
   listing(posting())
 
   show()
@@ -144,7 +148,17 @@ test('the register names its seven columns, and actions', async () => {
     within(header)
       .getAllByRole('columnheader')
       .map((cell) => cell.textContent),
-  ).toEqual(['Company', 'Role', 'Link', 'Posted', 'Added', 'Applied', 'Resume', 'Actions'])
+  ).toEqual([
+    'Company',
+    'Role',
+    'Location',
+    'Link',
+    'Posted',
+    'Added',
+    'Applied',
+    'Resume',
+    'Actions',
+  ])
 })
 
 test('a row carries company, role, a short link and its days', async () => {
@@ -152,6 +166,8 @@ test('a row carries company, role, a short link and its days', async () => {
     posting({
       company: 'DCV Technologies',
       role: 'Python Developer',
+      city: 'Warszawa',
+      work_mode: 'remote',
       posted_on: '2026-09-05',
       applied_on: '2026-09-20',
       applied_resume: { ...RESUME, target_role: 'Backend' },
@@ -162,9 +178,10 @@ test('a row carries company, role, a short link and its days', async () => {
 
   const row = await registerRow(1)
   const cells = within(row).getAllByRole('cell')
-  expect(cells.map((cell) => cell.textContent).slice(0, 7)).toEqual([
+  expect(cells.map((cell) => cell.textContent).slice(0, 8)).toEqual([
     'DCV Technologies',
     expect.stringContaining('Python Developer'),
+    'Warszawa, remote',
     'justjoin.it (opens in a new tab)',
     'Sep 5, 2026',
     expect.stringMatching(/2026/),

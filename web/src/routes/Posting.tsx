@@ -41,6 +41,10 @@ const LINK = 'text-accent underline underline-offset-2'
 const HEADING = 'text-base font-bold'
 const BACK = 'inline-flex items-center gap-1 text-sm text-ink-soft hover:text-accent'
 
+const WORK_MODES = ['remote', 'hybrid', 'office'] as const
+/** Mirrors WorkMode in app/schemas/document.py. */
+type WorkMode = (typeof WORK_MODES)[number]
+
 const MAX_LABEL_LENGTH = 200
 /** Mirrors MAX_LABEL_LENGTH in app/schemas/document.py. */
 
@@ -74,17 +78,19 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString()
 }
 
-/** Company, role and publication day, as far as they are known. */
+/** Company, role, place, work mode and publication day, as far as they are known. */
 function factsOf(posting: DocumentDetail): string {
   const known = [
     posting.company,
     posting.role,
+    posting.city,
+    posting.work_mode,
     posting.posted_on ? `published ${day(posting.posted_on)}` : null,
   ].filter((part): part is string => Boolean(part))
 
   return known.length > 0
     ? known.join(', ')
-    : 'Company, role and publication day not stated'
+    : 'Company, role, place and publication day not stated'
 }
 
 /**
@@ -96,6 +102,8 @@ function Facts({ posting }: { posting: DocumentDetail }): ReactElement {
   const [editing, setEditing] = useState(false)
   const [company, setCompany] = useState(posting.company ?? '')
   const [role, setRole] = useState(posting.role ?? '')
+  const [city, setCity] = useState(posting.city ?? '')
+  const [workMode, setWorkMode] = useState<WorkMode | ''>(posting.work_mode ?? '')
   const [postedOn, setPostedOn] = useState(posting.posted_on ?? '')
   const update = useUpdateDocument()
 
@@ -105,7 +113,13 @@ function Facts({ posting }: { posting: DocumentDetail }): ReactElement {
       {
         id: posting.id,
         // Blank is no value: the API stores an empty label as null too.
-        changes: { company, role, posted_on: postedOn || null },
+        changes: {
+          company,
+          role,
+          city,
+          work_mode: workMode || null,
+          posted_on: postedOn || null,
+        },
       },
       {
         onSuccess: () => {
@@ -127,6 +141,8 @@ function Facts({ posting }: { posting: DocumentDetail }): ReactElement {
           onClick={() => {
             setCompany(posting.company ?? '')
             setRole(posting.role ?? '')
+            setCity(posting.city ?? '')
+            setWorkMode(posting.work_mode ?? '')
             setPostedOn(posting.posted_on ?? '')
             update.reset()
             setEditing(true)
@@ -144,7 +160,7 @@ function Facts({ posting }: { posting: DocumentDetail }): ReactElement {
       onSubmit={onSubmit}
       className="flex flex-col gap-3 rounded-control bg-sunken p-3"
     >
-      <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Field id="posting-company" label="Company">
           {(className, id) => (
             <input
@@ -169,6 +185,38 @@ function Facts({ posting }: { posting: DocumentDetail }): ReactElement {
                 setRole(event.target.value)
               }}
             />
+          )}
+        </Field>
+        <Field id="posting-city" label="City">
+          {(className, id) => (
+            <input
+              id={id}
+              maxLength={MAX_LABEL_LENGTH}
+              className={className}
+              value={city}
+              onChange={(event) => {
+                setCity(event.target.value)
+              }}
+            />
+          )}
+        </Field>
+        <Field id="posting-work-mode" label="Work mode">
+          {(className, id) => (
+            <select
+              id={id}
+              className={className}
+              value={workMode}
+              onChange={(event) => {
+                setWorkMode(event.target.value as WorkMode | '')
+              }}
+            >
+              <option value="">Not stated</option>
+              {WORK_MODES.map((mode) => (
+                <option key={mode} value={mode}>
+                  {mode}
+                </option>
+              ))}
+            </select>
           )}
         </Field>
         <Field id="posting-posted-on" label="Published on">

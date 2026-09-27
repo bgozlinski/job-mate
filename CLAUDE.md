@@ -79,8 +79,11 @@ migrations, ingestion or tokens — that section is the only record of traps tha
     role and publication day. `StageRail` reaches stage 4.
   - Import from a search (2026-09-27): paste a filtered justjoin.it search; `POST /documents/from-search`
     reads its first page once (the `CollectionPage` ld+json) and answers the addresses you do not have;
-    the client adds them one by one through `from-url`, with progress. NFR-5 records the change and that
-    the board's terms were not checked.
+    the client adds them one by one through `from-url`, with progress. NFR-5 records the change and the
+    owner's decision not to check the board's terms.
+  - Location (migration `d08782adcd3e`): `city` and `work_mode` (remote/hybrid/office) on a posting, one
+    "Location" column in the register, editable on the posting page. A page only ever says remote
+    (TELECOMMUTE); never infer office from its absence.
 - **Next:** nothing scheduled; the roadmap is complete (stage 6 dropped on 2026-09-27, see the spec).
 - **Removed:** FR-7 automated harvesting (Scrapy) — built and reverted on 2026-09-10; the spec says why.
   Don't reintroduce crawling: NFR-5 allows only what a user action asks for — one posting, or one page of
