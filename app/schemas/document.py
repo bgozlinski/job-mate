@@ -58,6 +58,21 @@ class DocumentFromUrl(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class DocumentFromSearch(BaseModel):
+    """Payload for reading a page of search results the caller filtered (FR-1)."""
+
+    url: HttpUrl
+
+
+class SearchResults(BaseModel):
+    """What a page of search results lists, split by whether you have it already."""
+
+    new: list[str]
+    """Addresses of postings you have not added, in the order the page lists them."""
+    known: int
+    """How many of the listed postings you already have."""
+
+
 def _not_ahead(value: date | None) -> date | None:
     """
     Refuse a day that has not come yet.

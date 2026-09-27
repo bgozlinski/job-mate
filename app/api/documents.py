@@ -16,7 +16,7 @@ from fastapi import (
     status,
 )
 from openai import APIError
-from pydantic import ValidationError
+from pydantic import HttpUrl, TypeAdapter, ValidationError
 from redis.asyncio import Redis
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,17 +45,21 @@ from app.schemas.document import (
     AppliedResume,
     DocumentCreate,
     DocumentDetail,
+    DocumentFromSearch,
     DocumentFromUrl,
     DocumentRead,
     DocumentUpdate,
     DocumentUpload,
+    SearchResults,
 )
 from app.services.embeddings import EmbeddingModel
 from app.services.ingestion import EmptyDocumentError, SourceDocument, ingest_document
 from app.services.jobposting import (
     NoJobPostingError,
+    NoSearchResultsError,
     ScrapedPosting,
     parse_job_posting,
+    parse_search_page,
 )
 from app.services.requirements import SkillExtractor
 from app.services.scraping import PostingSource, ScrapeError, SourceUnavailableError
@@ -371,6 +375,73 @@ async def ingest_from_url(  # noqa: PLR0913, PLR0917 -- six are dependencies
             extractor,
             response,
         )
+
+
+OfferAddress = TypeAdapter(HttpUrl)
+
+
+def _offers(listed: list[str], search: HttpUrl) -> list[str]:
+    """
+    Keep the listed addresses on the search page's own host, in the form stored.
+
+    Written the way from-url stores source_url, so the same posting compares
+    equal whichever way it arrived. Another host is dropped rather than refused:
+    a page may link elsewhere, and from-url checks the allowlist again anyway.
+    """
+    offers: list[str] = []
+
+    for address in listed:
+        try:
+            url = OfferAddress.validate_python(address)
+        except ValidationError:
+            continue
+
+        if url.scheme == "https" and url.host == search.host and str(url) not in offers:
+            offers.append(str(url))
+
+    return offers
+
+
+@router.post("/from-search", dependencies=[Ingesting])
+async def read_search(
+    payload: DocumentFromSearch,
+    user: CurrentUser,
+    session: Session,
+    source: Posting,
+) -> SearchResults:
+    """
+    List the postings on a page of search results that you do not have yet (FR-1).
+
+    One fetch of the one page the caller pasted, read only for the addresses its
+    structured data lists (NFR-5). Nothing is stored here: the client adds each
+    new posting through from-url, one request per posting, so one that fails
+    costs only itself and each shows up as it lands. Counted against the ingest
+    budget, since it is a fetch from the board like any ingestion.
+    """
+    with traced("search", user.id, url=str(payload.url)):
+        try:
+            listed = parse_search_page(await source.fetch(str(payload.url)))
+        except SourceUnavailableError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+            ) from exc
+        except (ScrapeError, NoSearchResultsError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+            ) from exc
+
+        offers = _offers(listed, payload.url)
+        known = set(
+            await session.scalars(
+                select(Document.source_url).where(
+                    Document.user_id == user.id, Document.source_url.in_(offers)
+                )
+            )
+        )
+        new = [offer for offer in offers if offer not in known]
+        record(output={"listed": len(listed), "new": len(new)})
+
+        return SearchResults(new=new, known=len(offers) - len(new))
 
 
 async def _scrape(source: PostingSource, url: str) -> ScrapedPosting:

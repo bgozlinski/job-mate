@@ -33,8 +33,10 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 ## 3. Wymagania funkcjonalne
 
 ### FR-1. Ingestion dokumentów
-- System przyjmuje **wyłącznie ogłoszenia o pracę**, na trzy sposoby: wklejony tekst, plik PDF / DOCX / TXT
-  albo **adres URL ogłoszenia** w serwisie z allowlisty (warunki w NFR-5).
+- System przyjmuje **wyłącznie ogłoszenia o pracę**, na cztery sposoby: wklejony tekst, plik PDF / DOCX / TXT,
+  **adres URL ogłoszenia** w serwisie z allowlisty albo **adres przefiltrowanego wyszukiwania** w takim
+  serwisie — wtedy dochodzą oferty z pierwszej strony wyników, których użytkownik jeszcze nie ma (warunki
+  w NFR-5, zmiana 2026-09-27).
 - Dokumenty są dzielone na chunki (500–1000 tokenów z overlapem), embedowane i zapisywane w bazie.
 - Duplikaty są odrzucane na podstawie hasha treści, w obrębie konta: każde ogłoszenie należy do użytkownika,
   który je dodał (zmiana 2026-09-27).
@@ -225,6 +227,38 @@ JobMate to asystent kariery oparty na architekturze RAG (Retrieval-Augmented Gen
 > samo dla `web/src/api/schema.d.ts` względem tego dokumentu. Razem **nie da się zmienić modelu Pydantic
 > i zostawić frontendu z nieaktualnymi typami** — rozjazd psuje build, zamiast psuć ekran u użytkownika.
 - **NFR-5 Aspekty prawne:** brak scrapingu Indeed/LinkedIn (naruszenie regulaminów); dane pochodzą z ręcznego wprowadzania, z publicznych datasetów (np. zbiory ogłoszeń z Kaggle), albo z odczytu pojedynczej strony ogłoszenia w serwisie z allowlisty — na warunkach opisanych niżej.
+
+> **Zmiana 2026-09-27. Import z wyszukiwania.** Powód, słowami właściciela: „Chciałbym, aby użytkownik mógł
+> wkleić link po odfiltrowaniu już ze strony, np. https://justjoin.it/job-offers/all-locations/python?experience-levels=internship,junior,
+> i mógł zescrapować wszystkie oferty pracy po odfiltrowaniu. W przypadku ponownego wklejenia linku oferty
+> mają się nie dublować.”
+>
+> **Co dochodzi.** Poza stroną pojedynczej oferty wolno odczytać **stronę wyników wyszukiwania**, którą
+> użytkownik sam przefiltrował i wkleił, i pójść za adresami, które ta strona wymienia. Z listy czytamy tylko
+> blok `ld+json` typu `CollectionPage` i jego `hasPart` — dane, które serwis publikuje dla maszyn, tak jak
+> `JobPosting` na stronie oferty. `POST /documents/from-search` pobiera tę jedną stronę i odpowiada adresami,
+> których użytkownik jeszcze nie ma (porównanie z jego `source_url`); klient dodaje je po kolei przez
+> `from-url`, jedno żądanie na ofertę. Adresy spoza hosta wyszukiwania są pomijane, a `from-url` i tak
+> sprawdza allowlistę.
+>
+> **Znane ograniczenie.** Serwis potrafi opublikować tę samą ofertę ponownie pod nowym adresem (inna
+> końcówka, np. `…-c73f6f3f` → `…-c9f76993`, zaobserwowane 2026-09-27). Po adresie jej nie rozpoznamy;
+> zostanie pobrana, a zatrzyma ją dopiero deduplikacja po treści — o ile tekst się nie zmienił. Jeśli się
+> zmienił, powstaje drugie ogłoszenie.
+>
+> **Czego dalej nie robimy.** Tylko pierwsza strona wyników — bez paginacji, bez sitemap, bez `/api/`, bez
+> harmonogramu i bez pracy w tle: jedno kliknięcie to jedno pobranie listy i najwyżej tyle pobrań ofert, ile
+> ona wymienia (w praktyce 25, twardy limit `MAX_SEARCH_RESULTS`). Oferty idą jedna po drugiej, nie naraz.
+> Odczyt listy liczy się do tego samego limitu co ingestia; gdy limit się wyczerpie, import się zatrzymuje i
+> mówi, ile zostało.
+>
+> **Na czym opieramy zgodę** (stan na 2026-09-27): `robots.txt` justjoin.it nie blokuje `/job-offers/` ani
+> `/job-offer/`. Blokuje za to `/oferty-pracy/*,*` — polską ścieżkę listy z kilkoma filtrami naraz, czyli
+> z przecinkiem, jaki ma też przykładowy link. Angielskiej ścieżki ta reguła dosłownie nie obejmuje, ale
+> sygnał jest czytelny i zapisujemy go tu świadomie. **Regulaminu przy tej zmianie nie sprawdzono**
+> (`robots.txt` blokuje robotom także stronę regulaminu); do potwierdzenia przez właściciela. Obowiązują
+> warunki wygaśnięcia z akapitu „Granica” niżej, a dodatkowo: zgoda na odczyt listy wygasa, gdy
+> `robots.txt` zablokuje `/job-offers/` albo strona wyników przestanie publikować `CollectionPage`.
 
 > **Zmiana 2026-09-10 (wieczorem). Zgoda na crawlowanie wycofana.** Tego samego dnia rozszerzyliśmy NFR-5
 > o cykliczne pozyskiwanie ofert, łącznie z chodzeniem po linkach. Kod, dla którego to powstało (FR-7),

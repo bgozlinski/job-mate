@@ -4,8 +4,11 @@ from datetime import date
 import pytest
 
 from app.services.jobposting import (
+    MAX_SEARCH_RESULTS,
     NoJobPostingError,
+    NoSearchResultsError,
     parse_job_posting,
+    parse_search_page,
     plain_text,
 )
 
@@ -232,3 +235,46 @@ def test_the_type_attribute_is_read_whatever_else_the_tag_carries():
 )
 def test_plain_text_cases(raw, expected):
     assert plain_text(raw) == expected
+
+
+def collection(parts: object) -> dict[str, object]:
+    return {
+        "@context": "https://schema.org",
+        "@type": "CollectionPage",
+        "hasPart": parts,
+    }
+
+
+def test_a_search_page_lists_its_offers_in_order_each_once():
+    listed = parse_search_page(
+        page(
+            collection(
+                [
+                    {"url": "https://justjoin.it/job-offer/a", "@type": "CreativeWork"},
+                    "https://justjoin.it/job-offer/b",
+                    {"url": "https://justjoin.it/job-offer/a"},
+                    {"name": "no address"},
+                ]
+            ),
+            body="<a href='/job-offer/rail'>Not in the block</a>",
+        )
+    )
+
+    assert listed == [
+        "https://justjoin.it/job-offer/a",
+        "https://justjoin.it/job-offer/b",
+    ]
+
+
+def test_a_page_without_a_collection_lists_nothing():
+    with pytest.raises(NoSearchResultsError):
+        parse_search_page(page(POSTING))
+
+
+def test_a_page_listing_more_than_a_page_of_results_is_refused():
+    parts = [
+        f"https://justjoin.it/job-offer/{n}" for n in range(MAX_SEARCH_RESULTS + 1)
+    ]
+
+    with pytest.raises(NoSearchResultsError):
+        parse_search_page(page(collection(parts)))

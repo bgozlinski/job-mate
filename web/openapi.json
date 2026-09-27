@@ -511,6 +511,23 @@
         "title": "DocumentDetail",
         "type": "object"
       },
+      "DocumentFromSearch": {
+        "description": "Payload for reading a page of search results the caller filtered (FR-1).",
+        "properties": {
+          "url": {
+            "format": "uri",
+            "maxLength": 2083,
+            "minLength": 1,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "DocumentFromSearch",
+        "type": "object"
+      },
       "DocumentFromUrl": {
         "description": "Payload for ingesting the posting published at an address (FR-1).",
         "properties": {
@@ -1273,6 +1290,28 @@
         "title": "ResumeUpdate",
         "type": "object"
       },
+      "SearchResults": {
+        "description": "What a page of search results lists, split by whether you have it already.",
+        "properties": {
+          "known": {
+            "title": "Known",
+            "type": "integer"
+          },
+          "new": {
+            "items": {
+              "type": "string"
+            },
+            "title": "New",
+            "type": "array"
+          }
+        },
+        "required": [
+          "new",
+          "known"
+        ],
+        "title": "SearchResults",
+        "type": "object"
+      },
       "SessionCreate": {
         "description": "Which posting to be interviewed on, and with which of your resumes.",
         "properties": {
@@ -1977,6 +2016,53 @@
           }
         ],
         "summary": "Create Document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/documents/from-search": {
+      "post": {
+        "description": "List the postings on a page of search results that you do not have yet (FR-1).\n\nOne fetch of the one page the caller pasted, read only for the addresses its\nstructured data lists (NFR-5). Nothing is stored here: the client adds each\nnew posting through from-url, one request per posting, so one that fails\ncosts only itself and each shows up as it lands. Counted against the ingest\nbudget, since it is a fetch from the board like any ingestion.",
+        "operationId": "read_search_documents_from_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentFromSearch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResults"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read Search",
         "tags": [
           "documents"
         ]
