@@ -79,3 +79,18 @@ export function PageHeader({
 export function Muted({ children }: { children: ReactNode }): ReactElement {
   return <p className="text-sm text-ink-faint">{children}</p>
 }
+
+/**
+ * The foot of every page, signed-in or not: a line and the notice, quiet and
+ * on the page's own left edge. Pushed to the bottom by its parent, which is a
+ * full-height column with the content growing between header and footer.
+ */
+export function Footer(): ReactElement {
+  return (
+    <footer className="border-t border-line">
+      <p className="mx-auto w-full max-w-6xl px-6 py-4 text-xs text-ink-faint">
+        © 2026 BNBG
+      </p>
+    </footer>
+  )
+}

@@ -12,7 +12,7 @@ import type { LucideIcon } from 'lucide-react'
 import { Link, Outlet, useLocation } from 'react-router'
 
 import { useLogout, useSession } from '../auth/session'
-import { Button, ThemeToggle } from '../ui'
+import { Button, Footer, ThemeToggle } from '../ui'
 
 /**
  * `also` lists the pages that belong to a place without living under its
@@ -43,7 +43,7 @@ export function Layout(): ReactElement {
   const { pathname } = useLocation()
 
   return (
-    <div className="min-h-dvh">
+    <div className="flex min-h-dvh flex-col">
       <header className="border-b border-line bg-raised">
         {/* 6xl rather than 5xl so the places, the theme toggle and the account
             fit on one line at laptop width; main matches it so the logo stays
@@ -122,9 +122,11 @@ export function Layout(): ReactElement {
         </div>
       </header>
 
-      <main className="mx-auto flex max-w-6xl flex-col gap-10 px-6 py-8">
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-10 px-6 py-8">
         <Outlet />
       </main>
+
+      <Footer />
     </div>
   )
 }

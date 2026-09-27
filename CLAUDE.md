@@ -102,7 +102,7 @@ migrations, ingestion or tokens — that section is the only record of traps tha
 - `web/` — React + TypeScript (Vite) client. Types in `web/src/api/schema.d.ts` are generated from
   `web/openapi.json`, which is generated from the app. `src/ui/` holds every shared component behind one
   `index.ts` (controls incl. `ButtonLink` for a link drawn as a button; surfaces incl. `Sheet`, with an
-  optional file `tab`; data incl. `Chip`, `Score`, `percentage`; `StageRail` and `reachedOf`; feedback; the
+  optional file `tab`, and `Footer` (on every page, the login too); data incl. `Chip`, `Score`, `percentage`; `StageRail` and `reachedOf`; feedback; the
   theme toggle); `src/theme.ts` the theme choice; `src/time.ts` relative dates; `src/routes/` one file per
   screen (`Dashboard` is `/`; `PairPicker` backs Match and Interview; `timeline.ts` and `TimelineItem.tsx`
   are the history rows History and the dashboard share).
