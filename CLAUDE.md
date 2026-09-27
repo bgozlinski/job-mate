@@ -67,7 +67,7 @@ migrations, ingestion or tokens — that section is the only record of traps tha
     gaps; a posting is drawn as a file with a tab, and how far you got with it as a path of four stages
     (Posting, Match, Interview, Applied — the last dashed until it exists). API: `stage` and `best_score` on
     each posting, for the caller. Decisions V-1…V-7 in `docs/superpowers/specs/2026-09-26-ui-identity-design.md`.
-  - Postings per user (2026-09-27, in progress on `feat/posting-owner`): `documents.user_id`, dedup per
+  - Postings per user and Applied (PR #47): `documents.user_id`, dedup per
     account, `OwnedDocument` (404 for someone else's), only the owner deletes. Migration `984408943e7c`
     gives existing rows to their first user, else the oldest admin. The spec's "Zmiana 2026-09-27" says why.
     Then `company`, `role`, `posted_on` columns (migration `408d74d864e6`), filled from JSON-LD and
