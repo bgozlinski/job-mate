@@ -37,7 +37,8 @@ async def next_steps(db: AsyncSession, user_id: uuid.UUID) -> list[Step]:
     List what to do next, most important first. Never empty.
 
     Without a resume or without postings, only those are asked for: nothing
-    else can be done until they exist.
+    else can be done until they exist. A posting you applied to is done with,
+    so no rule offers it again.
     """
     resume_id = await _newest_resume(db, user_id)
     has_postings = bool(
@@ -101,6 +102,7 @@ async def _unfinished_interviews(
         .where(
             InterviewSession.user_id == user_id,
             Document.user_id == user_id,
+            Document.applied_on.is_(None),
             InterviewSession.status == "active",
             InterviewSession.resume_id.is_not(None),
         )
@@ -130,7 +132,11 @@ async def _unmatched_postings(
 
     rows = await db.execute(
         select(Document.id, Document.title)
-        .where(Document.user_id == user_id, ~yours.exists())
+        .where(
+            Document.user_id == user_id,
+            Document.applied_on.is_(None),
+            ~yours.exists(),
+        )
         .order_by(Document.created_at.desc(), Document.id.desc())
         .limit(STEPS_PER_KIND)
     )
@@ -180,7 +186,7 @@ async def _matches_to_practise(
             best.c.missing_keywords,
         )
         .join(Document, Document.id == best.c.document_id)
-        .where(Document.user_id == user_id)
+        .where(Document.user_id == user_id, Document.applied_on.is_(None))
         .order_by(best.c.score.desc(), Document.created_at.desc(), Document.id.desc())
         .limit(STEPS_PER_KIND)
     )
