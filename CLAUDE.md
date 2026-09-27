@@ -77,7 +77,7 @@ migrations, ingestion or tokens — that section is the only record of traps tha
     company, role, short link, posted, added, applied and resume; "Mark as applied" opens a form under
     the row, and an application's day is drawn as a stamp that reopens it. The posting page edits company,
     role and publication day. `StageRail` reaches stage 4.
-- **Next:** nothing scheduled; stage 6 (voice, salary trends) is the remaining candidate.
+- **Next:** nothing scheduled; the roadmap is complete (stage 6 dropped on 2026-09-27, see the spec).
 - **Removed:** FR-7 automated harvesting (Scrapy) — built and reverted on 2026-09-10; the spec says why.
   Don't reintroduce crawling: NFR-5 allows one fetch per explicit user action, nothing more.
 

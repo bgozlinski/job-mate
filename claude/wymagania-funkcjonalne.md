@@ -324,7 +324,7 @@ Przeglądarka                              Testy, curl, Swagger
 | 3 | Retrieval + dopasowanie CV (FR-3) | Pierwsza funkcja RAG end-to-end |
 | 4 | Tryb mock interview na LangGraph (FR-4) | Sesje konwersacyjne (graf stanowy) |
 | 5 | Eksport + panel admina (FR-5, FR-6) | Gotowe MVP |
-| 6 (bonus) | Rozmowy głosowe (speech-to-text), trendy wynagrodzeń | Cele dodatkowe |
+| ~~6 (bonus)~~ | ~~Rozmowy głosowe (speech-to-text), trendy wynagrodzeń~~ | Porzucony 2026-09-27 |
 
 > **Zmiana 2026-09-07. Etap 4 został świadomie przeskoczony.** Po zamknięciu etapu 3 powstał klient
 > w przeglądarce (React), którego nie było ani w roadmapie, ani w tabeli stacku — architektura wysokopoziomowa
@@ -432,6 +432,7 @@ Przeglądarka                              Testy, curl, Swagger
 > ogłoszenia z aplikacją we wszystkich trzech regułach (dopasuj, poćwicz, dokończ rozmowę) — są załatwione.
 > Filtr stoi w `WHERE`, przed limitem kroków, inaczej ogłoszenia z aplikacją zajęłyby wszystkie miejsca.
 > Gdy aplikowałeś na wszystko, zostaje krok „dodaj kolejne ogłoszenie”.
+> **Zmiana 2026-09-27. Etap 6 porzucony.** Nie jest potrzebny w tym projekcie.
 
 ## 8. Pułapki, których nie widać z kodu
 
