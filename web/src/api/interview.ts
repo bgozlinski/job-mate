@@ -8,6 +8,7 @@ import type {
 import { api } from './client'
 import { dashboardKey } from './dashboard'
 import { documentsKey } from './documents'
+import { historyKey } from './history'
 import { detailOf, reasonFor } from './errors'
 import type { Pairing } from './matching'
 import type { components } from './schema'
@@ -36,6 +37,7 @@ async function remember(queryClient: QueryClient, interview: Interview): Promise
   queryClient.setQueryData(interviewKey(interview.id), interview)
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: listsKey }),
+    queryClient.invalidateQueries({ queryKey: historyKey }),
     queryClient.invalidateQueries({ queryKey: dashboardKey }),
   ])
 }

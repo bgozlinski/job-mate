@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -51,11 +51,36 @@ function show(at = '/history') {
   )
 }
 
-function answer(matches: unknown[], interviews: unknown[]): void {
+interface Stored { id: string; created_at: string }
+
+/**
+ * Answer GET /history the way the API does: both kinds merged newest first,
+ * narrowed by kind, one page cut from the union, with the count of all.
+ */
+function answer(matches: Stored[], interviews: Stored[]): string[] {
+  const asked: string[] = []
   server.use(
-    http.get('/api/matches', () => HttpResponse.json(matches)),
-    http.get('/api/sessions', () => HttpResponse.json(interviews)),
+    http.get('/api/history', ({ request }) => {
+      const params = new URL(request.url).searchParams
+      const kind = params.get('kind') ?? 'all'
+      const limit = Number(params.get('limit'))
+      const offset = Number(params.get('offset'))
+      asked.push(`${kind}:${String(limit)}@${String(offset)}`)
+      const timeline = [
+        ...(kind === 'interviews' ? [] : matches.map((m) => ({ kind: 'match', match: m, at: m.created_at }))),
+        ...(kind === 'matches' ? [] : interviews.map((i) => ({ kind: 'interview', interview: i, at: i.created_at }))),
+      ].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
+
+      return HttpResponse.json({
+        items: timeline
+          .slice(offset, offset + limit)
+          .map((entry) => ({ kind: entry.kind, match: 'match' in entry ? entry.match : null, interview: 'interview' in entry ? entry.interview : null })),
+        total: timeline.length,
+      })
+    }),
   )
+
+  return asked
 }
 
 function rowNames(): string[] {
@@ -144,53 +169,55 @@ test('a deleted posting is named as deleted, not left blank', async () => {
   ).toBeInTheDocument()
 })
 
-test('loading more asks both lists for more, from the top', async () => {
-  const asked: string[] = []
-  const page = (url: string, make: (index: number) => unknown) => {
-    const params = new URL(url).searchParams
-    asked.push(`${new URL(url).pathname}:${params.get('limit') ?? ''}@${params.get('offset') ?? ''}`)
+test('a long history is numbered in pages kept in the address', async () => {
+  const many = Array.from({ length: 45 }, (_, i) =>
+    match(`m${String(i)}`, `2026-09-${String(10 + (i % 18)).padStart(2, '0')}T12:00:00Z`),
+  )
+  const asked = answer(many, [])
 
-    return HttpResponse.json(
-      Array.from({ length: Number(params.get('limit')) }, (_, index) => make(index)),
-    )
-  }
-  server.use(
-    http.get('/api/matches', ({ request }) =>
-      page(request.url, (i) => match(`m${String(i)}`, '2026-09-22T12:00:00Z')),
-    ),
-    http.get('/api/sessions', ({ request }) =>
-      page(request.url, (i) => interview(`s${String(i)}`, '2026-09-21T12:00:00Z')),
-    ),
+  show('/history?kind=matches&page=2')
+
+  const pages = await screen.findByRole('navigation', { name: 'Pages of history' })
+  expect(within(pages).getByText('Page 2').closest('[aria-current="page"]')).not.toBeNull()
+  expect(within(pages).getByRole('link', { name: 'Page 3' })).toHaveAttribute(
+    'href',
+    '/history?kind=matches&page=3',
+  )
+  expect(asked).toEqual(['matches:20@20'])
+})
+
+test('picking a kind starts at its first page', async () => {
+  const asked = answer(
+    Array.from({ length: 30 }, (_, i) => match(`m${String(i)}`, '2026-09-22T12:00:00Z')),
+    [interview('s1', '2026-09-21T12:00:00Z')],
   )
 
-  show()
-  await userEvent.click(await screen.findByRole('button', { name: 'Load more' }))
+  show('/history?page=2')
+  await screen.findByRole('navigation', { name: 'Pages of history' })
+  await userEvent.click(screen.getByRole('button', { name: 'Interviews' }))
 
   await waitFor(() => {
-    expect(asked.sort()).toEqual([
-      '/api/matches:20@0',
-      '/api/matches:40@0',
-      '/api/sessions:20@0',
-      '/api/sessions:40@0',
-    ])
+    expect(asked).toEqual(['all:20@20', 'interviews:20@0'])
   })
 })
 
 test('a history that failed to load can be asked again', async () => {
   let calls = 0
   server.use(
-    http.get('/api/matches', () => {
+    http.get('/api/history', () => {
       calls += 1
 
       return calls === 1
-        ? HttpResponse.json({ detail: 'Could not read your match history' }, { status: 500 })
-        : HttpResponse.json([match('m1', '2026-09-22T12:00:00Z')])
+        ? HttpResponse.json({ detail: 'Could not read your history' }, { status: 500 })
+        : HttpResponse.json({
+            items: [{ kind: 'match', match: match('m1', '2026-09-22T12:00:00Z') }],
+            total: 1,
+          })
     }),
-    http.get('/api/sessions', () => HttpResponse.json([])),
   )
 
   show()
-  expect(await screen.findByRole('alert')).toHaveTextContent('Could not read your match history')
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not read your history')
   await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
 
   expect(await screen.findByRole('link', { name: /^Match 56% —/ })).toBeInTheDocument()

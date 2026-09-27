@@ -41,7 +41,10 @@ export function PairPicker({
   onStart: (pairing: Pairing) => void
 }): ReactElement {
   const resumes = useResumes()
-  const documents = useDocuments(MAX_PAGE_SIZE)
+  // The newest page the API gives, as the list to pick from: a select
+  // longer than that is not a way to choose one.
+  const documents = useDocuments(1, MAX_PAGE_SIZE)
+  const postings = documents.data?.items
 
   const [pickedResume, setPickedResume] = useState('')
   const [documentId, setDocumentId] = useState('')
@@ -61,7 +64,7 @@ export function PairPicker({
   // empty is a dead end with a specific way out -- so each is named rather
   // than folded into one "nothing to pick" message.
   const noResumes = resumes.data?.length === 0
-  const noDocuments = documents.data?.length === 0
+  const noDocuments = postings?.length === 0
 
   return (
     <>
@@ -125,7 +128,7 @@ export function PairPicker({
                 }}
               >
                 <option value="">Choose a posting</option>
-                {documents.data?.map((document) => (
+                {postings?.map((document) => (
                   <option key={document.id} value={document.id}>
                     {document.title ?? 'Untitled'}
                   </option>

@@ -469,6 +469,17 @@ Przeglądarka                              Testy, curl, Swagger
 
 > **Zmiana 2026-09-27. Etap 6 porzucony.** Nie jest potrzebny w tym projekcie.
 
+> **Zmiana 2026-09-27. Numerowane strony w Postings i History.** Zastępują „Load more” z decyzji
+> w `docs/superpowers/specs/2026-09-07-scraper-cookie-auth-web-client.md` i
+> `2026-09-24-ui-navigation-design.md`. Powód: rosnący limit od `offset=0` kończył się na 100 wierszach,
+> a import z wyszukiwania dokłada po 25 ogłoszeń naraz. `GET /documents` odpowiada teraz stroną
+> `{items, total}` (liczone osobnym `count` bez złączenia z chunkami), a nowe `GET /history?kind=` łączy
+> dopasowania i rozmowy w SQL (`UNION ALL`) przed cięciem na strony — strona 3 osi czasu to nie strona 3
+> każdej z list. Numer strony żyje w adresie (`?page=`). Cena, przyjęta świadomie: wpis dodany w trakcie
+> czytania przesuwa wiersze między stronami, jak w każdej stronicowanej liście. `/matches` i `/sessions`
+> zostają listami — korzystają z nich strona ogłoszenia (z `document_id`) i dashboard, bez stron.
+> Wybór ogłoszenia w Match i Interview (`PairPicker`) nadal pokazuje najnowsze 100.
+
 ## 8. Pułapki, których nie widać z kodu
 
 Zapis z 2026-09-10, przy czyszczeniu komentarzy z kodu, przycięty wieczorem po usunięciu FR-7. Każdy punkt

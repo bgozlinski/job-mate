@@ -63,7 +63,8 @@ def _answered_as_http() -> Iterator[None]:
         ) from exc
 
 
-def _summarise(session: InterviewSession) -> SessionSummary:
+def summarise_session(session: InterviewSession) -> SessionSummary:
+    """Describe one interview without its messages, for a list or the history."""
     return SessionSummary(
         id=session.id,
         resume_id=session.resume_id,
@@ -79,7 +80,7 @@ def _summarise(session: InterviewSession) -> SessionSummary:
 
 def _read(session: InterviewSession) -> SessionRead:
     return SessionRead(
-        **_summarise(session).model_dump(),
+        **summarise_session(session).model_dump(),
         summary=(
             SummaryRead.model_validate(session.summary) if session.summary else None
         ),
@@ -126,7 +127,7 @@ async def list_sessions(
     """
     sessions = await interview.list_sessions(db, user.id, limit, offset, document_id)
 
-    return [_summarise(session) for session in sessions]
+    return [summarise_session(session) for session in sessions]
 
 
 @router.get("/{session_id}")

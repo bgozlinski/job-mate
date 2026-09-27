@@ -51,7 +51,7 @@ async def apply(
 
 
 async def listed(client: AsyncClient, headers: dict[str, str]) -> dict[str, object]:
-    return dict((await client.get("/documents", headers=headers)).json()[0])
+    return dict((await client.get("/documents", headers=headers)).json()["items"][0])
 
 
 async def test_a_posting_starts_without_an_application(client: AsyncClient) -> None:

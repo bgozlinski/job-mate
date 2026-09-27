@@ -57,7 +57,7 @@ function pickable(): void {
         resume('r-new', '2026-09-01T10:00:00Z', 'new.pdf'),
       ]),
     ),
-    http.get('/api/documents', () => HttpResponse.json([POSTING])),
+    http.get('/api/documents', () => HttpResponse.json({ items: [POSTING], total: 1 })),
   )
 }
 
@@ -161,7 +161,7 @@ test('an empty knowledge base points at where to fix it', async () => {
     http.get('/api/resumes', () =>
       HttpResponse.json([resume('r1', '2026-09-01T10:00:00Z', 'cv.pdf')]),
     ),
-    http.get('/api/documents', () => HttpResponse.json([])),
+    http.get('/api/documents', () => HttpResponse.json({ items: [], total: 0 })),
   )
 
   show('/match')
@@ -172,7 +172,7 @@ test('an empty knowledge base points at where to fix it', async () => {
 test('having no resumes points at where to fix that instead', async () => {
   server.use(
     http.get('/api/resumes', () => HttpResponse.json([])),
-    http.get('/api/documents', () => HttpResponse.json([POSTING])),
+    http.get('/api/documents', () => HttpResponse.json({ items: [POSTING], total: 1 })),
   )
 
   show('/interview')

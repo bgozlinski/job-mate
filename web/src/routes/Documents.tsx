@@ -7,12 +7,12 @@ import {
   PlusIcon,
   Trash2Icon,
 } from 'lucide-react'
-import { Link, useNavigate } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 
 import type { Document, Imported, Ingested } from '../api/documents'
 import {
-  MAX_PAGE_SIZE,
   PAGE_SIZE,
+  pageCount,
   useApply,
   useDeleteDocument,
   useDocuments,
@@ -32,8 +32,8 @@ import {
   Button,
   EmptyState,
   Field,
-  Muted,
   Notice,
+  Pagination,
   PageHeader,
   Score,
   Sheet,
@@ -41,6 +41,7 @@ import {
   StageRail,
   Status,
   Thinking,
+  pageFrom,
   reachedOf,
 } from '../ui'
 import { newest } from './Posting'
@@ -853,21 +854,33 @@ function AddPanel(): ReactElement {
   )
 }
 
+/** The address of one page of the postings: the first is the bare list. */
+function pageHref(page: number): string {
+  return page === 1 ? '/documents' : `/documents?page=${String(page)}`
+}
+
 /**
  * Your postings as a register you work from: each one a row with where it was
  * published, when you added it and when you applied with which resume, Match
  * and Practise right in it, and adding one behind a button -- open from the
- * start while there is nothing to list.
+ * start while there is nothing to list. A numbered page at a time, the page in
+ * the address.
  */
 export function Documents(): ReactElement {
-  const [shown, setShown] = useState(PAGE_SIZE)
-  const documents = useDocuments(shown)
-  const listed = documents.data ?? []
+  const [params] = useSearchParams()
+  const page = pageFrom(params.get('page'))
+  const documents = useDocuments(page)
+  const listed = documents.data?.items ?? []
+  const total = documents.data?.total ?? 0
+  const pages = pageCount(total, PAGE_SIZE)
   // The last deletion, said once over the list: the row just disappears, and
   // a row that vanishes without a word reads as a glitch. Replaced by the next.
   const [deleted, setDeleted] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
-  const empty = documents.isSuccess && listed.length === 0
+  const empty = documents.isSuccess && total === 0
+  // A page number past the end: typed in, or the last row of the last page
+  // deleted. The postings are there, just not on this page.
+  const pastEnd = documents.isSuccess && total > 0 && listed.length === 0
   const panelOpen = adding || empty
 
   // Only asked for once there is a row to act on: an empty base has nothing
@@ -1011,25 +1024,17 @@ export function Documents(): ReactElement {
         </Sheet>
       ) : null}
 
-      {/* A short page is the end of the listing: the route returns no total,
-          so this is how a caller learns there is nothing more. */}
-      {documents.data && documents.data.length >= shown ? (
-        shown >= MAX_PAGE_SIZE ? (
-          <Muted>The listing returns at most {MAX_PAGE_SIZE} postings.</Muted>
-        ) : (
-          <div className="flex">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                setShown((current) => Math.min(current + PAGE_SIZE, MAX_PAGE_SIZE))
-              }}
-            >
-              Load more
-            </Button>
-          </div>
-        )
+      {pastEnd ? (
+        <Notice>
+          There is no page {page}: your postings fill {pages === 1 ? '1 page' : `${String(pages)} pages`}.{' '}
+          <Link to={pageHref(pages)} className="text-accent underline underline-offset-2">
+            Go to the last page
+          </Link>
+          .
+        </Notice>
       ) : null}
+
+      <Pagination page={page} count={pages} hrefFor={pageHref} label="Pages of postings" />
     </>
   )
 }

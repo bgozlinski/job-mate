@@ -4,6 +4,7 @@ import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
 import { api } from './client'
 import { dashboardKey } from './dashboard'
 import { documentsKey } from './documents'
+import { historyKey } from './history'
 import { detailOf, reasonFor } from './errors'
 import type { components } from './schema'
 
@@ -12,8 +13,6 @@ export type MatchSummary = components['schemas']['MatchSummary']
 
 export const matchesKey = ['matches'] as const
 
-export const HISTORY_PAGE_SIZE = 20
-export const MAX_HISTORY_PAGE_SIZE = 100
 
 export interface Pairing {
   resumeId: string
@@ -50,6 +49,7 @@ export function useMatch(): UseMutationResult<Match, Error, Pairing> {
       // postings, which carry your stage and best score at each.
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: matchesKey }),
+        queryClient.invalidateQueries({ queryKey: historyKey }),
         queryClient.invalidateQueries({ queryKey: dashboardKey }),
         queryClient.invalidateQueries({ queryKey: documentsKey }),
       ])

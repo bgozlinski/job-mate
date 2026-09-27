@@ -229,5 +229,5 @@ async def test_the_list_counts_what_each_posting_asks_for(
 
     response = await client.get("/documents", headers=headers)
 
-    counts = {row["id"]: row["requirement_count"] for row in response.json()}
+    counts = {row["id"]: row["requirement_count"] for row in response.json()["items"]}
     assert counts == {read: len(REQUIREMENTS), unread: None}
