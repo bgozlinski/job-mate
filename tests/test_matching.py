@@ -1,10 +1,14 @@
+import uuid
+
 import pytest
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.security import hash_password
 from app.core.prompts import StaticPromptStore
 from app.models.chunk import EMBEDDING_DIMENSIONS
 from app.models.document import Document
+from app.models.user import User
 from app.services.ingestion import SourceDocument, ingest_document
 from app.services.matching import (
     BOILERPLATE,
@@ -48,8 +52,15 @@ def writer() -> FakeSuggestionWriter:
 async def store(
     session: AsyncSession, model: FakeEmbeddingModel, cache: Redis, content: str
 ) -> Document:
+    owner = User(
+        email=f"{uuid.uuid4()}@example.com",
+        password_hash=hash_password(uuid.uuid4().hex),
+    )
+    session.add(owner)
+    await session.flush()
     result = await ingest_document(
         session,
+        owner.id,
         SourceDocument(content=content, title="Posting"),
         model,
         cache,

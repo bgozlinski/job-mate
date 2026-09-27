@@ -142,6 +142,21 @@ async def test_someone_elses_resume_is_not_found(
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
+async def test_someone_elses_posting_is_not_found(
+    client: AsyncClient, session_factory: Factory
+) -> None:
+    owner = await account(client, "owner@example.com")
+    stranger = await account(client, "stranger@example.com")
+    body = {
+        "resume_id": await resume(client, stranger),
+        "document_id": await posting(client, session_factory, owner, ["Python"]),
+    }
+
+    response = await client.post("/sessions", json=body, headers=stranger)
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
 async def test_an_unknown_posting_is_not_found(client: AsyncClient) -> None:
     headers = await account(client)
     body = {

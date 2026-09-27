@@ -162,17 +162,19 @@ async def test_adding_a_posting_you_already_matched_says_how_far_you_got(
     assert (again.json()["stage"], again.json()["best_score"]) == (2, 0.5)
 
 
-async def test_another_accounts_work_does_not_move_your_stage(
+async def test_the_same_text_added_by_another_account_starts_over(
     client: AsyncClient, session_factory: Factory
 ) -> None:
-    """Postings are shared; how far somebody got with one is not (NFR-1)."""
+    """Each account gets its own copy, so how far somebody got stays theirs."""
     owner = await account(client)
     owner_id = await user_id_of(client, owner)
     document = await a_posting(client, owner)
     await a_match(session_factory, owner_id, document["id"], 0.9)
     await an_interview(session_factory, owner_id, document["id"])
     other = await account(client, "other@example.com")
+    copy = await a_posting(client, other)
 
     row = await listed(client, other)
 
-    assert (row["stage"], row["best_score"]) == (1, None)
+    assert copy["id"] != document["id"]
+    assert (row["id"], row["stage"], row["best_score"]) == (copy["id"], 1, None)

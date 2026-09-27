@@ -28,6 +28,7 @@ async def a_session(
         await db.flush()
         resume = Resume(user_id=user.id, content="Python, Docker")
         document = Document(
+            user_id=user.id,
             title="Backend developer",
             content="Docker",
             content_hash=uuid.uuid4().hex * 2,

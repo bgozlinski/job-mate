@@ -10,9 +10,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUser, get_db, get_interview_graph, rate_limited
+from app.api.deps import (
+    CurrentUser,
+    get_db,
+    get_interview_graph,
+    owned_document,
+    rate_limited,
+)
 from app.core.observability import traced
-from app.models.document import Document
 from app.models.interview import InterviewSession
 from app.models.resume import Resume
 from app.schemas.interview import (
@@ -90,10 +95,11 @@ async def start(
     resume = await db.scalar(
         select(Resume).where(Resume.id == payload.resume_id, Resume.user_id == user.id)
     )
-    document = await db.get(Document, payload.document_id)
 
-    if resume is None or document is None:
+    if resume is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
+    document = await owned_document(db, user.id, payload.document_id)
 
     with (
         _answered_as_http(),

@@ -72,6 +72,17 @@ async def test_the_knowledge_base_can_be_listed(client):
     assert "content" not in body[0]
 
 
+async def test_the_listing_holds_only_your_postings(client):
+    headers = await account(client)
+    await client.post("/documents", json=payload(), headers=headers)
+    other = await account(client, "other@example.com")
+
+    response = await client.get("/documents", headers=other)
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == []
+
+
 async def test_the_listing_is_newest_first(client):
     headers = await account(client)
     older = await client.post("/documents", json=payload(), headers=headers)

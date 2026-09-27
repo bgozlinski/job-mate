@@ -153,7 +153,7 @@ export interface paths {
         };
         /**
          * List Documents
-         * @description List the knowledge base, newest first, with your stage at each posting.
+         * @description List your postings, newest first, with your stage at each.
          */
         get: operations["list_documents_documents_get"];
         put?: never;
@@ -217,18 +217,48 @@ export interface paths {
         };
         /**
          * Read Document
-         * @description Return one posting with its text and requirements, or 404.
-         *
-         *     Open to every signed-in account, like the list: the knowledge base is shared.
+         * @description Return one of your postings with its text and requirements, or 404.
          */
         get: operations["read_document_documents__document_id__get"];
         put?: never;
         post?: never;
         /**
          * Delete Document
-         * @description Remove a posting and its chunks from the knowledge base (FR-6).
+         * @description Remove one of your postings and its chunks (FR-6).
+         *
+         *     Only its owner may: postings are per account, so an admin has no say in them.
          */
         delete: operations["delete_document_documents__document_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Document
+         * @description Correct the company, role or publication day of one of your postings.
+         */
+        patch: operations["update_document_documents__document_id__patch"];
+        trace?: never;
+    };
+    "/documents/{document_id}/application": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Apply
+         * @description Record that you applied to one of your postings, or correct the record.
+         */
+        put: operations["apply_documents__document_id__application_put"];
+        post?: never;
+        /**
+         * Withdraw
+         * @description Take back the record of applying. Done already counts as done.
+         *
+         *     For the record only -- nothing is sent anywhere, now or when applying.
+         */
+        delete: operations["withdraw_documents__document_id__application_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -566,6 +596,42 @@ export interface components {
              */
             question_id: string;
         };
+        /**
+         * ApplicationWrite
+         * @description Marking a posting as applied to: on which day, and with which resume.
+         */
+        ApplicationWrite: {
+            /**
+             * Applied On
+             * Format: date
+             */
+            applied_on: string;
+            /**
+             * Resume Id
+             * Format: uuid
+             */
+            resume_id: string;
+        };
+        /**
+         * AppliedResume
+         * @description Enough of a resume to tell which version went out.
+         */
+        AppliedResume: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Original Filename */
+            original_filename: string | null;
+            /** Target Role */
+            target_role: string | null;
+        };
         /** Body_upload_document_documents_upload_post */
         Body_upload_document_documents_upload_post: {
             /** File */
@@ -640,10 +706,15 @@ export interface components {
          * @description One posting in full: what the list leaves out, for the posting's own page.
          */
         DocumentDetail: {
+            /** Applied On */
+            applied_on: string | null;
+            applied_resume: components["schemas"]["AppliedResume"] | null;
             /** Best Score */
             best_score: number | null;
             /** Chunk Count */
             chunk_count: number;
+            /** Company */
+            company: string | null;
             /** Content */
             content: string;
             /**
@@ -660,10 +731,14 @@ export interface components {
             metadata: {
                 [key: string]: unknown;
             };
+            /** Posted On */
+            posted_on: string | null;
             /** Requirement Count */
             requirement_count: number | null;
             /** Requirements */
             requirements: string[] | null;
+            /** Role */
+            role: string | null;
             /** Source Url */
             source_url: string | null;
             /** Stage */
@@ -691,10 +766,15 @@ export interface components {
          * @description Public view of a stored posting.
          */
         DocumentRead: {
+            /** Applied On */
+            applied_on: string | null;
+            applied_resume: components["schemas"]["AppliedResume"] | null;
             /** Best Score */
             best_score: number | null;
             /** Chunk Count */
             chunk_count: number;
+            /** Company */
+            company: string | null;
             /**
              * Created At
              * Format: date-time
@@ -709,14 +789,32 @@ export interface components {
             metadata: {
                 [key: string]: unknown;
             };
+            /** Posted On */
+            posted_on: string | null;
             /** Requirement Count */
             requirement_count: number | null;
+            /** Role */
+            role: string | null;
             /** Source Url */
             source_url: string | null;
             /** Stage */
             stage: number;
             /** Title */
             title: string | null;
+        };
+        /**
+         * DocumentUpdate
+         * @description The fields of a posting its owner may correct.
+         *
+         *     What the caller omits stays as it is, and an explicit null clears it.
+         */
+        DocumentUpdate: {
+            /** Company */
+            company?: string | null;
+            /** Posted On */
+            posted_on?: string | null;
+            /** Role */
+            role?: string | null;
         };
         /** @enum {string} */
         ExportFormat: "md" | "docx" | "pdf";
@@ -1458,6 +1556,105 @@ export interface operations {
         };
     };
     delete_document_documents__document_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_document_documents__document_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_documents__document_id__application_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplicationWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    withdraw_documents__document_id__application_delete: {
         parameters: {
             query?: never;
             header?: never;

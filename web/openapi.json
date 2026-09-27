@@ -62,6 +62,73 @@
         "title": "AnswerCreate",
         "type": "object"
       },
+      "ApplicationWrite": {
+        "additionalProperties": false,
+        "description": "Marking a posting as applied to: on which day, and with which resume.",
+        "properties": {
+          "applied_on": {
+            "format": "date",
+            "title": "Applied On",
+            "type": "string"
+          },
+          "resume_id": {
+            "format": "uuid",
+            "title": "Resume Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "applied_on",
+          "resume_id"
+        ],
+        "title": "ApplicationWrite",
+        "type": "object"
+      },
+      "AppliedResume": {
+        "description": "Enough of a resume to tell which version went out.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "original_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Filename"
+          },
+          "target_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Role"
+          }
+        },
+        "required": [
+          "id",
+          "original_filename",
+          "target_role",
+          "created_at"
+        ],
+        "title": "AppliedResume",
+        "type": "object"
+      },
       "Body_upload_document_documents_upload_post": {
         "properties": {
           "file": {
@@ -281,6 +348,28 @@
       "DocumentDetail": {
         "description": "One posting in full: what the list leaves out, for the posting's own page.",
         "properties": {
+          "applied_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied On"
+          },
+          "applied_resume": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppliedResume"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "best_score": {
             "anyOf": [
               {
@@ -295,6 +384,17 @@
           "chunk_count": {
             "title": "Chunk Count",
             "type": "integer"
+          },
+          "company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
           },
           "content": {
             "title": "Content",
@@ -314,6 +414,18 @@
             "additionalProperties": true,
             "title": "Metadata",
             "type": "object"
+          },
+          "posted_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Posted On"
           },
           "requirement_count": {
             "anyOf": [
@@ -339,6 +451,17 @@
               }
             ],
             "title": "Requirements"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
           },
           "source_url": {
             "anyOf": [
@@ -371,6 +494,11 @@
           "id",
           "title",
           "source_url",
+          "company",
+          "role",
+          "posted_on",
+          "applied_on",
+          "applied_resume",
           "metadata",
           "chunk_count",
           "requirement_count",
@@ -408,6 +536,28 @@
       "DocumentRead": {
         "description": "Public view of a stored posting.",
         "properties": {
+          "applied_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied On"
+          },
+          "applied_resume": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppliedResume"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "best_score": {
             "anyOf": [
               {
@@ -422,6 +572,17 @@
           "chunk_count": {
             "title": "Chunk Count",
             "type": "integer"
+          },
+          "company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
           },
           "created_at": {
             "format": "date-time",
@@ -438,6 +599,18 @@
             "title": "Metadata",
             "type": "object"
           },
+          "posted_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Posted On"
+          },
           "requirement_count": {
             "anyOf": [
               {
@@ -448,6 +621,17 @@
               }
             ],
             "title": "Requirement Count"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
           },
           "source_url": {
             "anyOf": [
@@ -480,6 +664,11 @@
           "id",
           "title",
           "source_url",
+          "company",
+          "role",
+          "posted_on",
+          "applied_on",
+          "applied_resume",
           "metadata",
           "chunk_count",
           "requirement_count",
@@ -488,6 +677,50 @@
           "best_score"
         ],
         "title": "DocumentRead",
+        "type": "object"
+      },
+      "DocumentUpdate": {
+        "additionalProperties": false,
+        "description": "The fields of a posting its owner may correct.\n\nWhat the caller omits stays as it is, and an explicit null clears it.",
+        "properties": {
+          "company": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
+          "posted_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Posted On"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          }
+        },
+        "title": "DocumentUpdate",
         "type": "object"
       },
       "ExportFormat": {
@@ -1640,7 +1873,7 @@
     },
     "/documents": {
       "get": {
-        "description": "List the knowledge base, newest first, with your stage at each posting.",
+        "description": "List your postings, newest first, with your stage at each.",
         "operationId": "list_documents_documents_get",
         "parameters": [
           {
@@ -1845,7 +2078,7 @@
     },
     "/documents/{document_id}": {
       "delete": {
-        "description": "Remove a posting and its chunks from the knowledge base (FR-6).",
+        "description": "Remove one of your postings and its chunks (FR-6).\n\nOnly its owner may: postings are per account, so an admin has no say in them.",
         "operationId": "delete_document_documents__document_id__delete",
         "parameters": [
           {
@@ -1885,7 +2118,7 @@
         ]
       },
       "get": {
-        "description": "Return one posting with its text and requirements, or 404.\n\nOpen to every signed-in account, like the list: the knowledge base is shared.",
+        "description": "Return one of your postings with its text and requirements, or 404.",
         "operationId": "read_document_documents__document_id__get",
         "parameters": [
           {
@@ -1927,6 +2160,162 @@
           }
         ],
         "summary": "Read Document",
+        "tags": [
+          "documents"
+        ]
+      },
+      "patch": {
+        "description": "Correct the company, role or publication day of one of your postings.",
+        "operationId": "update_document_documents__document_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/documents/{document_id}/application": {
+      "delete": {
+        "description": "Take back the record of applying. Done already counts as done.\n\nFor the record only -- nothing is sent anywhere, now or when applying.",
+        "operationId": "withdraw_documents__document_id__application_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Withdraw",
+        "tags": [
+          "documents"
+        ]
+      },
+      "put": {
+        "description": "Record that you applied to one of your postings, or correct the record.",
+        "operationId": "apply_documents__document_id__application_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplicationWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Apply",
         "tags": [
           "documents"
         ]

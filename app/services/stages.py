@@ -1,10 +1,10 @@
 """
 How far one account got with each posting: its stage and its best score.
 
-Postings are shared by every account; matches and interviews are not, so
-every query filters by the caller (NFR-1). A page of postings costs two
-queries whatever its length -- one for scores, one for interviews -- never
-one per row.
+Postings belong to one account, and so do matches and interviews; every query
+still filters by the caller (NFR-1). A page of postings costs two queries
+whatever its length -- one for scores, one for interviews -- never one per
+row. Applying is read off the posting itself.
 """
 
 import uuid
@@ -14,12 +14,14 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.document import Document
 from app.models.interview import InterviewSession
 from app.models.match import Match
 
 ADDED = 1
 MATCHED = 2
 INTERVIEWED = 3
+APPLIED = 4
 
 
 @dataclass(frozen=True)
@@ -29,8 +31,9 @@ class Standing:
 
     The stage is the furthest step reached, not every step in order: an
     interview can be started before any match, and that is stage 3 with no
-    score. The score is the best of the account's matches, including ones whose
-    resume was deleted since -- it describes what happened, not what to do next.
+    score; an application sent without either is stage 4. The score is the
+    best of the account's matches, including ones whose resume was deleted
+    since -- it describes what happened, not what to do next.
     """
 
     stage: int = ADDED
@@ -38,11 +41,13 @@ class Standing:
 
 
 async def standings(
-    db: AsyncSession, user_id: uuid.UUID, document_ids: Sequence[uuid.UUID]
+    db: AsyncSession, user_id: uuid.UUID, documents: Sequence[Document]
 ) -> dict[uuid.UUID, Standing]:
     """Return the caller's standing at each of the given postings."""
-    if not document_ids:
+    if not documents:
         return {}
+
+    document_ids = [document.id for document in documents]
 
     best = await db.execute(
         select(Match.document_id, func.max(Match.score))
@@ -63,15 +68,17 @@ async def standings(
     )
 
     return {
-        document_id: Standing(
+        document.id: Standing(
             stage=(
-                INTERVIEWED
-                if document_id in interviewed
+                APPLIED
+                if document.applied_on is not None
+                else INTERVIEWED
+                if document.id in interviewed
                 else MATCHED
-                if document_id in scores
+                if document.id in scores
                 else ADDED
             ),
-            best_score=scores.get(document_id),
+            best_score=scores.get(document.id),
         )
-        for document_id in document_ids
+        for document in documents
     }

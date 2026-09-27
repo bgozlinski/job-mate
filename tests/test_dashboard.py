@@ -55,10 +55,15 @@ async def a_resume(factory: Factory, user_id: uuid.UUID) -> Owned:
         return Owned(user_id, resume.id)
 
 
-async def a_posting(factory: Factory, title: str = "Backend developer") -> uuid.UUID:
+async def a_posting(
+    factory: Factory, owner: uuid.UUID, title: str = "Backend developer"
+) -> uuid.UUID:
     async with factory() as db:
         document = Document(
-            title=title, content="Python and Docker.", content_hash=uuid.uuid4().hex * 2
+            user_id=owner,
+            title=title,
+            content="Python and Docker.",
+            content_hash=uuid.uuid4().hex * 2,
         )
         db.add(document)
         await db.commit()
@@ -152,7 +157,7 @@ async def test_without_a_resume_nothing_else_is_suggested(
     session_factory: Factory,
 ) -> None:
     user_id = await a_user(session_factory)
-    await a_posting(session_factory)
+    await a_posting(session_factory, user_id)
 
     steps = await steps_for(session_factory, user_id)
 
@@ -176,7 +181,7 @@ async def test_a_posting_without_a_match_is_offered_with_the_newest_resume(
     user_id = await a_user(session_factory)
     await a_resume(session_factory, user_id)
     newest = await a_resume(session_factory, user_id)
-    document_id = await a_posting(session_factory, "Data engineer")
+    document_id = await a_posting(session_factory, user_id, "Data engineer")
 
     steps = await steps_for(session_factory, user_id)
 
@@ -193,7 +198,7 @@ async def test_a_match_without_an_interview_is_offered_for_practice(
     session_factory: Factory,
 ) -> None:
     resume = await a_resume(session_factory, await a_user(session_factory))
-    document_id = await a_posting(session_factory, "Data engineer")
+    document_id = await a_posting(session_factory, resume.user_id, "Data engineer")
     await a_match(session_factory, resume, document_id, score=0.72)
 
     steps = await steps_for(session_factory, resume.user_id)
@@ -213,7 +218,7 @@ async def test_an_unfinished_interview_is_offered_with_its_progress(
     session_factory: Factory,
 ) -> None:
     resume = await a_resume(session_factory, await a_user(session_factory))
-    document_id = await a_posting(session_factory, "Data engineer")
+    document_id = await a_posting(session_factory, resume.user_id, "Data engineer")
     await a_match(session_factory, resume, document_id)
     session_id = await an_interview(session_factory, resume, document_id, answered=2)
 
@@ -234,12 +239,12 @@ async def test_steps_come_in_order_interviews_then_matches_then_practice(
     session_factory: Factory,
 ) -> None:
     resume = await a_resume(session_factory, await a_user(session_factory))
-    to_practise = await a_posting(session_factory, "Practise me")
+    to_practise = await a_posting(session_factory, resume.user_id, "Practise me")
     await a_match(session_factory, resume, to_practise)
-    to_continue = await a_posting(session_factory, "Continue me")
+    to_continue = await a_posting(session_factory, resume.user_id, "Continue me")
     await a_match(session_factory, resume, to_continue)
     await an_interview(session_factory, resume, to_continue)
-    await a_posting(session_factory, "Match me")
+    await a_posting(session_factory, resume.user_id, "Match me")
 
     steps = await steps_for(session_factory, resume.user_id)
 
@@ -253,7 +258,7 @@ async def test_each_kind_is_capped_and_newest_postings_come_first(
     await a_resume(session_factory, user_id)
     titles = [f"Posting {number}" for number in range(STEPS_PER_KIND + 1)]
     for title in titles:
-        await a_posting(session_factory, title)
+        await a_posting(session_factory, user_id, title)
 
     steps = await steps_for(session_factory, user_id)
 
@@ -269,8 +274,8 @@ async def test_practice_takes_the_best_match_per_posting_best_first(
     user_id = await a_user(session_factory)
     weaker = await a_resume(session_factory, user_id)
     stronger = await a_resume(session_factory, user_id)
-    first = await a_posting(session_factory, "First")
-    second = await a_posting(session_factory, "Second")
+    first = await a_posting(session_factory, user_id, "First")
+    second = await a_posting(session_factory, user_id, "Second")
     await a_match(session_factory, weaker, first, score=0.4)
     await a_match(session_factory, stronger, first, score=0.8)
     await a_match(session_factory, weaker, second, score=0.6)
@@ -292,7 +297,7 @@ async def test_practice_shows_the_gaps_of_the_best_match(
     user_id = await a_user(session_factory)
     weaker = await a_resume(session_factory, user_id)
     stronger = await a_resume(session_factory, user_id)
-    document_id = await a_posting(session_factory)
+    document_id = await a_posting(session_factory, user_id)
     await a_match(session_factory, stronger, document_id, 0.8, ["Kubernetes"])
     await a_match(session_factory, weaker, document_id, 0.4, ["Kubernetes", "Go"])
 
@@ -307,7 +312,9 @@ async def test_the_cap_on_practice_keeps_the_best_scores(
 ) -> None:
     resume = await a_resume(session_factory, await a_user(session_factory))
     for score in [0.9, 0.1, 0.8, 0.7]:
-        document_id = await a_posting(session_factory, f"Scored {score}")
+        document_id = await a_posting(
+            session_factory, resume.user_id, f"Scored {score}"
+        )
         await a_match(session_factory, resume, document_id, score=score)
 
     steps = await steps_for(session_factory, resume.user_id)
@@ -323,7 +330,7 @@ async def test_a_finished_interview_is_neither_continued_nor_practised_again(
     session_factory: Factory,
 ) -> None:
     resume = await a_resume(session_factory, await a_user(session_factory))
-    document_id = await a_posting(session_factory)
+    document_id = await a_posting(session_factory, resume.user_id)
     await a_match(session_factory, resume, document_id)
     await an_interview(session_factory, resume, document_id, status="finished")
 
@@ -336,8 +343,8 @@ async def test_a_deleted_posting_leaves_no_step_behind(
     session_factory: Factory,
 ) -> None:
     resume = await a_resume(session_factory, await a_user(session_factory))
-    await a_posting(session_factory, "Still here")
-    gone = await a_posting(session_factory, "Gone")
+    await a_posting(session_factory, resume.user_id, "Still here")
+    gone = await a_posting(session_factory, resume.user_id, "Gone")
     await a_match(session_factory, resume, gone)
     await an_interview(session_factory, resume, gone)
     async with session_factory() as db:
@@ -355,7 +362,7 @@ async def test_a_match_whose_resume_was_deleted_is_not_offered_for_practice(
     user_id = await a_user(session_factory)
     await a_resume(session_factory, user_id)
     gone = await a_resume(session_factory, user_id)
-    document_id = await a_posting(session_factory)
+    document_id = await a_posting(session_factory, user_id)
     await a_match(session_factory, gone, document_id)
     await delete_resume(session_factory, gone)
 
@@ -371,7 +378,7 @@ async def test_an_interview_whose_resume_was_deleted_is_not_offered_to_continue(
     user_id = await a_user(session_factory)
     await a_resume(session_factory, user_id)
     gone = await a_resume(session_factory, user_id)
-    document_id = await a_posting(session_factory)
+    document_id = await a_posting(session_factory, user_id)
     await a_match(session_factory, gone, document_id)
     await an_interview(session_factory, gone, document_id)
     await delete_resume(session_factory, gone)
@@ -384,17 +391,30 @@ async def test_an_interview_whose_resume_was_deleted_is_not_offered_to_continue(
 async def test_another_accounts_work_does_not_change_your_steps(
     session_factory: Factory,
 ) -> None:
-    """Postings are shared; matches, interviews and resumes are not (NFR-1)."""
+    """Postings, matches, interviews and resumes are all per account (NFR-1)."""
     owner = await a_user(session_factory)
     await a_resume(session_factory, owner)
+    await a_posting(session_factory, owner)
     others = await a_resume(session_factory, await a_user(session_factory))
-    document_id = await a_posting(session_factory)
-    await a_match(session_factory, others, document_id)
-    await an_interview(session_factory, others, document_id)
+    theirs = await a_posting(session_factory, others.user_id)
+    await a_match(session_factory, others, theirs)
+    await an_interview(session_factory, others, theirs)
 
     steps = await steps_for(session_factory, owner)
 
     assert kinds(steps) == ["match"]
+
+
+async def test_another_accounts_posting_does_not_count_as_yours(
+    session_factory: Factory,
+) -> None:
+    owner = await a_user(session_factory)
+    await a_resume(session_factory, owner)
+    await a_posting(session_factory, await a_user(session_factory))
+
+    steps = await steps_for(session_factory, owner)
+
+    assert kinds(steps) == ["add_posting"]
 
 
 async def test_another_accounts_resume_does_not_count_as_yours(
@@ -402,7 +422,7 @@ async def test_another_accounts_resume_does_not_count_as_yours(
 ) -> None:
     owner = await a_user(session_factory)
     await a_resume(session_factory, await a_user(session_factory))
-    await a_posting(session_factory)
+    await a_posting(session_factory, owner)
 
     steps = await steps_for(session_factory, owner)
 

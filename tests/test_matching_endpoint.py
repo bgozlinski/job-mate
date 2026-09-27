@@ -113,6 +113,20 @@ async def test_an_unknown_document_is_not_found(client, owner):
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
+async def test_someone_elses_document_is_not_found(client, owner):
+    resume_id = await create_resume(client, owner)
+    stranger = await account(client, "stranger@example.com")
+    document_id = await create_document(client, stranger)
+
+    response = await client.post(
+        f"/resumes/{resume_id}/match",
+        json={"document_id": document_id},
+        headers=owner,
+    )
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
 async def test_matching_requires_a_token(client, owner):
     resume_id = await create_resume(client, owner)
     document_id = await create_document(client, owner)

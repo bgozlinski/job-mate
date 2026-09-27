@@ -1,5 +1,6 @@
 import asyncio
 import sys
+import uuid
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from urllib.parse import urlsplit, urlunsplit
 
@@ -21,11 +22,12 @@ from app.api.deps import (
     get_resume_skill_extractor,
     get_suggestion_writer,
 )
+from app.auth.security import hash_password
 from app.core.config import get_settings
 from app.core.db import Base
 from app.core.prompts import StaticPromptStore
 from app.main import app
-from app.models import User  # noqa: F401  -- registers the table on Base.metadata
+from app.models import User
 from app.models.chunk import EMBEDDING_DIMENSIONS
 from app.services.matching import Suggestions
 from app.services.scraping import SourceUnavailableError
@@ -171,6 +173,25 @@ async def session_factory(
     yield async_sessionmaker(engine, expire_on_commit=False)
 
     await engine.dispose()
+
+
+async def an_account(session_factory: async_sessionmaker[AsyncSession]) -> uuid.UUID:
+    """Store a user with a random address and password, and return its id."""
+    async with session_factory() as session:
+        user = User(
+            email=f"{uuid.uuid4()}@example.com",
+            password_hash=hash_password(uuid.uuid4().hex),
+        )
+        session.add(user)
+        await session.commit()
+
+        return user.id
+
+
+@pytest_asyncio.fixture
+async def owner(session_factory: async_sessionmaker[AsyncSession]) -> uuid.UUID:
+    """An account to own the postings a test stores, since every posting has one."""
+    return await an_account(session_factory)
 
 
 @pytest.fixture
