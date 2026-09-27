@@ -41,6 +41,10 @@ class Document(Base):
             "applied_resume_id IS NULL OR applied_on IS NOT NULL",
             name="ck_documents_applied_resume_needs_day",
         ),
+        CheckConstraint(
+            "work_mode IN ('remote', 'hybrid', 'office')",
+            name="ck_documents_work_mode",
+        ),
         Index(
             "ix_documents_metadata_gin",
             "metadata",
@@ -61,6 +65,14 @@ class Document(Base):
     source_url: Mapped[str | None] = mapped_column(Text())
     company: Mapped[str | None] = mapped_column(Text())
     role: Mapped[str | None] = mapped_column(Text())
+    city: Mapped[str | None] = mapped_column(Text())
+    """Where the job is, as the page names the first place it lists."""
+    work_mode: Mapped[str | None] = mapped_column(Text())
+    """
+    remote, hybrid or office -- or NULL when nobody said. A page says only
+    "remote" (schema.org's TELECOMMUTE); the other two are the owner's to set,
+    and a page that does not say remote is not thereby an office.
+    """
     posted_on: Mapped[date | None] = mapped_column(Date())
     """
     The day the posting was published, as the page states it or the owner types it.

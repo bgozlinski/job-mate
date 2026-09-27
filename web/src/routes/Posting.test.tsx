@@ -16,6 +16,8 @@ const POSTING: DocumentDetail = {
   source_url: 'https://justjoin.it/job-offer/dcv-python',
   company: 'DCV',
   role: 'Python Developer',
+  city: 'Kraków',
+  work_mode: 'remote',
   posted_on: '2026-09-07',
   applied_on: null,
   applied_resume: null,
@@ -113,7 +115,7 @@ test('company, role and publication day read as one sentence', async () => {
   show()
 
   expect(
-    await screen.findByText('DCV, Python Developer, published Sep 7, 2026'),
+    await screen.findByText('DCV, Python Developer, Kraków, remote, published Sep 7, 2026'),
   ).toBeInTheDocument()
 })
 
@@ -134,10 +136,19 @@ test('the owner corrects the details, and a cleared field is sent as empty', asy
   await userEvent.clear(within(form).getByLabelText('Company'))
   await userEvent.type(within(form).getByLabelText('Company'), 'Acme')
   await userEvent.clear(within(form).getByLabelText('Published on'))
+  await userEvent.selectOptions(within(form).getByLabelText('Work mode'), 'hybrid')
   await userEvent.click(within(form).getByRole('button', { name: 'Save' }))
 
   await waitFor(() => {
-    expect(sent).toEqual([{ company: 'Acme', role: 'Python Developer', posted_on: null }])
+    expect(sent).toEqual([
+      {
+        company: 'Acme',
+        role: 'Python Developer',
+        city: 'Kraków',
+        work_mode: 'hybrid',
+        posted_on: null,
+      },
+    ])
   })
   await waitFor(() => {
     expect(screen.queryByRole('form', { name: 'Posting details' })).not.toBeInTheDocument()

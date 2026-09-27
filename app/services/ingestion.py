@@ -31,6 +31,8 @@ class SourceDocument:
     source_url: str | None = None
     company: str | None = None
     role: str | None = None
+    city: str | None = None
+    work_mode: str | None = None
     posted_on: date | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -102,6 +104,8 @@ async def ingest_document(  # noqa: PLR0913, PLR0917 -- three are services
         source_url=source.source_url,
         company=source.company,
         role=source.role,
+        city=source.city,
+        work_mode=source.work_mode,
         posted_on=source.posted_on,
         content=normalized,
         content_hash=digest,

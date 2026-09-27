@@ -67,6 +67,7 @@ async def test_a_posting_is_ingested_from_its_address(client, posting_source):
         "Python Developer",
         "2026-09-07",
     )
+    assert (body["city"], body["work_mode"]) == ("Kraków", None)
     assert posting_source.fetched == [URL]
 
 

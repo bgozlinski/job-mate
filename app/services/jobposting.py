@@ -14,6 +14,9 @@ JOB_POSTING_TYPE = "JobPosting"
 
 COLLECTION_PAGE_TYPE = "CollectionPage"
 
+TELECOMMUTE = "TELECOMMUTE"
+"""The one jobLocationType schema.org defines: the job is done remotely."""
+
 MAX_SEARCH_RESULTS = 100
 """
 More than any one page of results lists (justjoin.it shows 25). A page claiming more
@@ -56,6 +59,8 @@ class ScrapedPosting:
     title: str | None = None
     company: str | None = None
     role: str | None = None
+    city: str | None = None
+    work_mode: str | None = None
     posted_on: date | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -209,6 +214,18 @@ def _place(value: object) -> dict[str, str]:
     return {key: value for key, value in parts.items() if value}
 
 
+def _work_mode(value: object) -> str | None:
+    """
+    Say "remote" when the posting declares TELECOMMUTE, and nothing otherwise.
+
+    Anywhere in a list, not only first. Without it the page has simply not said:
+    guessing "office" would put a claim in the column that nobody made.
+    """
+    declared = value if isinstance(value, list) else [value]
+
+    return "remote" if TELECOMMUTE in declared else None
+
+
 def _salary(value: object) -> dict[str, Any]:
     """Map a MonetaryAmount to flat keys, when the posting states one."""
     node = _first(value)
@@ -296,6 +313,8 @@ def parse_job_posting(document: str) -> ScrapedPosting:
         title=_title(posting),
         company=_named(posting.get("hiringOrganization")),
         role=_text(posting.get("title")),
+        city=_place(posting.get("jobLocation")).get("city"),
+        work_mode=_work_mode(posting.get("jobLocationType")),
         posted_on=_day(posting.get("datePosted")),
         metadata=_metadata(posting),
     )

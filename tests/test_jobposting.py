@@ -82,6 +82,21 @@ def test_the_company_role_and_day_are_read_apart_from_the_title():
     assert scraped.posted_on == date(2026, 9, 7)
 
 
+def test_the_city_is_read_and_the_work_mode_left_unsaid():
+    """No TELECOMMUTE is not a claim of an office: the page has not said."""
+    scraped = parse_job_posting(page(POSTING))
+
+    assert scraped.city == "Kraków"
+    assert scraped.work_mode is None
+
+
+@pytest.mark.parametrize("declared", ["TELECOMMUTE", ["Place", "TELECOMMUTE"]])
+def test_a_posting_declared_telecommute_is_remote(declared: object) -> None:
+    scraped = parse_job_posting(page(POSTING | {"jobLocationType": declared}))
+
+    assert scraped.work_mode == "remote"
+
+
 @pytest.mark.parametrize(
     ("stated", "expected"),
     [

@@ -351,6 +351,13 @@ function hostOf(url: string): string {
   }
 }
 
+/** Where and how the job is done, as far as anyone said: "Warszawa, remote". */
+function locationOf(document: Document): string | null {
+  const said = [document.city, document.work_mode].filter(Boolean)
+
+  return said.length > 0 ? said.join(', ') : null
+}
+
 function resumeName(resume: { original_filename?: string | null }): string {
   return resume.original_filename ?? 'Pasted text'
 }
@@ -358,6 +365,7 @@ function resumeName(resume: { original_filename?: string | null }): string {
 const COLUMNS = [
   'Company',
   'Role',
+  'Location',
   'Link',
   'Posted',
   'Added',
@@ -641,6 +649,9 @@ function RegisterEntry({
             )}
             {document.requirement_count === null ? 'requirements not read' : null}
           </span>
+        </Cell>
+        <Cell label="Location" className="lg:max-w-40">
+          {locationOf(document) ?? <Missing said="not stated" />}
         </Cell>
         <Cell label="Link">
           {document.source_url ? (

@@ -739,6 +739,8 @@ export interface components {
             best_score: number | null;
             /** Chunk Count */
             chunk_count: number;
+            /** City */
+            city: string | null;
             /** Company */
             company: string | null;
             /** Content */
@@ -771,6 +773,8 @@ export interface components {
             stage: number;
             /** Title */
             title: string | null;
+            /** Work Mode */
+            work_mode: ("remote" | "hybrid" | "office") | null;
         };
         /**
          * DocumentFromSearch
@@ -810,6 +814,8 @@ export interface components {
             best_score: number | null;
             /** Chunk Count */
             chunk_count: number;
+            /** City */
+            city: string | null;
             /** Company */
             company: string | null;
             /**
@@ -838,6 +844,8 @@ export interface components {
             stage: number;
             /** Title */
             title: string | null;
+            /** Work Mode */
+            work_mode: ("remote" | "hybrid" | "office") | null;
         };
         /**
          * DocumentUpdate
@@ -846,12 +854,16 @@ export interface components {
          *     What the caller omits stays as it is, and an explicit null clears it.
          */
         DocumentUpdate: {
+            /** City */
+            city?: string | null;
             /** Company */
             company?: string | null;
             /** Posted On */
             posted_on?: string | null;
             /** Role */
             role?: string | null;
+            /** Work Mode */
+            work_mode?: ("remote" | "hybrid" | "office") | null;
         };
         /** @enum {string} */
         ExportFormat: "md" | "docx" | "pdf";

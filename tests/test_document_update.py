@@ -83,6 +83,23 @@ async def test_an_explicit_null_clears_only_that_field(client: AsyncClient) -> N
     assert (body["company"], body["role"]) == (None, "Dev")
 
 
+async def test_the_owner_sets_the_city_and_the_work_mode(client: AsyncClient) -> None:
+    headers = await account(client)
+    document_id = await a_posting(client, headers)
+
+    body = await patch(
+        client, headers, document_id, {"city": " Lublin ", "work_mode": "hybrid"}
+    )
+
+    assert (body["city"], body["work_mode"]) == ("Lublin", "hybrid")
+
+    cleared = await patch(
+        client, headers, document_id, {"city": "  ", "work_mode": None}
+    )
+
+    assert (cleared["city"], cleared["work_mode"]) == (None, None)
+
+
 async def test_a_blank_label_is_stored_as_none_and_a_padded_one_trimmed(
     client: AsyncClient,
 ) -> None:
@@ -115,6 +132,8 @@ async def test_tomorrow_is_allowed_for_the_time_zones_ahead(
         {"posted_on": "2026-02-30"},
         {"company": "x" * (MAX_LABEL_LENGTH + 1)},
         {"title": "Not editable here"},
+        {"work_mode": "home"},
+        {"city": "x" * (MAX_LABEL_LENGTH + 1)},
     ],
 )
 async def test_a_value_it_cannot_take_is_rejected(
