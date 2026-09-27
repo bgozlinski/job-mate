@@ -100,6 +100,15 @@ async def test_the_owner_sets_the_city_and_the_work_mode(client: AsyncClient) ->
     assert (cleared["city"], cleared["work_mode"]) == (None, None)
 
 
+async def test_a_city_typed_in_is_kept_under_its_one_name(client: AsyncClient) -> None:
+    headers = await account(client)
+    document_id = await a_posting(client, headers)
+
+    body = await patch(client, headers, document_id, {"city": "warsaw"})
+
+    assert body["city"] == "Warszawa"
+
+
 async def test_a_blank_label_is_stored_as_none_and_a_padded_one_trimmed(
     client: AsyncClient,
 ) -> None:

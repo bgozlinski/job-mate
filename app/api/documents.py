@@ -53,6 +53,7 @@ from app.schemas.document import (
     SearchResults,
     WorkMode,
 )
+from app.services.cities import canonical_city
 from app.services.embeddings import EmbeddingModel
 from app.services.ingestion import EmptyDocumentError, SourceDocument, ingest_document
 from app.services.jobposting import (
@@ -222,7 +223,13 @@ async def update_document(
     payload: DocumentUpdate, document: OwnedDocument, session: Session
 ) -> DocumentRead:
     """Correct the company, role or publication day of one of your postings."""
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+
+    if "city" in changes:
+        # Typed by the owner, so as varied as any page: kept under one name too.
+        changes["city"] = canonical_city(changes["city"])
+
+    for field, value in changes.items():
         setattr(document, field, value)
 
     await session.commit()
