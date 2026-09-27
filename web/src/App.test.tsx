@@ -55,6 +55,24 @@ test('a visitor with no session is sent to the login screen', async () => {
   expect(await screen.findByLabelText('Email')).toBeInTheDocument()
 })
 
+test('the login screen carries the footer', async () => {
+  signedOut()
+
+  show('/')
+
+  await screen.findByLabelText('Email')
+  expect(screen.getByRole('contentinfo')).toHaveTextContent('© 2026 BNBG')
+})
+
+test('every signed-in page carries the footer', async () => {
+  signedIn()
+
+  show('/')
+
+  await screen.findByRole('button', { name: 'Log out' })
+  expect(screen.getByRole('contentinfo')).toHaveTextContent('© 2026 BNBG')
+})
+
 test('a returning visitor is not shown the login screen', async () => {
   // The cookie is valid and unreadable from here, so the application has to
   // ask before deciding. Rendering the login form while that answer is in

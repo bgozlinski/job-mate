@@ -3,7 +3,7 @@ import type { ReactElement, SyntheticEvent } from 'react'
 import { Navigate, useLocation } from 'react-router'
 
 import { useLogin, useRegister, useSession } from '../auth/session'
-import { Alert, Button, Field, Sheet } from '../ui'
+import { Alert, Button, Field, Footer, Sheet } from '../ui'
 
 interface FromState {
   from?: string
@@ -54,72 +54,76 @@ export function Login(): ReactElement {
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center gap-8 p-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">
-          Job<span className="text-accent">Mate</span>
-        </h1>
-        <p className="mt-1 text-sm text-ink-faint">
-          Measure a resume against the job you want.
-        </p>
-      </div>
+    <div className="flex min-h-dvh flex-col">
+      <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-8 p-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Job<span className="text-accent">Mate</span>
+          </h1>
+          <p className="mt-1 text-sm text-ink-faint">
+            Measure a resume against the job you want.
+          </p>
+        </div>
 
-      {/* On a sheet, like every page behind it: the only one without the
-          header, and without a sheet it would be fields on bare paper. */}
-      <Sheet>
-        <form onSubmit={onSubmit} className="flex flex-col gap-4">
-          <Field id="email" label="Email">
-            {(className, id) => (
-              <input
-                id={id}
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                className={className}
-                value={email}
-                onChange={(event) => {
-                  setEmail(event.target.value)
-                }}
-              />
-            )}
-          </Field>
+        {/* On a sheet, like every page behind it: the only one without the
+            header, and without a sheet it would be fields on bare paper. */}
+        <Sheet>
+          <form onSubmit={onSubmit} className="flex flex-col gap-4">
+            <Field id="email" label="Email">
+              {(className, id) => (
+                <input
+                  id={id}
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  className={className}
+                  value={email}
+                  onChange={(event) => {
+                    setEmail(event.target.value)
+                  }}
+                />
+              )}
+            </Field>
 
-          <Field id="password" label="Password">
-            {(className, id) => (
-              <input
-                id={id}
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                className={className}
-                value={password}
-                onChange={(event) => {
-                  setPassword(event.target.value)
-                }}
-              />
-            )}
-          </Field>
+            <Field id="password" label="Password">
+              {(className, id) => (
+                <input
+                  id={id}
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  className={className}
+                  value={password}
+                  onChange={(event) => {
+                    setPassword(event.target.value)
+                  }}
+                />
+              )}
+            </Field>
 
-          <div className="mt-2 flex flex-col gap-2">
-            <Button type="submit" name="action" value="login" disabled={pending}>
-              Log in
-            </Button>
-            <Button
-              type="submit"
-              name="action"
-              value="register"
-              variant="secondary"
-              disabled={pending}
-            >
-              Create an account
-            </Button>
-          </div>
-        </form>
-      </Sheet>
+            <div className="mt-2 flex flex-col gap-2">
+              <Button type="submit" name="action" value="login" disabled={pending}>
+                Log in
+              </Button>
+              <Button
+                type="submit"
+                name="action"
+                value="register"
+                variant="secondary"
+                disabled={pending}
+              >
+                Create an account
+              </Button>
+            </div>
+          </form>
+        </Sheet>
 
-      {failure ? <Alert>{failure.message}</Alert> : null}
-    </main>
+        {failure ? <Alert>{failure.message}</Alert> : null}
+      </main>
+
+      <Footer />
+    </div>
   )
 }
