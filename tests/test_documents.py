@@ -63,9 +63,10 @@ async def test_the_knowledge_base_can_be_listed(client):
     created = await client.post("/documents", json=payload(), headers=headers)
 
     response = await client.get("/documents", headers=headers)
-    body = response.json()
+    body = response.json()["items"]
 
     assert response.status_code == status.HTTP_200_OK
+    assert response.json()["total"] == 1
     assert [row["id"] for row in body] == [created.json()["id"]]
     assert body[0]["chunk_count"] == created.json()["chunk_count"]
     assert body[0]["title"] == "Backend engineer"
@@ -80,7 +81,7 @@ async def test_the_listing_holds_only_your_postings(client):
     response = await client.get("/documents", headers=other)
 
     assert response.status_code == status.HTTP_200_OK
-    assert response.json() == []
+    assert response.json() == {"items": [], "total": 0}
 
 
 async def test_the_listing_is_newest_first(client):
@@ -92,7 +93,7 @@ async def test_the_listing_is_newest_first(client):
         headers=headers,
     )
 
-    body = (await client.get("/documents", headers=headers)).json()
+    body = (await client.get("/documents", headers=headers)).json()["items"]
 
     assert [row["id"] for row in body] == [newer.json()["id"], older.json()["id"]]
 
@@ -117,8 +118,31 @@ async def test_a_page_can_be_walked_with_limit_and_offset(client):
         )
     ).json()
 
-    assert [row["id"] for row in first] == list(reversed(ids))[:2]
-    assert [row["id"] for row in second] == list(reversed(ids))[2:]
+    assert [row["id"] for row in first["items"]] == list(reversed(ids))[:2]
+    assert [row["id"] for row in second["items"]] == list(reversed(ids))[2:]
+    # Every page counts the whole list, so the client can number its pages.
+    assert first["total"] == second["total"] == len(ids)
+
+
+async def test_a_posting_with_many_chunks_counts_once(client):
+    """Counted without the join to chunks, which would count those instead."""
+    headers = await account(client)
+    created = await client.post("/documents", json=payload(), headers=headers)
+
+    body = (await client.get("/documents", headers=headers)).json()
+
+    assert created.json()["chunk_count"] > 1
+    assert body["total"] == 1
+
+
+async def test_the_total_counts_only_your_postings(client):
+    await client.post("/documents", json=payload(), headers=await account(client))
+    other = await account(client, "other@example.com")
+    await client.post("/documents", json=payload(), headers=other)
+
+    body = (await client.get("/documents", headers=other)).json()
+
+    assert body["total"] == 1
 
 
 @pytest.mark.parametrize(

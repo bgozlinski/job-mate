@@ -1,54 +1,85 @@
-import { useState } from 'react'
 import type { ReactElement } from 'react'
 import { HistoryIcon } from 'lucide-react'
-import { useSearchParams } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 
-import { useInterviews } from '../api/interview'
-import { HISTORY_PAGE_SIZE, MAX_HISTORY_PAGE_SIZE, useMatches } from '../api/matching'
-import { Alert, Button, EmptyState, PageHeader, Sheet, Skeleton } from '../ui'
+import { pageCount } from '../api/documents'
+import { HISTORY_PAGE_SIZE, useHistory } from '../api/history'
+import type { HistoryItem, HistoryKind } from '../api/history'
+import {
+  Alert,
+  Button,
+  EmptyState,
+  Notice,
+  PageHeader,
+  Pagination,
+  Sheet,
+  Skeleton,
+  pageFrom,
+} from '../ui'
 import { TimelineItem } from './TimelineItem'
-import { newestFirst } from './timeline'
+import { fromInterview, fromMatch } from './timeline'
+import type { Row } from './timeline'
 
-type Kind = 'all' | 'matches' | 'interviews'
-
-const FILTERS: { kind: Kind; label: string }[] = [
+const FILTERS: { kind: HistoryKind; label: string }[] = [
   { kind: 'all', label: 'All' },
   { kind: 'matches', label: 'Matches' },
   { kind: 'interviews', label: 'Interviews' },
 ]
 
-function kindOf(value: string | null): Kind {
+function kindOf(value: string | null): HistoryKind {
   return value === 'matches' || value === 'interviews' ? value : 'all'
 }
 
+/** The address of one page of one kind of history; page 1 and "all" are bare. */
+function historyHref(kind: HistoryKind, page: number): string {
+  const query = new URLSearchParams()
+
+  if (kind !== 'all') {
+    query.set('kind', kind)
+  }
+
+  if (page > 1) {
+    query.set('page', String(page))
+  }
+
+  const search = query.toString()
+
+  return search ? `/history?${search}` : '/history'
+}
+
+/** One line of the history, whichever of the two it is. */
+function rowOf(item: HistoryItem): Row | null {
+  if (item.kind === 'match' && item.match) {
+    return fromMatch(item.match)
+  }
+
+  if (item.kind === 'interview' && item.interview) {
+    return fromInterview(item.interview)
+  }
+
+  return null
+}
+
 /**
- * Everything you did, newest first: matches and interviews on one timeline.
+ * Everything you did, newest first: matches and interviews on one timeline,
+ * a numbered page at a time.
  *
- * Two lists read from the top with the same growing limit, merged here. Each
- * is fetched from offset 0, as the old histories were: a new row lands above
- * the page, so paging by offset would show one row twice.
+ * The API merges the two before it pages them, since page 3 of the timeline
+ * is not page 3 of each list. The kind and the page live in the address, so a
+ * reload or "back" returns to the same place; picking a kind starts at its
+ * first page.
  */
 export function History(): ReactElement {
   const [params, setParams] = useSearchParams()
   const kind = kindOf(params.get('kind'))
-  const [shown, setShown] = useState(HISTORY_PAGE_SIZE)
-  const matches = useMatches(shown)
-  const interviews = useInterviews(shown)
-
-  const rows = newestFirst(
-    kind === 'interviews' ? [] : (matches.data ?? []),
-    kind === 'matches' ? [] : (interviews.data ?? []),
-  )
-
-  const pending =
-    (kind !== 'interviews' && matches.isPending) ||
-    (kind !== 'matches' && interviews.isPending)
-  const error = matches.error ?? interviews.error
-  // A full page from either list means that list may have more; the API gives
-  // no total, so a short page is how the end shows.
-  const more =
-    (kind !== 'interviews' && (matches.data?.length ?? 0) >= shown) ||
-    (kind !== 'matches' && (interviews.data?.length ?? 0) >= shown)
+  const page = pageFrom(params.get('page'))
+  const history = useHistory(kind, page)
+  const rows = (history.data?.items ?? [])
+    .map(rowOf)
+    .filter((row): row is Row => row !== null)
+  const total = history.data?.total ?? 0
+  const pages = pageCount(total, HISTORY_PAGE_SIZE)
+  const pastEnd = history.isSuccess && total > 0 && rows.length === 0
 
   return (
     <>
@@ -74,24 +105,34 @@ export function History(): ReactElement {
         ))}
       </div>
 
-      {pending ? <Skeleton lines={3} label="Loading your history…" /> : null}
-      {error ? (
+      {history.isPending ? <Skeleton lines={3} label="Loading your history…" /> : null}
+      {history.error ? (
         <Alert
           onRetry={() => {
-            // Both, whichever failed: asking the healthy one again costs a
-            // cheap read and keeps the timeline from mixing old and new rows.
-            void matches.refetch()
-            void interviews.refetch()
+            void history.refetch()
           }}
         >
-          {error.message}
+          {history.error.message}
         </Alert>
       ) : null}
 
-      {!pending && !error && rows.length === 0 ? (
+      {history.isSuccess && total === 0 ? (
         <EmptyState icon={HistoryIcon} title="Nothing here yet.">
           Open a posting to match your CV against it or practise its interview.
         </EmptyState>
+      ) : null}
+
+      {pastEnd ? (
+        <Notice>
+          There is no page {page} of this history.{' '}
+          <Link
+            to={historyHref(kind, pages)}
+            className="text-accent underline underline-offset-2"
+          >
+            Go to the last page
+          </Link>
+          .
+        </Notice>
       ) : null}
 
       {rows.length > 0 ? (
@@ -104,27 +145,12 @@ export function History(): ReactElement {
         </Sheet>
       ) : null}
 
-      {more ? (
-        shown >= MAX_HISTORY_PAGE_SIZE ? (
-          <p className="text-sm text-ink-faint">
-            History shows at most {MAX_HISTORY_PAGE_SIZE} of each.
-          </p>
-        ) : (
-          <div className="flex">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                setShown((current) =>
-                  Math.min(current + HISTORY_PAGE_SIZE, MAX_HISTORY_PAGE_SIZE),
-                )
-              }}
-            >
-              Load more
-            </Button>
-          </div>
-        )
-      ) : null}
+      <Pagination
+        page={page}
+        count={pages}
+        hrefFor={(n) => historyHref(kind, n)}
+        label="Pages of history"
+      />
     </>
   )
 }

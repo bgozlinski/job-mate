@@ -9,6 +9,7 @@ from app.api.auth import router as auth_router
 from app.api.dashboard import router as dashboard_router
 from app.api.documents import router as documents_router
 from app.api.health import router as health_router
+from app.api.history import router as history_router
 from app.api.matches import router as matches_router
 from app.api.matching import router as matching_router
 from app.api.resumes import router as resumes_router
@@ -92,6 +93,7 @@ app.include_router(matching_router)
 app.include_router(matches_router)
 app.include_router(sessions_router)
 app.include_router(dashboard_router)
+app.include_router(history_router)
 
 
 @app.get("/")

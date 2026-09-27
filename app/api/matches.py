@@ -19,7 +19,7 @@ DEFAULT_PAGE_SIZE = 20
 MAX_PAGE_SIZE = 100
 
 
-def _summarise(match: Match) -> MatchSummary:
+def summarise_match(match: Match) -> MatchSummary:
     """Describe one stored match without carrying its lists."""
     return MatchSummary(
         id=match.id,
@@ -58,7 +58,7 @@ async def list_matches(
         .offset(offset)
     )
 
-    return [_summarise(match) for match in rows]
+    return [summarise_match(match) for match in rows]
 
 
 @router.get("/{match_id}")

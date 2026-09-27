@@ -79,7 +79,7 @@ async def test_only_the_named_offer_is_stored_not_the_rail_beside_it(
     headers = await account(client)
 
     await client.post("/documents/from-url", json={"url": URL}, headers=headers)
-    listed = (await client.get("/documents", headers=headers)).json()
+    listed = (await client.get("/documents", headers=headers)).json()["items"]
 
     assert "SomeoneElse" not in json.dumps(listed)
 

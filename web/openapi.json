@@ -847,6 +847,44 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HistoryItem": {
+        "description": "One line of the history: a match or an interview, whichever it is.",
+        "properties": {
+          "interview": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SessionSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "enum": [
+              "match",
+              "interview"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "match": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MatchSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "HistoryItem",
+        "type": "object"
+      },
       "ImprovementRead": {
         "description": "A requirement answered weakly, and what would have helped.",
         "properties": {
@@ -1213,6 +1251,48 @@
           "created_at"
         ],
         "title": "MessageRead",
+        "type": "object"
+      },
+      "Page_DocumentRead_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "Page[DocumentRead]",
+        "type": "object"
+      },
+      "Page_HistoryItem_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "Page[HistoryItem]",
         "type": "object"
       },
       "PractiseStep": {
@@ -1998,7 +2078,7 @@
     },
     "/documents": {
       "get": {
-        "description": "List your postings, newest first, with your stage at each.",
+        "description": "List a page of your postings, newest first, with your stage at each.\n\nWith the count of all of them, so the client can number its pages. Counted\nwithout the join to chunks, which would count chunks, not postings.",
         "operationId": "list_documents_documents_get",
         "parameters": [
           {
@@ -2030,11 +2110,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/DocumentRead"
-                  },
-                  "title": "Response List Documents Documents Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/Page_DocumentRead_"
                 }
               }
             },
@@ -2542,6 +2618,83 @@
         "summary": "Readiness",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/history": {
+      "get": {
+        "description": "List your matches and interviews newest first, with how many there are.\n\nMerged in SQL, not in the client: page 3 of the timeline is not page 3 of\neach list, so the two are one ordered union before any of it is cut. Only\nids and times go through the union; the rows of the page are then read in\nfull, two queries whatever its length. Only yours (NFR-1).",
+        "operationId": "read_history_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "matches",
+                "interviews"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_HistoryItem_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read History",
+        "tags": [
+          "history"
         ]
       }
     },

@@ -53,7 +53,7 @@ async def test_the_owner_fills_in_company_role_and_day(client: AsyncClient) -> N
         "Backend engineer",
         "2026-09-01",
     )
-    listed = (await client.get("/documents", headers=headers)).json()
+    listed = (await client.get("/documents", headers=headers)).json()["items"]
     assert listed[0]["company"] == "Acme"
 
 

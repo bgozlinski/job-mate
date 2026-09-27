@@ -38,7 +38,7 @@ function newAccount(): void {
     ),
     http.get('/api/matches', () => HttpResponse.json([])),
     http.get('/api/sessions', () => HttpResponse.json([])),
-    http.get('/api/documents', () => HttpResponse.json([])),
+    http.get('/api/documents', () => HttpResponse.json({ items: [], total: 0 })),
   )
 }
 

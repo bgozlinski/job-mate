@@ -27,6 +27,7 @@ export {
   Thinking,
 } from './feedback'
 export { Footer, Muted, PageHeader, PageTitle, Sheet } from './surfaces'
+export { Pagination, pageFrom, pagesAround } from './pagination'
 export { StageRail, reachedOf } from './stages'
 export type { Reached } from './stages'
 export { ThemeToggle } from './ThemeToggle'

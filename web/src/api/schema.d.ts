@@ -153,7 +153,10 @@ export interface paths {
         };
         /**
          * List Documents
-         * @description List your postings, newest first, with your stage at each.
+         * @description List a page of your postings, newest first, with your stage at each.
+         *
+         *     With the count of all of them, so the client can number its pages. Counted
+         *     without the join to chunks, which would count chunks, not postings.
          */
         get: operations["list_documents_documents_get"];
         put?: never;
@@ -322,6 +325,31 @@ export interface paths {
          * @description Report whether the dependencies are reachable, 503 if any is not.
          */
         get: operations["readiness_health_ready_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read History
+         * @description List your matches and interviews newest first, with how many there are.
+         *
+         *     Merged in SQL, not in the client: page 3 of the timeline is not page 3 of
+         *     each list, so the two are one ordered union before any of it is cut. Only
+         *     ids and times go through the union; the rows of the page are then read in
+         *     full, two queries whatever its length. Only yours (NFR-1).
+         */
+        get: operations["read_history_history_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -873,6 +901,19 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * HistoryItem
+         * @description One line of the history: a match or an interview, whichever it is.
+         */
+        HistoryItem: {
+            interview?: components["schemas"]["SessionSummary"] | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "match" | "interview";
+            match?: components["schemas"]["MatchSummary"] | null;
+        };
+        /**
          * ImprovementRead
          * @description A requirement answered weakly, and what would have helped.
          */
@@ -1032,6 +1073,20 @@ export interface components {
             verdicts: {
                 [key: string]: components["schemas"]["VerdictRead"];
             } | null;
+        };
+        /** Page[DocumentRead] */
+        Page_DocumentRead_: {
+            /** Items */
+            items: components["schemas"]["DocumentRead"][];
+            /** Total */
+            total: number;
+        };
+        /** Page[HistoryItem] */
+        Page_HistoryItem_: {
+            /** Items */
+            items: components["schemas"]["HistoryItem"][];
+            /** Total */
+            total: number;
         };
         /**
          * PractiseStep
@@ -1470,7 +1525,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DocumentRead"][];
+                    "application/json": components["schemas"]["Page_DocumentRead_"];
                 };
             };
             /** @description Validation Error */
@@ -1815,6 +1870,39 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    read_history_history_get: {
+        parameters: {
+            query?: {
+                kind?: "all" | "matches" | "interviews";
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_HistoryItem_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -78,7 +78,7 @@ async def listed(client: AsyncClient, headers: dict[str, str]) -> dict[str, Any]
     response = await client.get("/documents", headers=headers)
 
     assert response.status_code == status.HTTP_200_OK
-    return dict(response.json()[0])
+    return dict(response.json()["items"][0])
 
 
 async def test_a_posting_you_have_not_touched_is_at_the_first_stage(

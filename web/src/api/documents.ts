@@ -13,7 +13,7 @@ export type DocumentUpdate = components['schemas']['DocumentUpdate']
 
 export const PAGE_SIZE = 20
 export const MAX_PAGE_SIZE = 100
-/** What the listing route will return at most; asking for more is a 422. */
+/** What the listing route will return in one page at most; asking for more is a 422. */
 
 export const documentsKey = ['documents'] as const
 
@@ -23,25 +23,30 @@ export interface Ingested {
   duplicate: boolean
 }
 
+/** One numbered page of a list, and how long the whole list is. */
+export interface Page<Item> { items: Item[]; total: number }
+
+/** How many pages a list of `total` rows makes, never fewer than one. */
+export function pageCount(total: number, size: number): number {
+  return Math.max(1, Math.ceil(total / size))
+}
+
 /**
- * Your postings, newest first, as one growing page.
+ * One numbered page of your postings, newest first, and how many there are.
  *
- * Read from offset 0 with a growing limit rather than paged by offset, and
- * not with useInfiniteQuery, because the list shifts under the reader: every
- * ingestion inserts at the top, so a second page fetched at offset 20 after
- * one arrived repeats the row that has just been pushed down. Asking for
- * "the first N, again" cannot show anything twice.
- *
- * The cost is refetching rows already on screen, which is a listing without
- * content -- ids, titles and counts -- and cheap enough to prefer over a
- * duplicate nobody can explain.
+ * A posting added while you read page 2 pushes one row from page 1 onto it,
+ * as it would in any paged list; the page number in the address is what the
+ * reader holds on to, not the rows.
  */
-export function useDocuments(shown: number): UseQueryResult<Document[]> {
+export function useDocuments(
+  page: number,
+  size: number = PAGE_SIZE,
+): UseQueryResult<Page<Document>> {
   return useQuery({
-    queryKey: [...documentsKey, shown],
+    queryKey: [...documentsKey, 'page', page, size],
     queryFn: async () => {
       const { data, error } = await api.GET('/documents', {
-        params: { query: { limit: shown, offset: 0 } },
+        params: { query: { limit: size, offset: (page - 1) * size } },
       })
 
       if (!data) {

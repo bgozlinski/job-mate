@@ -86,6 +86,9 @@ migrations, ingestion or tokens — that section is the only record of traps tha
     (TELECOMMUTE); never infer office from its absence. A city is stored under one Polish name
     (`canonical_city` in `app/services/cities.py`, "Warsaw" -> "Warszawa", "Poland" -> NULL), on read
     and on PATCH; migration `8b0c1f4e2a77` copies the alias list — change one, change both.
+  - Numbered pages (2026-09-27): `GET /documents` answers `Page[DocumentRead]` (`{items, total}`,
+    `app/schemas/page.py`); `GET /history?kind=` merges matches and interviews in SQL before paging.
+    The client's `Pagination` (`src/ui/pagination.tsx`) keeps the page in the address (`?page=`).
 - **Next:** nothing scheduled; the roadmap is complete (stage 6 dropped on 2026-09-27, see the spec).
 - **Removed:** FR-7 automated harvesting (Scrapy) — built and reverted on 2026-09-10; the spec says why.
   Don't reintroduce crawling: NFR-5 allows only what a user action asks for — one posting, or one page of

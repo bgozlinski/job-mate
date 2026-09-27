@@ -67,14 +67,17 @@ const RESUME = {
   created_at: '2026-09-01T10:00:00Z',
 }
 
-function show({ resumes = [RESUME] }: { resumes?: unknown[] } = {}): QueryClient {
+function show({
+  resumes = [RESUME],
+  at = '/documents',
+}: { resumes?: unknown[]; at?: string } = {}): QueryClient {
   // The page reads the resumes to run Match and Practise from a row.
   server.use(http.get('/api/resumes', () => HttpResponse.json(resumes)))
   const client = createQueryClient()
 
   render(
     <Providers client={client}>
-      <MemoryRouter initialEntries={['/documents']}>
+      <MemoryRouter initialEntries={[at]}>
         <Routes>
           <Route path="/documents" element={<Documents />} />
           <Route path="/documents/:documentId" element={<Opened />} />
@@ -114,8 +117,13 @@ function Opened() {
   )
 }
 
+/** One page of the listing, counted: what GET /documents answers. */
+function pageOf(postings: Stored[], total = postings.length) {
+  return { items: postings, total }
+}
+
 function listing(...postings: Stored[]): void {
-  server.use(http.get('/api/documents', () => HttpResponse.json(postings)))
+  server.use(http.get('/api/documents', () => HttpResponse.json(pageOf(postings))))
 }
 
 /** The register's rows, header first, without the rows opened under an entry. */
@@ -441,7 +449,7 @@ test('the postings show their shape while they load', async () => {
     http.get('/api/documents', async () => {
       await delay(50)
 
-      return HttpResponse.json([posting()])
+      return HttpResponse.json(pageOf([posting()]))
     }),
   )
 
@@ -459,7 +467,7 @@ test('postings that failed to load can be asked for again', async () => {
 
       return calls === 1
         ? HttpResponse.json({ detail: 'Could not read your postings' }, { status: 500 })
-        : HttpResponse.json([posting()])
+        : HttpResponse.json(pageOf([posting()]))
     }),
   )
 
@@ -564,7 +572,7 @@ test('a refused address says why, in the API’s own words', async () => {
 test('a stored posting is in the listing on the way back, without a reload', async () => {
   let stored = false
   server.use(
-    http.get('/api/documents', () => HttpResponse.json(stored ? [posting()] : [])),
+    http.get('/api/documents', () => HttpResponse.json(pageOf(stored ? [posting()] : []))),
     http.post('/api/documents/from-url', () => {
       stored = true
 
@@ -755,7 +763,7 @@ function deletable(status: number, detail?: string): string[] {
   const deleted: string[] = []
   let postings = [posting()]
   server.use(
-    http.get('/api/documents', () => HttpResponse.json(postings)),
+    http.get('/api/documents', () => HttpResponse.json(pageOf(postings))),
     http.delete('/api/documents/:id', ({ params }) => {
       deleted.push(String(params.id))
 
@@ -830,4 +838,56 @@ test('a posting somebody else already deleted is simply gone', async () => {
 
   expect(await screen.findByText('No postings yet.')).toBeInTheDocument()
   expect(screen.queryByRole('alert')).toBeNull()
+})
+
+test('a long list is numbered in pages, the current one marked', async () => {
+  listing(...Array.from({ length: 20 }, (_, i) => posting({ id: `p${String(i)}` })))
+  server.use(
+    http.get('/api/documents', () =>
+      HttpResponse.json(pageOf([posting()], 45)),
+    ),
+  )
+
+  show()
+
+  const pages = await screen.findByRole('navigation', { name: 'Pages of postings' })
+  expect(within(pages).getByText('Page 1').closest('[aria-current="page"]')).not.toBeNull()
+  expect(within(pages).getByRole('link', { name: 'Page 3' })).toHaveAttribute(
+    'href',
+    '/documents?page=3',
+  )
+  expect(within(pages).getByRole('link', { name: /Next/ })).toHaveAttribute(
+    'href',
+    '/documents?page=2',
+  )
+})
+
+test('the page in the address is the page asked for', async () => {
+  const asked: string[] = []
+  server.use(
+    http.get('/api/documents', ({ request }) => {
+      const params = new URL(request.url).searchParams
+      asked.push(`${params.get('limit') ?? ''}@${params.get('offset') ?? ''}`)
+
+      return HttpResponse.json(pageOf([posting()], 45))
+    }),
+  )
+
+  show({ at: '/documents?page=2' })
+
+  await screen.findByRole('link', { name: TITLE })
+  expect(asked).toEqual(['20@20'])
+})
+
+test('a page past the end says so and leads to the last one', async () => {
+  server.use(http.get('/api/documents', () => HttpResponse.json(pageOf([], 45))))
+
+  show({ at: '/documents?page=9' })
+
+  expect(await screen.findByText(/There is no page 9/)).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Go to the last page' })).toHaveAttribute(
+    'href',
+    '/documents?page=3',
+  )
+  expect(screen.queryByText('No postings yet.')).not.toBeInTheDocument()
 })

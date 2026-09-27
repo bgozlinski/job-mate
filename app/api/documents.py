@@ -53,6 +53,7 @@ from app.schemas.document import (
     SearchResults,
     WorkMode,
 )
+from app.schemas.page import Page
 from app.services.cities import canonical_city
 from app.services.embeddings import EmbeddingModel
 from app.services.ingestion import EmptyDocumentError, SourceDocument, ingest_document
@@ -179,12 +180,21 @@ async def list_documents(
     session: Session,
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[DocumentRead]:
-    """List your postings, newest first, with your stage at each."""
+) -> Page[DocumentRead]:
+    """
+    List a page of your postings, newest first, with your stage at each.
+
+    With the count of all of them, so the client can number its pages. Counted
+    without the join to chunks, which would count chunks, not postings.
+    """
+    yours = Document.user_id == user.id
+    total = await session.scalar(
+        select(func.count()).select_from(Document).where(yours)
+    )
     counted = (
         select(Document, func.count(Chunk.id))
         .outerjoin(Chunk, Chunk.document_id == Document.id)
-        .where(Document.user_id == user.id)
+        .where(yours)
     )
 
     rows = await session.execute(
@@ -200,10 +210,13 @@ async def list_documents(
     standing = await standings(session, user.id, documents)
     resumes = await _applied_resumes(session, user.id, documents)
 
-    return [
-        _describe(document, chunk_count, standing[document.id], resumes)
-        for document, chunk_count in page
-    ]
+    return Page(
+        items=[
+            _describe(document, chunk_count, standing[document.id], resumes)
+            for document, chunk_count in page
+        ],
+        total=int(total or 0),
+    )
 
 
 @router.get("/{document_id}")
