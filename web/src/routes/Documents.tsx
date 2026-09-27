@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import type { ReactElement, SyntheticEvent } from 'react'
+import type { ReactElement, ReactNode, SyntheticEvent } from 'react'
 import {
   BriefcaseIcon,
   GitCompareArrowsIcon,
   MessagesSquareIcon,
   PlusIcon,
+  Trash2Icon,
 } from 'lucide-react'
 import { Link, useNavigate } from 'react-router'
 
@@ -12,17 +13,19 @@ import type { Document, Ingested } from '../api/documents'
 import {
   MAX_PAGE_SIZE,
   PAGE_SIZE,
+  useApply,
   useDeleteDocument,
   useDocuments,
   useIngestFile,
   useIngestText,
   useIngestUrl,
+  useWithdraw,
 } from '../api/documents'
 import { useStartInterview } from '../api/interview'
 import { useMatch } from '../api/matching'
 import { useResumes } from '../api/resumes'
-import { useSession } from '../auth/session'
-import { ago } from '../time'
+import type { Resume } from '../api/resumes'
+import { day, dayOf, today } from '../time'
 import {
   Alert,
   Button,
@@ -229,89 +232,17 @@ function AddByText(): ReactElement {
   )
 }
 
-/**
- * Deleting a posting, for administrators (FR-6). Two steps in place rather
- * than window.confirm: the second step says what is lost, and it can be
- * tested and styled like everything else on the page.
- */
-function DeletePosting({
-  document,
-  onDeleted,
-}: {
-  document: Document
-  onDeleted: (name: string) => void
-}): ReactElement {
-  const [confirming, setConfirming] = useState(false)
-  const remove = useDeleteDocument()
-  const name = document.title ?? 'Untitled'
-
-  if (!confirming) {
-    return (
-      <div className="flex flex-col gap-2">
-        <div className="flex">
-          <Button
-            type="button"
-            variant="quiet"
-            size="sm"
-            // Named after the posting: a list of identical "Delete" buttons
-            // is one button to a screen reader, repeated.
-            aria-label={`Delete ${name}`}
-            onClick={() => {
-              remove.reset()
-              setConfirming(true)
-            }}
-          >
-            Delete
-          </Button>
-        </div>
-        {remove.error ? <Alert>{remove.error.message}</Alert> : null}
-      </div>
-    )
-  }
-
+/** A cell with nothing in it: a dash to the eye, words to a screen reader. */
+function Missing({ said }: { said: string }): ReactElement {
   return (
-    <div
-      role="group"
-      aria-label={`Confirm deleting ${name}`}
-      className="flex flex-col gap-2 rounded-control bg-sunken p-3"
-    >
-      <p className="text-sm">
-        This removes the posting and its chunks for good. Matches already in
-        anyone’s history stay, without a link to it.
-      </p>
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          variant="danger"
-          disabled={remove.isPending}
-          onClick={() => {
-            remove.mutate(document.id, {
-              onSuccess: () => {
-                onDeleted(name)
-              },
-              onSettled: () => {
-                setConfirming(false)
-              },
-            })
-          }}
-        >
-          {remove.isPending ? 'Deleting…' : 'Delete for good'}
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={remove.isPending}
-          onClick={() => {
-            setConfirming(false)
-          }}
-        >
-          Cancel
-        </Button>
-      </div>
-    </div>
+    <>
+      <span aria-hidden="true" className="text-ink-faint">
+        —
+      </span>
+      <span className="sr-only">{said}</span>
+    </>
   )
 }
-
 
 function hostOf(url: string): string {
   try {
@@ -321,12 +252,48 @@ function hostOf(url: string): string {
   }
 }
 
-function requirements(count: number | null): string {
-  if (count === null) {
-    return 'requirements not read'
-  }
+function resumeName(resume: { original_filename?: string | null }): string {
+  return resume.original_filename ?? 'Pasted text'
+}
 
-  return count === 1 ? '1 requirement' : `${String(count)} requirements`
+const COLUMNS = [
+  'Company',
+  'Role',
+  'Link',
+  'Posted',
+  'Added',
+  'Applied',
+  'Resume',
+] as const
+
+/**
+ * One cell of the register. Below lg the table becomes a stack of entries,
+ * and each cell carries its column's name before its value, since the header
+ * row is no longer where the eye can find it.
+ */
+function Cell({
+  label,
+  className = '',
+  children,
+}: {
+  label?: (typeof COLUMNS)[number]
+  className?: string
+  children: ReactNode
+}): ReactElement {
+  return (
+    <td
+      data-label={label}
+      className={
+        'align-top lg:py-3 lg:pr-4 ' +
+        (label
+          ? 'max-lg:grid max-lg:grid-cols-[6rem_minmax(0,1fr)] max-lg:gap-2 max-lg:before:text-ink-faint max-lg:before:content-[attr(data-label)] '
+          : '') +
+        className
+      }
+    >
+      {children}
+    </td>
+  )
 }
 
 /** What a row can start, and on which resume. */
@@ -340,110 +307,415 @@ interface RowActions {
 }
 
 /**
- * One posting as a row: what it is, how old, whether it was read, how far you
- * got with it -- and the two things to do with it, right here, on the newest
- * resume.
- *
- * From md the row is a grid, so stages and scores stand in columns and can be
- * compared down the list; below it the parts wrap, with room kept for the
- * title.
+ * Recording an application, or changing or taking back one already recorded:
+ * the day (today where you are, unless you say otherwise) and the resume that
+ * went out (the main one, unless you pick another).
  */
-function PostingRow({
+function ApplicationForm({
   document,
-  admin,
+  resumes,
+  onClose,
+}: {
+  document: Document
+  resumes: Resume[]
+  onClose: () => void
+}): ReactElement {
+  const name = document.title ?? 'Untitled'
+  const applied = document.applied_on !== null
+  const [appliedOn, setAppliedOn] = useState(document.applied_on ?? today())
+  const [resumeId, setResumeId] = useState(
+    document.applied_resume?.id ?? newest(resumes)?.id ?? '',
+  )
+  const apply = useApply()
+  const withdraw = useWithdraw()
+  const busy = apply.isPending || withdraw.isPending
+
+  function onSubmit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>): void {
+    event.preventDefault()
+    apply.mutate(
+      { documentId: document.id, appliedOn, resumeId },
+      { onSuccess: onClose },
+    )
+  }
+
+  if (resumes.length === 0) {
+    return (
+      <Notice>
+        An application names the resume you sent.{' '}
+        <Link to="/resumes" className="text-accent underline underline-offset-2">
+          Add a resume first
+        </Link>
+        .
+      </Notice>
+    )
+  }
+
+  return (
+    <form
+      aria-label={`Application to ${name}`}
+      onSubmit={onSubmit}
+      className="flex flex-col gap-3 rounded-control bg-sunken p-3"
+    >
+      <div className="flex flex-wrap items-end gap-3">
+        <Field id={`applied-on-${document.id}`} label="Applied on">
+          {(className, id) => (
+            <input
+              id={id}
+              type="date"
+              required
+              max={today()}
+              className={`${className} w-auto tabular-nums`}
+              value={appliedOn}
+              onChange={(event) => {
+                setAppliedOn(event.target.value)
+              }}
+            />
+          )}
+        </Field>
+        <Field id={`applied-resume-${document.id}`} label="With resume">
+          {(className, id) => (
+            <select
+              id={id}
+              required
+              className={`${className} w-auto`}
+              value={resumeId}
+              onChange={(event) => {
+                setResumeId(event.target.value)
+              }}
+            >
+              {resumes.map((resume) => (
+                <option key={resume.id} value={resume.id}>
+                  {resumeName(resume)}
+                  {resume.target_role ? ` — ${resume.target_role}` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" size="sm" disabled={busy}>
+          {apply.isPending ? 'Saving…' : 'Save'}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={busy}
+          onClick={onClose}
+        >
+          Cancel
+        </Button>
+        {applied ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="quiet"
+            disabled={busy}
+            onClick={() => {
+              withdraw.mutate(document.id, { onSuccess: onClose })
+            }}
+          >
+            {withdraw.isPending ? 'Taking back…' : 'Not applied after all'}
+          </Button>
+        ) : null}
+      </div>
+
+      {apply.error ? <Alert>{apply.error.message}</Alert> : null}
+      {withdraw.error ? <Alert>{withdraw.error.message}</Alert> : null}
+    </form>
+  )
+}
+
+/**
+ * Deleting one of your postings (FR-6). Two steps in place rather than
+ * window.confirm: the second step says what is lost, and it can be tested and
+ * styled like everything else on the page.
+ */
+function ConfirmDelete({
+  document,
+  onDeleted,
+  onClose,
+}: {
+  document: Document
+  onDeleted: (name: string) => void
+  onClose: () => void
+}): ReactElement {
+  const remove = useDeleteDocument()
+  const name = document.title ?? 'Untitled'
+
+  return (
+    <div
+      role="group"
+      aria-label={`Confirm deleting ${name}`}
+      className="flex flex-col gap-2 rounded-control bg-sunken p-3"
+    >
+      <p className="text-sm">
+        This removes the posting and its chunks for good. Your matches stay in
+        your history, without a link to it.
+      </p>
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="danger"
+          disabled={remove.isPending}
+          onClick={() => {
+            remove.mutate(document.id, {
+              onSuccess: () => {
+                onDeleted(name)
+              },
+            })
+          }}
+        >
+          {remove.isPending ? 'Deleting…' : 'Delete for good'}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={remove.isPending}
+          onClick={onClose}
+        >
+          Cancel
+        </Button>
+      </div>
+      {remove.error ? <Alert>{remove.error.message}</Alert> : null}
+    </div>
+  )
+}
+
+/**
+ * One posting as an entry in the register: who, what, where it was published
+ * and when, when you added it, and when you applied and with what. The day of
+ * an application is drawn as a stamp -- the one mark on the page that says a
+ * thing was sent.
+ *
+ * Its own tbody, because what opens under it -- the application form, the
+ * confirmation of a delete, a wait or a failure -- is a second row that
+ * belongs to it.
+ */
+function RegisterEntry({
+  document,
+  resumes,
   actions,
   onDeleted,
 }: {
   document: Document
-  admin: boolean
+  resumes: Resume[]
   actions: RowActions
   onDeleted: (name: string) => void
 }): ReactElement {
+  const [open, setOpen] = useState<'application' | 'delete' | null>(null)
   const unread = !document.requirement_count
   const name = document.title ?? 'Untitled'
+  const close = (): void => {
+    setOpen(null)
+  }
+  const toggle = (what: 'application' | 'delete'): void => {
+    setOpen(open === what ? null : what)
+  }
+  const underneath =
+    open !== null ||
+    actions.pending !== null ||
+    actions.error !== null ||
+    document.chunk_count === 0
 
   return (
-    <li className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 md:grid md:grid-cols-[minmax(0,1fr)_auto_4rem_auto]">
-        <div className="min-w-48 flex-1">
-          <h3 className="truncate font-bold">
-            <Link
-              to={`/documents/${document.id}`}
-              className="hover:text-accent hover:underline"
+    <tbody className="border-b border-line last:border-b-0 max-lg:block max-lg:py-4 max-lg:first:pt-0 max-lg:last:pb-0">
+      <tr className="max-lg:flex max-lg:flex-col max-lg:gap-1.5">
+        <Cell label="Company" className="lg:max-w-40">
+          {document.company ?? <Missing said="not stated" />}
+        </Cell>
+        <Cell className="max-lg:order-first lg:min-w-48">
+          <Link
+            to={`/documents/${document.id}`}
+            className="font-bold text-ink hover:text-accent hover:underline"
+          >
+            {document.role ?? name}
+          </Link>
+          <span className="mt-1 flex items-center gap-2 text-xs text-ink-faint">
+            <StageRail reached={reachedOf(document.stage)} compact />
+            {document.best_score === null ? null : (
+              <Score value={document.best_score} size="sm" />
+            )}
+            {document.requirement_count === null ? 'requirements not read' : null}
+          </span>
+        </Cell>
+        <Cell label="Link">
+          {document.source_url ? (
+            <a
+              href={document.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent underline-offset-2 hover:underline"
             >
-              {name}
-            </Link>
-          </h3>
-          <p className="text-sm text-ink-faint">
-            {document.source_url ? hostOf(document.source_url) : 'uploaded'}
-            {', '}
-            <time
-              dateTime={document.created_at}
-              title={new Date(document.created_at).toLocaleString()}
-            >
-              {ago(document.created_at)}
-            </time>
-            {', '}
-            {requirements(document.requirement_count)}
-          </p>
-        </div>
-
-        <StageRail reached={reachedOf(document.stage)} compact />
-        <span className="w-16 text-right">
-          {document.best_score === null ? (
-            <>
-              <span aria-hidden="true" className="text-ink-faint">
-                —
-              </span>
-              <span className="sr-only">Not matched yet</span>
-            </>
+              {hostOf(document.source_url)}
+              <span className="sr-only"> (opens in a new tab)</span>
+            </a>
           ) : (
-            <Score value={document.best_score} size="sm" />
+            <Missing said="no link" />
           )}
-        </span>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            icon={GitCompareArrowsIcon}
-            aria-label={`Match my CV with ${name}`}
-            disabled={actions.busy || !actions.resumeId}
-            onClick={actions.onMatch}
+        </Cell>
+        <Cell label="Posted" className="whitespace-nowrap tabular-nums">
+          {document.posted_on ? (
+            <time dateTime={document.posted_on}>{day(document.posted_on)}</time>
+          ) : (
+            <Missing said="not stated" />
+          )}
+        </Cell>
+        <Cell label="Added" className="whitespace-nowrap tabular-nums">
+          <time
+            dateTime={document.created_at}
+            title={new Date(document.created_at).toLocaleString()}
           >
-            Match
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            icon={MessagesSquareIcon}
-            aria-label={`Practise an interview for ${name}`}
-            title={unread ? 'Its requirements have not been read yet' : undefined}
-            disabled={actions.busy || !actions.resumeId || unread}
-            onClick={actions.onPractise}
+            {dayOf(document.created_at)}
+          </time>
+        </Cell>
+        <Cell label="Applied" className="whitespace-nowrap">
+          {document.applied_on ? (
+            <span>
+              <button
+                type="button"
+                aria-label={`Applied ${day(document.applied_on)}: change the application to ${name}`}
+                aria-expanded={open === 'application'}
+                onClick={() => {
+                  toggle('application')
+                }}
+                className="inline-block -rotate-[1.5deg] rounded-control border-2 border-accent px-1.5 py-0.5 text-sm font-bold tabular-nums text-accent hover:bg-accent-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              >
+                <time dateTime={document.applied_on}>{day(document.applied_on)}</time>
+              </button>
+            </span>
+          ) : (
+            <span>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                aria-label={`Mark ${name} as applied`}
+                aria-expanded={open === 'application'}
+                onClick={() => {
+                  toggle('application')
+                }}
+              >
+                Mark as applied
+              </Button>
+            </span>
+          )}
+        </Cell>
+        <Cell label="Resume" className="lg:max-w-40">
+          {document.applied_resume ? (
+            <span
+              className="block truncate"
+              title={document.applied_resume.target_role ?? undefined}
+            >
+              {resumeName(document.applied_resume)}
+            </span>
+          ) : document.applied_on ? (
+            <span className="text-ink-faint italic">deleted resume</span>
+          ) : (
+            <Missing said="not applied" />
+          )}
+        </Cell>
+        <Cell className="max-lg:pt-1 lg:pr-0">
+          <div className="flex items-center gap-1 lg:justify-end">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              icon={GitCompareArrowsIcon}
+              aria-label={`Match my CV with ${name}`}
+              title="Match my CV"
+              disabled={actions.busy || !actions.resumeId}
+              onClick={actions.onMatch}
+            >
+              <span className="lg:sr-only">Match</span>
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              icon={MessagesSquareIcon}
+              aria-label={`Practise an interview for ${name}`}
+              title={
+                unread ? 'Its requirements have not been read yet' : 'Practise an interview'
+              }
+              disabled={actions.busy || !actions.resumeId || unread}
+              onClick={actions.onPractise}
+            >
+              <span className="lg:sr-only">Practise</span>
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="quiet"
+              icon={Trash2Icon}
+              // Named after the posting: a list of identical "Delete" buttons
+              // is one button to a screen reader, repeated.
+              aria-label={`Delete ${name}`}
+              title="Delete"
+              aria-expanded={open === 'delete'}
+              onClick={() => {
+                toggle('delete')
+              }}
+            >
+              <span className="lg:sr-only">Delete</span>
+            </Button>
+          </div>
+        </Cell>
+      </tr>
+
+      {underneath ? (
+        <tr className="max-lg:block">
+          <td
+            colSpan={COLUMNS.length + 1}
+            className="pb-3 max-lg:block max-lg:pt-3"
           >
-            Practise
-          </Button>
-        </div>
-      </div>
-
-      {actions.pending === 'match' ? <Thinking>Matching your CV…</Thinking> : null}
-      {actions.pending === 'practise' ? (
-        <Thinking>Preparing questions…</Thinking>
+            <div className="flex flex-col gap-2">
+              {open === 'application' ? (
+                <ApplicationForm document={document} resumes={resumes} onClose={close} />
+              ) : null}
+              {open === 'delete' ? (
+                <ConfirmDelete document={document} onDeleted={onDeleted} onClose={close} />
+              ) : null}
+              {actions.pending === 'match' ? (
+                <Thinking>Matching your CV…</Thinking>
+              ) : null}
+              {actions.pending === 'practise' ? (
+                <Thinking>Preparing questions…</Thinking>
+              ) : null}
+              {actions.error ? <Alert>{actions.error.message}</Alert> : null}
+              {/* A posting with no chunks is in the database and invisible to
+                  retrieval, which is worth saying rather than leaving as a zero
+                  -- as a notice, not an error: nothing the reader did failed. */}
+              {document.chunk_count === 0 ? (
+                <Notice>No chunks: nothing about this posting can be retrieved.</Notice>
+              ) : null}
+            </div>
+          </td>
+        </tr>
       ) : null}
-      {actions.error ? <Alert>{actions.error.message}</Alert> : null}
+    </tbody>
+  )
+}
 
-      {/* A posting with no chunks is in the database and invisible to
-          retrieval, which is worth saying rather than leaving as a zero --
-          as a notice, not an error: nothing the reader did failed. */}
-      {document.chunk_count === 0 ? (
-        <Notice>No chunks: nothing about this posting can be retrieved.</Notice>
-      ) : null}
-
-      {admin ? <DeletePosting document={document} onDeleted={onDeleted} /> : null}
-    </li>
+/** The register's column names: read by a screen reader, drawn from lg up. */
+function RegisterHead(): ReactElement {
+  return (
+    <thead className="max-lg:sr-only">
+      <tr className="border-b border-line text-left text-xs text-ink-faint">
+        {COLUMNS.map((column) => (
+          <th key={column} scope="col" className="pr-4 pb-2 font-semibold">
+            {column}
+          </th>
+        ))}
+        <th scope="col" className="pb-2">
+          <span className="sr-only">Actions</span>
+        </th>
+      </tr>
+    </thead>
   )
 }
 
@@ -467,16 +739,15 @@ function AddPanel(): ReactElement {
 }
 
 /**
- * The knowledge base as a list you work from: each posting a row with Match and
- * Practise right in it, and adding one behind a button -- open from the start
- * while there is nothing to list.
+ * Your postings as a register you work from: each one a row with where it was
+ * published, when you added it and when you applied with which resume, Match
+ * and Practise right in it, and adding one behind a button -- open from the
+ * start while there is nothing to list.
  */
 export function Documents(): ReactElement {
   const [shown, setShown] = useState(PAGE_SIZE)
   const documents = useDocuments(shown)
   const listed = documents.data ?? []
-  // A convenience, not a guard: the API refuses a non-administrator anyway.
-  const admin = useSession().data?.is_admin === true
   // The last deletion, said once over the list: the row just disappears, and
   // a row that vanishes without a word reads as a glitch. Replaced by the next.
   const [deleted, setDeleted] = useState<string | null>(null)
@@ -540,7 +811,7 @@ export function Documents(): ReactElement {
     <>
       <PageHeader
         title="Postings"
-        description="Shared by every account: postings added by anyone are listed here."
+        description="Every posting you added, and when you applied to it."
         actions={
           <Button
             type="button"
@@ -575,7 +846,7 @@ export function Documents(): ReactElement {
       ) : null}
 
       {documents.isPending ? (
-        <Skeleton lines={4} label="Loading the knowledge base…" />
+        <Skeleton lines={4} label="Loading your postings…" />
       ) : null}
       {documents.error ? (
         <Alert
@@ -590,7 +861,7 @@ export function Documents(): ReactElement {
       {empty ? (
         <EmptyState
           icon={BriefcaseIcon}
-          title="The knowledge base is empty."
+          title="No postings yet."
           action={
             <Button
               type="button"
@@ -610,17 +881,18 @@ export function Documents(): ReactElement {
 
       {listed.length > 0 ? (
         <Sheet>
-          <ul aria-label="Postings" className="flex flex-col divide-y divide-line">
+          <table aria-label="Postings" className="w-full text-sm max-lg:block">
+            <RegisterHead />
             {listed.map((document) => (
-              <PostingRow
+              <RegisterEntry
                 key={document.id}
                 document={document}
-                admin={admin}
+                resumes={resumes.data ?? []}
                 actions={actionsFor(document)}
                 onDeleted={setDeleted}
               />
             ))}
-          </ul>
+          </table>
         </Sheet>
       ) : null}
 

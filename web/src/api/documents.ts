@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
 
-import { sessionKey } from '../auth/session'
 import { api } from './client'
 import { dashboardKey } from './dashboard'
 import { detailOf } from './errors'
@@ -9,6 +8,7 @@ import type { components } from './schema'
 
 export type Document = components['schemas']['DocumentRead']
 export type DocumentDetail = components['schemas']['DocumentDetail']
+export type DocumentUpdate = components['schemas']['DocumentUpdate']
 
 export const PAGE_SIZE = 20
 export const MAX_PAGE_SIZE = 100
@@ -23,7 +23,7 @@ export interface Ingested {
 }
 
 /**
- * The knowledge base, newest first, as one growing page.
+ * Your postings, newest first, as one growing page.
  *
  * Read from offset 0 with a growing limit rather than paged by offset, and
  * not with useInfiniteQuery, because the list shifts under the reader: every
@@ -44,7 +44,7 @@ export function useDocuments(shown: number): UseQueryResult<Document[]> {
       })
 
       if (!data) {
-        throw new Error(detailOf(error) ?? 'Could not read the knowledge base')
+        throw new Error(detailOf(error) ?? 'Could not read your postings')
       }
 
       return data
@@ -166,13 +166,10 @@ export function useIngestFile(): UseMutationResult<Ingested, Error, File> {
 }
 
 /**
- * Remove a posting and its chunks from the knowledge base (FR-6).
+ * Remove one of your postings and its chunks (FR-6).
  *
- * The API is what enforces administrator rights; the page only hides the
- * action from everyone else. A 404 counts as done: another window got there
- * first, and the posting is gone either way. A 403 means the rights were
- * revoked after this page read the session, which is cached for good -- so
- * the session is read again and the action disappears with it.
+ * A 404 counts as done: another window got there first, and the posting is
+ * gone either way.
  */
 export function useDeleteDocument(): UseMutationResult<undefined, Error, string> {
   const queryClient = useQueryClient()
@@ -187,10 +184,6 @@ export function useDeleteDocument(): UseMutationResult<undefined, Error, string>
         return undefined
       }
 
-      if (response.status === 403) {
-        await queryClient.invalidateQueries({ queryKey: sessionKey })
-      }
-
       throw new Error(
         detailOf(error) ?? `Could not delete the posting (${String(response.status)})`,
       )
@@ -201,5 +194,94 @@ export function useDeleteDocument(): UseMutationResult<undefined, Error, string>
         queryClient.invalidateQueries({ queryKey: dashboardKey }),
       ])
     },
+  })
+}
+
+/**
+ * A mutation of one posting that answers with the posting as it now stands.
+ *
+ * Its stage, its dates and its resume change what the list, the posting's own
+ * page and the dashboard show, so all three are read again.
+ */
+function usePostingMutation<Input>(
+  send: (input: Input) => Promise<undefined>,
+): UseMutationResult<undefined, Error, Input> {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: send,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: documentsKey }),
+        queryClient.invalidateQueries({ queryKey: dashboardKey }),
+      ])
+    },
+  })
+}
+
+/** Correct the company, role or publication day of one of your postings. */
+export function useUpdateDocument(): UseMutationResult<
+  undefined,
+  Error,
+  { id: string; changes: DocumentUpdate }
+> {
+  return usePostingMutation(async ({ id, changes }) => {
+    const { error, response } = await api.PATCH('/documents/{document_id}', {
+      params: { path: { document_id: id } },
+      body: changes,
+    })
+
+    if (!response.ok) {
+      throw new Error(
+        detailOf(error) ?? `Could not save the posting (${String(response.status)})`,
+      )
+    }
+
+    return undefined
+  })
+}
+
+export interface Application {
+  documentId: string
+  /** A day as the API writes it: "2026-09-20". */
+  appliedOn: string
+  resumeId: string
+}
+
+/** Record that you applied to a posting, or correct the day or the resume. */
+export function useApply(): UseMutationResult<undefined, Error, Application> {
+  return usePostingMutation(async ({ documentId, appliedOn, resumeId }) => {
+    const { error, response } = await api.PUT('/documents/{document_id}/application', {
+      params: { path: { document_id: documentId } },
+      body: { applied_on: appliedOn, resume_id: resumeId },
+    })
+
+    if (!response.ok) {
+      throw new Error(
+        detailOf(error) ??
+          `Could not record the application (${String(response.status)})`,
+      )
+    }
+
+    return undefined
+  })
+}
+
+/** Take back the record of an application. Nothing is sent anywhere. */
+export function useWithdraw(): UseMutationResult<undefined, Error, string> {
+  return usePostingMutation(async (documentId: string) => {
+    const { error, response } = await api.DELETE(
+      '/documents/{document_id}/application',
+      { params: { path: { document_id: documentId } } },
+    )
+
+    if (!response.ok) {
+      throw new Error(
+        detailOf(error) ??
+          `Could not take the application back (${String(response.status)})`,
+      )
+    }
+
+    return undefined
   })
 }

@@ -21,19 +21,20 @@ test('the stages are the four steps of an application, in order', () => {
 test.each([
   [1, 'Match'],
   [2, 'Interview'],
+  [3, 'Applied'],
 ])('having reached stage %i, the next step is %s', (reached, next) => {
-  render(<StageRail reached={reached as 1 | 2} />)
+  render(<StageRail reached={reached as 1 | 2 | 3} />)
 
   const current = steps().filter((step) => step.getAttribute('aria-current') === 'step')
   expect(current).toHaveLength(1)
   expect(current[0]).toHaveTextContent(next)
 })
 
-test('after an interview nothing is next until applications can be tracked', () => {
-  render(<StageRail reached={3} />)
+test('once applied every step is done and nothing is next', () => {
+  render(<StageRail reached={4} />)
 
   expect(steps().some((step) => step.hasAttribute('aria-current'))).toBe(false)
-  expect(steps()[3]).toHaveTextContent('coming later')
+  expect(steps().every((step) => step.textContent.includes('done'))).toBe(true)
 })
 
 test('each step says whether it is done', () => {
@@ -72,5 +73,5 @@ test('a score reads as a percentage', () => {
 })
 
 test('a stage outside what the rail can draw is clamped, not cast', () => {
-  expect([0, 1, 2, 3, 4].map(reachedOf)).toEqual([1, 1, 2, 3, 3])
+  expect([0, 1, 2, 3, 4, 5].map(reachedOf)).toEqual([1, 1, 2, 3, 4, 4])
 })

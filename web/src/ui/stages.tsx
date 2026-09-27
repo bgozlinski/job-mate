@@ -2,34 +2,27 @@ import type { ReactElement } from 'react'
 
 import { percentage } from './data'
 
-/** Where a posting stands for you: 1 added, 2 matched, 3 interviewed. */
-export type Reached = 1 | 2 | 3
+/** Where a posting stands for you: 1 added, 2 matched, 3 interviewed, 4 applied. */
+export type Reached = 1 | 2 | 3 | 4
 
 /**
  * A stage from the API as one the rail can draw.
  *
- * The API sends a plain number, and a later project adds 4 for Applied; until
- * the rail can show that, anything outside 1-3 is clamped rather than cast.
+ * The API sends a plain number; anything outside 1-4 is clamped rather than
+ * cast, so a stage added later draws as the furthest one known.
  */
 export function reachedOf(stage: number): Reached {
-  return stage >= 3 ? 3 : stage <= 1 ? 1 : 2
+  return stage >= 4 ? 4 : stage === 3 ? 3 : stage === 2 ? 2 : 1
 }
 
 const STEPS = ['Posting', 'Match', 'Interview', 'Applied'] as const
-
-/**
- * The step that cannot be reached yet: tracking sent applications is a later
- * project, so the rail keeps its place without offering it.
- */
-const LATER = 4
 
 /**
  * The steps of an application, drawn as a path.
  *
  * `reached` is the last step done, so the step after it is the next one to
  * take -- a posting matched but not practised has reached 2, and Interview is
- * marked as next. After an interview nothing is next, because Applied cannot
- * be recorded yet.
+ * marked as next. Once applied, nothing is next.
  *
  * A numbered list, because the steps are a sequence. Position alone does not
  * tell a screen reader what is done, so each step says it in words; the
@@ -44,7 +37,7 @@ export function StageRail({
   score?: number | null
   compact?: boolean
 }): ReactElement {
-  const next = reached + 1 < LATER ? reached + 1 : null
+  const next = reached < STEPS.length ? reached + 1 : null
 
   if (compact) {
     const name = STEPS[reached - 1] ?? ''
@@ -72,7 +65,6 @@ export function StageRail({
         const number = index + 1
         const done = number <= reached
         const isNext = number === next
-        const later = number === LATER
 
         return (
           <li
@@ -80,7 +72,6 @@ export function StageRail({
             aria-current={isNext ? 'step' : undefined}
             className={
               'border-t-[3px] px-2 py-1.5 ' +
-              (later ? 'border-dashed ' : '') +
               (isNext
                 ? 'border-accent bg-accent-soft font-extrabold text-accent-strong'
                 : done
@@ -91,7 +82,7 @@ export function StageRail({
             {`${String(number)} ${step}`}
             {step === 'Match' && score != null ? ` ${percentage(score)}` : null}
             <span className="sr-only">
-              {later ? ', coming later' : done ? ', done' : ', not yet'}
+              {done ? ', done' : ', not yet'}
             </span>
           </li>
         )
