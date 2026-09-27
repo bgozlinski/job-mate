@@ -12,6 +12,15 @@ LD_JSON_TYPE = "application/ld+json"
 
 JOB_POSTING_TYPE = "JobPosting"
 
+COLLECTION_PAGE_TYPE = "CollectionPage"
+
+MAX_SEARCH_RESULTS = 100
+"""
+More than any one page of results lists (justjoin.it shows 25). A page claiming more
+is not a page of search results, and each address it names costs a fetch, an
+embedding and a model call.
+"""
+
 MAX_METADATA_TEXT = 200
 """
 How much of any one scraped value is kept. The fields mapped below are names and labels
@@ -102,26 +111,26 @@ def _candidates(value: object) -> list[dict[str, Any]]:
     return found
 
 
-def _is_job_posting(node: dict[str, Any]) -> bool:
-    """Say whether this node declares itself a JobPosting."""
+def _is_a(node: dict[str, Any], kind: str) -> bool:
+    """Say whether this node declares itself of the given schema.org type."""
     declared = node.get("@type")
 
     if isinstance(declared, str):
-        return declared == JOB_POSTING_TYPE
+        return declared == kind
 
     if isinstance(declared, list):
-        return JOB_POSTING_TYPE in declared
+        return kind in declared
 
     return False
 
 
-def _job_postings(document: str) -> list[dict[str, Any]]:
-    """Return the JobPosting nodes on a page, in document order."""
+def _nodes(document: str, kind: str) -> list[dict[str, Any]]:
+    """Return the ld+json nodes of one type on a page, in document order."""
     scripts = _LdJsonScripts()
     scripts.feed(document)
     scripts.close()
 
-    postings: list[dict[str, Any]] = []
+    nodes: list[dict[str, Any]] = []
 
     for block in scripts.blocks:
         try:
@@ -129,9 +138,14 @@ def _job_postings(document: str) -> list[dict[str, Any]]:
         except json.JSONDecodeError:
             continue
 
-        postings.extend(node for node in _candidates(parsed) if _is_job_posting(node))
+        nodes.extend(node for node in _candidates(parsed) if _is_a(node, kind))
 
-    return postings
+    return nodes
+
+
+def _job_postings(document: str) -> list[dict[str, Any]]:
+    """Return the JobPosting nodes on a page, in document order."""
+    return _nodes(document, JOB_POSTING_TYPE)
 
 
 def plain_text(value: str) -> str:
@@ -285,3 +299,49 @@ def parse_job_posting(document: str) -> ScrapedPosting:
         posted_on=_day(posting.get("datePosted")),
         metadata=_metadata(posting),
     )
+
+
+class NoSearchResultsError(ValueError):
+    """Raised for a page that lists no job offers in its structured data."""
+
+
+def _address(part: object) -> str | None:
+    """Read the address of one listed part, given as an object or a bare string."""
+    if isinstance(part, dict):
+        part = part.get("url")
+
+    if not isinstance(part, str):
+        return None
+
+    return part.strip() or None
+
+
+def parse_search_page(document: str) -> list[str]:
+    """
+    Read the addresses a page of search results lists, in order, each once.
+
+    Only what the board publishes for machines: the CollectionPage block and its
+    hasPart, the same kind of data a single posting is read from. Only this one
+    page -- the next page of results would be walking the board, which NFR-5
+    does not allow. Whether an address may be fetched is the caller's to decide.
+    """
+    addresses: list[str] = []
+
+    for page in _nodes(document, COLLECTION_PAGE_TYPE):
+        parts = page.get("hasPart")
+
+        for part in parts if isinstance(parts, list) else [parts]:
+            address = _address(part)
+
+            if address is not None and address not in addresses:
+                addresses.append(address)
+
+    if not addresses:
+        raise NoSearchResultsError("The page lists no job offers")
+
+    if len(addresses) > MAX_SEARCH_RESULTS:
+        raise NoSearchResultsError(
+            f"The page lists more than {MAX_SEARCH_RESULTS} offers"
+        )
+
+    return addresses

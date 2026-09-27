@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
 
 import { api } from './client'
@@ -110,6 +111,106 @@ function useIngestion<Input>(
       ])
     },
   })
+}
+
+/** How far an import from a search has got: postings added so far, of how many. */
+export interface ImportProgress {
+  done: number
+  total: number
+}
+
+/** What an import from a search came to. */
+export interface Imported {
+  /** Stored by this import. */
+  added: number
+  /** Listed by the search and already among your postings. */
+  known: number
+  failed: { url: string; reason: string }[]
+  /** Why the import stopped before the end, or null when it did not. */
+  stopped: string | null
+  /** Postings not tried because the import stopped. */
+  skipped: number
+}
+
+const TOO_MANY_REQUESTS = 429
+
+/**
+ * Add every posting a page of search results lists that you do not have yet.
+ *
+ * The API reads the page once and answers with the addresses that are new to
+ * you; each is then added through from-url, one after another, so a posting
+ * that fails costs only itself and the count on screen moves as they land.
+ * One at a time rather than all at once, because each is a fetch from the
+ * board and a model call, and the board should not see a burst. A 429 means
+ * the ingest budget is spent: the rest waits for the next import of the same
+ * search, which will list them as new again.
+ */
+export function useImportSearch(): {
+  mutation: UseMutationResult<Imported, Error, string>
+  progress: ImportProgress | null
+} {
+  const queryClient = useQueryClient()
+  const [progress, setProgress] = useState<ImportProgress | null>(null)
+
+  const mutation = useMutation({
+    mutationFn: async (url: string): Promise<Imported> => {
+      setProgress(null)
+      const { data, error, response } = await api.POST('/documents/from-search', {
+        body: { url },
+      })
+
+      if (!data) {
+        throw new Error(
+          detailOf(error) ?? `Could not read the search (${String(response.status)})`,
+        )
+      }
+
+      const result: Imported = {
+        added: 0,
+        known: data.known,
+        failed: [],
+        stopped: null,
+        skipped: 0,
+      }
+
+      for (const [index, offer] of data.new.entries()) {
+        setProgress({ done: index, total: data.new.length })
+        const added = await api.POST('/documents/from-url', {
+          body: { url: offer, metadata: {} },
+        })
+
+        if (added.data) {
+          // 200 is the same text stored under another address: already yours.
+          if (added.response.status === 200) {
+            result.known += 1
+          } else {
+            result.added += 1
+          }
+        } else if (added.response.status === TOO_MANY_REQUESTS) {
+          result.stopped = detailOf(added.error) ?? 'The limit on adding postings is reached'
+          result.skipped = data.new.length - index
+          break
+        } else {
+          result.failed.push({
+            url: offer,
+            reason: detailOf(added.error) ?? `(${String(added.response.status)})`,
+          })
+        }
+      }
+
+      return result
+    },
+    onSettled: async () => {
+      setProgress(null)
+      // Also after a failure halfway: whatever was added is there to list.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: documentsKey }),
+        queryClient.invalidateQueries({ queryKey: dashboardKey }),
+      ])
+    },
+  })
+
+  return { mutation, progress }
 }
 
 /** Ingest a posting from the address it is published at (FR-1, NFR-5). */

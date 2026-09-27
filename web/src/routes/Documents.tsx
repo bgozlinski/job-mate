@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { Link, useNavigate } from 'react-router'
 
-import type { Document, Ingested } from '../api/documents'
+import type { Document, Imported, Ingested } from '../api/documents'
 import {
   MAX_PAGE_SIZE,
   PAGE_SIZE,
@@ -18,6 +18,7 @@ import {
   useDocuments,
   useIngestFile,
   useIngestText,
+  useImportSearch,
   useIngestUrl,
   useWithdraw,
 } from '../api/documents'
@@ -115,6 +116,104 @@ function AddByUrl(): ReactElement {
       </div>
 
       <Failure error={ingest.error} />
+    </form>
+  )
+}
+
+/** How an import from a search went, in one sentence. */
+function importSummary(result: Imported): string {
+  if (result.added === 0 && result.failed.length === 0 && !result.stopped) {
+    return result.known === 1
+      ? 'Nothing new: the one posting listed is already here.'
+      : `Nothing new: all ${String(result.known)} postings listed are already here.`
+  }
+
+  const added = result.added === 1 ? '1 new posting' : `${String(result.added)} new postings`
+
+  if (result.known === 0) {
+    return `Added ${added}.`
+  }
+
+  return result.known === 1
+    ? `Added ${added}; 1 was already here.`
+    : `Added ${added}; ${String(result.known)} were already here.`
+}
+
+/** The last part of a posting address: enough to tell which one failed. */
+function slugOf(url: string): string {
+  return url.split('/').filter(Boolean).pop() ?? url
+}
+
+/**
+ * A search you filtered on the board, pasted as its address: every posting on
+ * its first page that you do not have yet is added, one after another (FR-1).
+ * Pasting the same search again adds only what appeared since.
+ */
+function AddBySearch(): ReactElement {
+  const [url, setUrl] = useState('')
+  const { mutation: importing, progress } = useImportSearch()
+  const result = importing.data
+
+  function onSubmit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>): void {
+    event.preventDefault()
+    importing.mutate(url.trim())
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="flex flex-col gap-3 pt-3">
+      <Field
+        id="search-url"
+        label="Search results URL"
+        hint="The first page of results is read once; postings you already have are skipped."
+      >
+        {(className, id) => (
+          <input
+            id={id}
+            type="url"
+            required
+            placeholder="https://justjoin.it/job-offers/all-locations/python?..."
+            className={className}
+            value={url}
+            onChange={(event) => {
+              setUrl(event.target.value)
+            }}
+          />
+        )}
+      </Field>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="submit" disabled={importing.isPending}>
+          Import new postings
+        </Button>
+        {importing.isPending ? (
+          <Thinking>
+            {progress
+              ? `Adding ${String(progress.done + 1)} of ${String(progress.total)}…`
+              : 'Reading the search…'}
+          </Thinking>
+        ) : null}
+      </div>
+
+      {importing.error ? <Alert>{importing.error.message}</Alert> : null}
+      {result ? <Status>{importSummary(result)}</Status> : null}
+      {result?.stopped ? (
+        <Alert>
+          {result.stopped}. {result.skipped} left: import the same search again
+          later to add them.
+        </Alert>
+      ) : null}
+      {result && result.failed.length > 0 ? (
+        <Alert>
+          Could not add {result.failed.length === 1 ? '1 posting' : `${String(result.failed.length)} postings`}:
+          <ul className="mt-1 list-disc pl-5">
+            {result.failed.map((failure) => (
+              <li key={failure.url}>
+                {slugOf(failure.url)}: {failure.reason}
+              </li>
+            ))}
+          </ul>
+        </Alert>
+      ) : null}
     </form>
   )
 }
@@ -724,6 +823,11 @@ function AddPanel(): ReactElement {
   return (
     <Sheet className="flex max-w-2xl flex-col gap-2">
       <AddByUrl />
+
+      <details className="border-t border-line pt-3">
+        <summary className={SUMMARY}>…or import a whole search</summary>
+        <AddBySearch />
+      </details>
 
       <details className="border-t border-line pt-3">
         <summary className={SUMMARY}>…or upload a file</summary>

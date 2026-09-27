@@ -565,6 +565,113 @@ test('a stored posting is in the listing on the way back, without a reload', asy
   ).toBeInTheDocument()
 })
 
+const SEARCH = 'https://justjoin.it/job-offers/all-locations/python?experience-levels=junior'
+const OFFER = (slug: string) => `https://justjoin.it/job-offer/${slug}`
+
+/**
+ * Answer the search with these new addresses, and each from-url with the
+ * status given for its slug. Returns the addresses from-url was asked for.
+ */
+function searchable(
+  search: { new: string[]; known: number } | { status: number; detail: string },
+  answers: Record<string, { status: number; detail?: string }> = {},
+): string[] {
+  const asked: string[] = []
+  server.use(
+    http.post('/api/documents/from-search', () =>
+      'status' in search
+        ? HttpResponse.json({ detail: search.detail }, { status: search.status })
+        : HttpResponse.json(search),
+    ),
+    http.post('/api/documents/from-url', async ({ request }) => {
+      const { url } = (await request.json()) as { url: string }
+      asked.push(url)
+      const answer = answers[url.split('/').pop() ?? ''] ?? { status: 201 }
+
+      return answer.status < 300
+        ? HttpResponse.json(posting({ id: url }), { status: answer.status })
+        : HttpResponse.json({ detail: answer.detail }, { status: answer.status })
+    }),
+  )
+
+  return asked
+}
+
+async function importSearch(): Promise<void> {
+  await userEvent.click(await screen.findByText('…or import a whole search'))
+  await userEvent.type(screen.getByLabelText('Search results URL'), SEARCH)
+  await userEvent.click(screen.getByRole('button', { name: 'Import new postings' }))
+}
+
+test('importing a search adds each new posting in turn and counts them', async () => {
+  listing()
+  const asked = searchable({ new: [OFFER('a'), OFFER('b')], known: 1 })
+
+  show()
+  await importSearch()
+
+  expect(await screen.findByRole('status')).toHaveTextContent(
+    'Added 2 new postings; 1 was already here.',
+  )
+  expect(asked).toEqual([OFFER('a'), OFFER('b')])
+})
+
+test('a search with nothing new adds nothing and says so', async () => {
+  listing()
+  const asked = searchable({ new: [], known: 3 })
+
+  show()
+  await importSearch()
+
+  expect(await screen.findByRole('status')).toHaveTextContent(
+    'Nothing new: all 3 postings listed are already here.',
+  )
+  expect(asked).toEqual([])
+})
+
+test('a posting that fails is named and the rest are still added', async () => {
+  listing()
+  searchable(
+    { new: [OFFER('broken'), OFFER('fine')], known: 0 },
+    { broken: { status: 422, detail: 'The page carries no job posting' } },
+  )
+
+  show()
+  await importSearch()
+
+  expect(await screen.findByRole('status')).toHaveTextContent('Added 1 new posting.')
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'broken: The page carries no job posting',
+  )
+})
+
+test('a spent limit stops the import and says how many are left', async () => {
+  listing()
+  const asked = searchable(
+    { new: [OFFER('a'), OFFER('b'), OFFER('c')], known: 0 },
+    { b: { status: 429, detail: 'Too many requests' } },
+  )
+
+  show()
+  await importSearch()
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Too many requests. 2 left: import the same search again later to add them.',
+  )
+  expect(asked).toEqual([OFFER('a'), OFFER('b')])
+})
+
+test('a page that is not a search says why, in the API’s words', async () => {
+  listing()
+  const asked = searchable({ status: 422, detail: 'The page lists no job offers' })
+
+  show()
+  await importSearch()
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('The page lists no job offers')
+  expect(asked).toEqual([])
+})
+
 test('a file is sent as multipart with the browser’s own boundary', async () => {
   // No Content-Type is set anywhere in the client: the browser writes it
   // together with the multipart boundary, and a header set by hand loses the

@@ -77,9 +77,14 @@ migrations, ingestion or tokens — that section is the only record of traps tha
     company, role, short link, posted, added, applied and resume; "Mark as applied" opens a form under
     the row, and an application's day is drawn as a stamp that reopens it. The posting page edits company,
     role and publication day. `StageRail` reaches stage 4.
+  - Import from a search (2026-09-27): paste a filtered justjoin.it search; `POST /documents/from-search`
+    reads its first page once (the `CollectionPage` ld+json) and answers the addresses you do not have;
+    the client adds them one by one through `from-url`, with progress. NFR-5 records the change and that
+    the board's terms were not checked.
 - **Next:** nothing scheduled; the roadmap is complete (stage 6 dropped on 2026-09-27, see the spec).
 - **Removed:** FR-7 automated harvesting (Scrapy) — built and reverted on 2026-09-10; the spec says why.
-  Don't reintroduce crawling: NFR-5 allows one fetch per explicit user action, nothing more.
+  Don't reintroduce crawling: NFR-5 allows only what a user action asks for — one posting, or one page of
+  search results and the postings it lists — never pagination, sitemaps, `/api/` or a schedule.
 
 ## Layout
 
@@ -187,6 +192,8 @@ Pydantic schema or route must regenerate `web/openapi.json` and `web/src/api/sch
 - **Prompts** are served from Langfuse with a code fallback (`app/core/prompts.py`); every LLM call is traced.
 - **URL ingestion** reads only the `application/ld+json` `JobPosting` block from hosts in
   `SCRAPER_ALLOWED_HOSTS` (exact match, redirects validated per hop, body capped after decompression).
+  A search page is read the same way, for its `CollectionPage` `hasPart` only; the addresses it lists are
+  compared with `source_url` in the form from-url stores it (`str(HttpUrl)`), so change one, change both.
 - **Browser and API share one origin** (Vite/nginx proxy `/api`). Cookie auth relies on `SameSite=Lax` —
   splitting origins needs a real CSRF answer, not looser cookies. `COOKIE_PATH_PREFIX` must match the proxy.
 - **Web client conventions.** Colours are CSS variables in `styles.css` (`:root`, `[data-theme="dark"]` and
@@ -211,7 +218,7 @@ Pydantic schema or route must regenerate `web/openapi.json` and `web/src/api/sch
 
 ## Constraints
 
-- **No scraping of Indeed/LinkedIn, no crawling anywhere** (NFR-5). Adding a host to the allowlist is a
+- **No scraping of Indeed/LinkedIn, no crawling beyond what a click asks for** (NFR-5). Adding a host to the allowlist is a
   documented decision (robots.txt + terms checked), not a code change.
 - Auth is JWT; users may only ever access their own resumes, matches, sessions, and messages (NFR-1).
 - `messages.retrieved_chunk_ids` / `matches.retrieved_chunk_ids` exist for auditing what the model saw —
