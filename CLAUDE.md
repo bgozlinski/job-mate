@@ -83,7 +83,9 @@ migrations, ingestion or tokens — that section is the only record of traps tha
     owner's decision not to check the board's terms.
   - Location (migration `d08782adcd3e`): `city` and `work_mode` (remote/hybrid/office) on a posting, one
     "Location" column in the register, editable on the posting page. A page only ever says remote
-    (TELECOMMUTE); never infer office from its absence.
+    (TELECOMMUTE); never infer office from its absence. A city is stored under one Polish name
+    (`canonical_city` in `app/services/cities.py`, "Warsaw" -> "Warszawa", "Poland" -> NULL), on read
+    and on PATCH; migration `8b0c1f4e2a77` copies the alias list — change one, change both.
 - **Next:** nothing scheduled; the roadmap is complete (stage 6 dropped on 2026-09-27, see the spec).
 - **Removed:** FR-7 automated harvesting (Scrapy) — built and reverted on 2026-09-10; the spec says why.
   Don't reintroduce crawling: NFR-5 allows only what a user action asks for — one posting, or one page of

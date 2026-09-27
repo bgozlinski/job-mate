@@ -90,6 +90,15 @@ def test_the_city_is_read_and_the_work_mode_left_unsaid():
     assert scraped.work_mode is None
 
 
+def test_the_city_is_kept_under_its_one_name():
+    place = {"@type": "Place", "address": {"addressLocality": "Warsaw"}}
+
+    scraped = parse_job_posting(page(POSTING | {"jobLocation": place}))
+
+    assert scraped.city == "Warszawa"
+    assert scraped.metadata["city"] == "Warsaw"
+
+
 @pytest.mark.parametrize("declared", ["TELECOMMUTE", ["Place", "TELECOMMUTE"]])
 def test_a_posting_declared_telecommute_is_remote(declared: object) -> None:
     scraped = parse_job_posting(page(POSTING | {"jobLocationType": declared}))

@@ -8,6 +8,8 @@ from datetime import date
 from html.parser import HTMLParser
 from typing import Any
 
+from app.services.cities import canonical_city
+
 LD_JSON_TYPE = "application/ld+json"
 
 JOB_POSTING_TYPE = "JobPosting"
@@ -313,7 +315,7 @@ def parse_job_posting(document: str) -> ScrapedPosting:
         title=_title(posting),
         company=_named(posting.get("hiringOrganization")),
         role=_text(posting.get("title")),
-        city=_place(posting.get("jobLocation")).get("city"),
+        city=canonical_city(_place(posting.get("jobLocation")).get("city")),
         work_mode=_work_mode(posting.get("jobLocationType")),
         posted_on=_day(posting.get("datePosted")),
         metadata=_metadata(posting),
