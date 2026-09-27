@@ -1,9 +1,10 @@
 import uuid
 from dataclasses import dataclass
+from datetime import date
 
 from fastapi import status
 from httpx import AsyncClient
-from sqlalchemy import delete
+from sqlalchemy import delete, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.auth.security import hash_password
@@ -131,6 +132,17 @@ async def an_interview(
 async def delete_resume(factory: Factory, resume: Owned) -> None:
     async with factory() as db:
         await db.execute(delete(Resume).where(Resume.id == resume.resume_id))
+        await db.commit()
+
+
+async def an_application(factory: Factory, document_id: uuid.UUID) -> None:
+    """Mark a posting as applied to, the way PUT /documents/{id}/application does."""
+    async with factory() as db:
+        await db.execute(
+            update(Document)
+            .where(Document.id == document_id)
+            .values(applied_on=date(2026, 9, 20))
+        )
         await db.commit()
 
 
@@ -427,6 +439,63 @@ async def test_another_accounts_resume_does_not_count_as_yours(
     steps = await steps_for(session_factory, owner)
 
     assert kinds(steps) == ["add_resume"]
+
+
+async def test_a_posting_you_applied_to_is_not_offered_to_match(
+    session_factory: Factory,
+) -> None:
+    user_id = await a_user(session_factory)
+    await a_resume(session_factory, user_id)
+    await an_application(session_factory, await a_posting(session_factory, user_id))
+
+    steps = await steps_for(session_factory, user_id)
+
+    assert kinds(steps) == ["add_another_posting"]
+
+
+async def test_a_posting_you_applied_to_is_not_offered_to_practise(
+    session_factory: Factory,
+) -> None:
+    resume = await a_resume(session_factory, await a_user(session_factory))
+    document_id = await a_posting(session_factory, resume.user_id)
+    await a_match(session_factory, resume, document_id)
+    await an_application(session_factory, document_id)
+
+    steps = await steps_for(session_factory, resume.user_id)
+
+    assert kinds(steps) == ["add_another_posting"]
+
+
+async def test_an_interview_on_a_posting_you_applied_to_is_not_offered(
+    session_factory: Factory,
+) -> None:
+    resume = await a_resume(session_factory, await a_user(session_factory))
+    document_id = await a_posting(session_factory, resume.user_id)
+    await an_interview(session_factory, resume, document_id)
+    await an_application(session_factory, document_id)
+
+    steps = await steps_for(session_factory, resume.user_id)
+
+    assert kinds(steps) == ["add_another_posting"]
+
+
+async def test_postings_you_applied_to_do_not_take_the_places_of_others(
+    session_factory: Factory,
+) -> None:
+    """Filtered before the cap, or three applications would fill every place."""
+    user_id = await a_user(session_factory)
+    await a_resume(session_factory, user_id)
+    await a_posting(session_factory, user_id, "Still open")
+    for number in range(STEPS_PER_KIND):
+        applied = await a_posting(session_factory, user_id, f"Applied {number}")
+        await an_application(session_factory, applied)
+
+    steps = await steps_for(session_factory, user_id)
+
+    assert kinds(steps) == ["match"]
+    assert [step.document_title for step in steps if isinstance(step, MatchStep)] == [
+        "Still open"
+    ]
 
 
 async def test_the_dashboard_needs_a_token(client: AsyncClient) -> None:

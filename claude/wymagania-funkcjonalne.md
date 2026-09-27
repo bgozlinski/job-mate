@@ -428,8 +428,10 @@ Przeglądarka                              Testy, curl, Swagger
 > zapisuje albo poprawia aplikację, `DELETE` ją cofa (brak aplikacji to też 204). CV jest wymagane i musi być
 > własne (404 na cudze), więc `applied_on` bez CV znaczy jedno: CV usunięto później — aplikacja zostaje, bo
 > została wysłana. Dzień podlega tej samej regule co `posted_on` (najwyżej jutro w UTC). Etap 4 wynika
-> z kolumny i wygrywa z pozostałymi: można aplikować bez dopasowania i bez rozmowy. Dashboard na razie
-> tego nie uwzględnia — ogłoszenie z aplikacją dalej może być proponowane do dopasowania i ćwiczenia.
+> z kolumny i wygrywa z pozostałymi: można aplikować bez dopasowania i bez rozmowy. Dashboard pomija
+> ogłoszenia z aplikacją we wszystkich trzech regułach (dopasuj, poćwicz, dokończ rozmowę) — są załatwione.
+> Filtr stoi w `WHERE`, przed limitem kroków, inaczej ogłoszenia z aplikacją zajęłyby wszystkie miejsca.
+> Gdy aplikowałeś na wszystko, zostaje krok „dodaj kolejne ogłoszenie”.
 
 ## 8. Pułapki, których nie widać z kodu
 

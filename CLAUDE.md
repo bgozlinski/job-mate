@@ -77,8 +77,7 @@ migrations, ingestion or tokens — that section is the only record of traps tha
     company, role, short link, posted, added, applied and resume; "Mark as applied" opens a form under
     the row, and an application's day is drawn as a stamp that reopens it. The posting page edits company,
     role and publication day. `StageRail` reaches stage 4.
-- **Next:** nothing scheduled; stage 6 (voice, salary trends) is the remaining candidate. The dashboard
-  still ignores applications (it may offer to match or practise a posting already applied to).
+- **Next:** nothing scheduled; stage 6 (voice, salary trends) is the remaining candidate.
 - **Removed:** FR-7 automated harvesting (Scrapy) — built and reverted on 2026-09-10; the spec says why.
   Don't reintroduce crawling: NFR-5 allows one fetch per explicit user action, nothing more.
 
@@ -182,7 +181,7 @@ Pydantic schema or route must regenerate `web/openapi.json` and `web/src/api/sch
 - **Dashboard:** Python chooses the steps (`app/services/dashboard.py`), one query per rule, because "a
   posting you haven't matched" and "your best match without an interview" are questions about every row and
   the client's lists are paged. Postings, matches, sessions and resumes are all filtered by user
-  (NFR-1). A step needs its posting and resume to still exist — answers are judged against the resume. The
+  (NFR-1). A posting you applied to is offered by no rule. A step needs its posting and resume to still exist — answers are judged against the resume. The
   list is never empty. In the client, **every mutation of resumes, postings, matches or interviews must
   invalidate `dashboardKey`**, or going back to `/` shows a step already done.
 - **Prompts** are served from Langfuse with a code fallback (`app/core/prompts.py`); every LLM call is traced.
